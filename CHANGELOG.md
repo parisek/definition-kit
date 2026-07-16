@@ -10,6 +10,24 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **Generated `block.json` no longer emits `"attributes": null`** — non-bleed blocks (and a
+  captured `wp.block.attributes: null`) now omit the key entirely, matching real ACF exports and
+  `parisek/acf-json-schema`'s block schema (`attributes` must be an object when present). Found on
+  the first full downstream migration (mairateam, 49 blocks): 9 non-bleed blocks failed
+  `acf-lint --strict` on the freshly generated files.
+
+### Removed
+
+- **`mcp-defaults.yaml` + `Mcp\McpDefaultsLibrary`** — the per-abstract-type default AI-guidance
+  library was seeded but never wired into migration or generation (referenced only by its own
+  test). The per-field `mcp` annotation (schema + migration capture) stays; **type-level MCP
+  guidance now lives in the consumer (the portadesign-mcp plugin)**, where it applies to every
+  ACF field of a type across *all* blocks — not only definition-kit-generated ones. definition-kit
+  remains the authoritative schema/validator for the authored `<name>.yaml`; it does not own the
+  type-default guidance.
+
+### Fixed
+
 - **`fields-generate` preserves the existing acf.json `modified` timestamp** — it stamped
   `time()` on every run, so regenerating churned the `modified` field on every component (git
   noise that defeats committing acf.json as a generated artifact). It now reads the current

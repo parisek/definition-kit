@@ -79,6 +79,14 @@ final class BlockJsonGenerator
             }
         }
 
+        // acf-json-schema's block schema requires `attributes` to be an
+        // object when present, and real ACF exports simply omit the key on
+        // non-bleed blocks — so a null (derived or captured) never reaches
+        // the output.
+        if (null === $block['attributes']) {
+            unset($block['attributes']);
+        }
+
         return $block;
     }
 

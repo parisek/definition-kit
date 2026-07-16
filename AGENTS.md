@@ -21,7 +21,7 @@ Authored `<name>.yaml` definition → CMS projection (`acf.json` + `block.json`)
 - `src/Lint/` — `DriftLinter` + `DriftAllowlist` + `DriftResult`; `bin/fields-lint`.
 - `src/Schema/` — opis/json-schema validation of `<name>.yaml` and the JSON outputs.
 - `src/Support/StructuralDiff.php` — order-insensitive structural diff shared by the linter and the migration self-diff.
-- `schemas/` — **shipped, runtime-read**: `component.fields.schema.json` (the `<name>.yaml` contract), `acf-defaults-baseline.yaml` (type-defaults dropped on migrate / re-added on generate), `*.output.schema.json`, `constraint-sentinels.yaml`, `mcp-defaults.yaml`, `drift-lint-allowlist.yaml`, `block-icon.svg`. NOT export-ignored.
+- `schemas/` — **shipped, runtime-read**: `component.fields.schema.json` (the `<name>.yaml` contract), `acf-defaults-baseline.yaml` (type-defaults dropped on migrate / re-added on generate), `*.output.schema.json`, `constraint-sentinels.yaml`, `drift-lint-allowlist.yaml`, `block-icon.svg`. NOT export-ignored.
 
 ## Commands
 
