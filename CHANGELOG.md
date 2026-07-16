@@ -6,6 +6,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-07-16
+
 ### Fixed
 
 - **Accordion residual is captured generically via self-diff** — real accordions carry section
