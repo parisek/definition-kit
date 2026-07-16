@@ -40,10 +40,10 @@
         }
     },
     "bin": [
-        "bin/fields-migrate",
         "bin/fields-generate",
-        "bin/fields-validate",
-        "bin/fields-lint"
+        "bin/fields-lint",
+        "bin/fields-migrate",
+        "bin/fields-validate"
     ],
     "config": {
         "allow-plugins": {
