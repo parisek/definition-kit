@@ -44,8 +44,22 @@ function fields_generate_one(string $componentDir, bool $dryRun): array
         return ['ok' => false, 'component' => $componentName, 'error' => 'malformed YAML'];
     }
 
+    // Preserve the existing acf.json's `modified` timestamp so regeneration is
+    // idempotent — otherwise every run stamps `time()` and churns the field on
+    // all components, defeating a git-committed generated artifact. Mirrors how
+    // DriftLinter injects the committed `modified` for its comparison. Only a
+    // brand-new component (no existing acf.json) falls back to the current time.
+    $existingAcfPath = "{$componentDir}/acf.json";
+    $existingModified = null;
+    if (is_file($existingAcfPath)) {
+        $existingAcf = json_decode(file_get_contents($existingAcfPath), true);
+        if (is_array($existingAcf) && isset($existingAcf['modified']) && is_numeric($existingAcf['modified'])) {
+            $existingModified = (int) $existingAcf['modified'];
+        }
+    }
+
     try {
-        $fieldGroup = (new FieldsGenerator())->generate($tree, $componentName, time());
+        $fieldGroup = (new FieldsGenerator())->generate($tree, $componentName, $existingModified ?? time());
     } catch (\Throwable $e) {
         // Broad on purpose: AbstractTypeReverseMapper throws DomainException
         // for an unsupported abstract type/kind/shape/of combination — one
