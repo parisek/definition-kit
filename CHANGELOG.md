@@ -6,8 +6,6 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [0.1.1] - 2026-07-16
-
 ### Fixed
 
 - **`fields-generate` preserves the existing acf.json `modified` timestamp** — it stamped
@@ -16,6 +14,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   acf.json's `modified` and reuses it, mirroring how `DriftLinter` injects the committed value;
   only a brand-new component (no existing acf.json) falls back to the current time. Regeneration
   is now idempotent — an unchanged component produces a byte-identical acf.json.
+
+## [0.1.1] - 2026-07-16
+
+### Fixed
 
 - **Accordion residual is captured generically via self-diff** — real accordions carry section
   `instructions` (and other non-baseline props) that v0.1.0 dropped on round-trip, because
