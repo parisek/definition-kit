@@ -150,19 +150,25 @@ final class RootFieldGroupBuilderTest extends TestCase
         self::assertSame(0, $accordion['endpoint']);
     }
 
-    public function test_accordion_replays_captured_nonzero_wpml(): void
+    public function test_accordion_replays_captured_residual_verbatim(): void
     {
+        // Residual props (real ACF names) overlay the baseline pseudo-field.
         $tree = [
             'name' => 'Demo',
-            'wp' => ['accordions' => [['key' => 'field_demo_a', 'label' => 'A', 'open' => 0, 'wpml' => 1, 'before' => 'title']]],
+            'wp' => ['accordions' => [[
+                'key' => 'field_demo_a', 'label' => 'Menu', 'open' => 0,
+                'instructions' => 'Menu se vypisuje automaticky', 'wpml_cf_preferences' => 1,
+                'before' => 'title',
+            ]]],
             'fields' => ['title' => ['type' => 'text', 'label' => 'T']],
         ];
         $group = $this->builder->build($tree, [['type' => 'text', 'name' => 'title']], 'demo', 1700000000);
 
         self::assertSame(1, $group['fields'][0]['wpml_cf_preferences']);
+        self::assertSame('Menu se vypisuje automaticky', $group['fields'][0]['instructions']);
     }
 
-    public function test_accordion_without_captured_wpml_defaults_to_zero(): void
+    public function test_accordion_without_residual_keeps_baseline_values(): void
     {
         $tree = [
             'name' => 'Demo',
@@ -172,6 +178,7 @@ final class RootFieldGroupBuilderTest extends TestCase
         $group = $this->builder->build($tree, [['type' => 'text', 'name' => 'title']], 'demo', 1700000000);
 
         self::assertSame(0, $group['fields'][0]['wpml_cf_preferences']);
+        self::assertSame('', $group['fields'][0]['instructions']);
     }
 
     public function test_multiple_accordions_each_placed_before_their_own_field(): void

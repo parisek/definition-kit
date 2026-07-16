@@ -46,7 +46,7 @@ final class RootFieldGroupBuilder
     public function build(array $definitionTree, array $orderedRawFields, string $componentSlug, int $modifiedAt): array
     {
         $rootWp = (array) ($definitionTree['wp'] ?? []);
-        /** @var list<array{key:string,label:string,open:int,wpml?:int,before:?string}> $accordions */
+        /** @var list<array<string,mixed>> $accordions */
         $accordions = (array) ($rootWp['accordions'] ?? []);
         // `accordions` is replayed into `fields` below; `block` is block.json-only
         // config (Generator\BlockJsonGenerator consumes it). Neither is an acf.json
@@ -73,7 +73,7 @@ final class RootFieldGroupBuilder
     /**
      * @param list<string> $fieldNames
      * @param list<array<string,mixed>> $orderedRawFields
-     * @param list<array{key:string,label:string,open:int,wpml?:int,before:?string}> $accordions
+     * @param list<array<string,mixed>> $accordions
      * @return list<array<string,mixed>>
      */
     private function interleaveAccordions(array $fieldNames, array $orderedRawFields, array $accordions): array
@@ -86,10 +86,11 @@ final class RootFieldGroupBuilder
         $trailing = [];
         foreach ($accordions as $accordion) {
             $pseudo = $this->buildAccordionPseudoField($accordion);
-            if (null === $accordion['before']) {
+            $before = $accordion['before'] ?? null;
+            if (null === $before) {
                 $trailing[] = $pseudo;
             } else {
-                $byBefore[$accordion['before']][] = $pseudo;
+                $byBefore[(string) $before][] = $pseudo;
             }
         }
 
@@ -108,15 +109,19 @@ final class RootFieldGroupBuilder
     }
 
     /**
-     * @param array{key:string,label:string,open:int,wpml?:int,before:?string} $accordion
+     * The fixed accordion pseudo-field the generator rebuilds from an
+     * accordion's identity triple. Public so Migration\AccordionResidualCapturer
+     * can self-diff a real accordion against it — the accordion analogue of the
+     * block.json BlockResidualCapturer and the acf.json type-defaults baseline.
+     *
      * @return array<string,mixed>
      */
-    private function buildAccordionPseudoField(array $accordion): array
+    public function accordionBaseline(string $key, string $label, int $open): array
     {
         return [
-            'key' => $accordion['key'],
+            'key' => $key,
             'allow_in_bindings' => 0,
-            'label' => $accordion['label'],
+            'label' => $label,
             'name' => '',
             'aria-label' => '',
             'type' => 'accordion',
@@ -124,12 +129,35 @@ final class RootFieldGroupBuilder
             'required' => 0,
             'conditional_logic' => 0,
             'wrapper' => ['width' => '', 'class' => '', 'id' => ''],
-            // Baseline 0 when the migration captured nothing; a non-zero value
-            // is replayed verbatim (real mairateam accordions carry 1).
-            'wpml_cf_preferences' => $accordion['wpml'] ?? 0,
-            'open' => $accordion['open'],
+            'wpml_cf_preferences' => 0,
+            'open' => $open,
             'multi_expand' => 0,
             'endpoint' => 0,
         ];
+    }
+
+    /**
+     * @param array<string,mixed> $accordion
+     * @return array<string,mixed>
+     */
+    private function buildAccordionPseudoField(array $accordion): array
+    {
+        $pseudo = $this->accordionBaseline(
+            (string) $accordion['key'],
+            (string) $accordion['label'],
+            (int) $accordion['open'],
+        );
+        // Overlay the captured non-derivable residual verbatim — instructions,
+        // non-zero wpml_cf_preferences, multi_expand, … : any real ACF prop the
+        // migration self-diff found deviating from the baseline. Meta keys are
+        // consumed above (key/label/open) or used only for positioning
+        // (before), never overlaid. Reassigning an existing key keeps its
+        // position, so key order is unchanged.
+        foreach ($accordion as $prop => $value) {
+            if (!in_array($prop, ['key', 'label', 'open', 'before'], true)) {
+                $pseudo[$prop] = $value;
+            }
+        }
+        return $pseudo;
     }
 }
