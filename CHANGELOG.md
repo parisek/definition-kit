@@ -8,6 +8,13 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **`fields-generate` preserves the existing acf.json `modified` timestamp** — it stamped
+  `time()` on every run, so regenerating churned the `modified` field on every component (git
+  noise that defeats committing acf.json as a generated artifact). It now reads the current
+  acf.json's `modified` and reuses it, mirroring how `DriftLinter` injects the committed value;
+  only a brand-new component (no existing acf.json) falls back to the current time. Regeneration
+  is now idempotent — an unchanged component produces a byte-identical acf.json.
+
 - **Accordion residual is captured generically via self-diff** — real accordions carry section
   `instructions` (and other non-baseline props) that v0.1.0 dropped on round-trip, because
   accordion capture kept only `{key, label, open}` plus a wpml-only special case. Migration now

@@ -44,6 +44,38 @@ final class FieldsGenerateCliTest extends TestCase
         self::assertSame('group_demo', $acf['key']);
     }
 
+    public function test_regeneration_preserves_the_existing_acf_json_modified_timestamp(): void
+    {
+        // Idempotence: regenerating over an existing acf.json must keep its
+        // `modified`, not stamp the current time — otherwise every run churns
+        // the field on every component (git noise for a committed artifact).
+        $dir = $this->makeComponentDir('demo', "name: Demo\nfields:\n  title:\n    type: text\n    label: Nadpis\n");
+        $pinned = 1700000000;
+        file_put_contents("{$dir}/acf.json", json_encode(['key' => 'group_demo', 'modified' => $pinned], JSON_PRETTY_PRINT));
+
+        shell_exec(sprintf('php %s %s 2>&1', escapeshellarg($this->binPath), escapeshellarg($dir)));
+
+        $raw = file_get_contents("{$dir}/acf.json");
+        self::assertIsString($raw);
+        $acf = json_decode($raw, true);
+        self::assertSame($pinned, $acf['modified']);
+    }
+
+    public function test_brand_new_component_gets_a_nonzero_modified(): void
+    {
+        // No existing acf.json → fall back to the current time (just assert it's
+        // a plausible non-zero timestamp; the exact value is non-deterministic).
+        $dir = $this->makeComponentDir('demo', "name: Demo\nfields:\n  title:\n    type: text\n    label: Nadpis\n");
+
+        shell_exec(sprintf('php %s %s 2>&1', escapeshellarg($this->binPath), escapeshellarg($dir)));
+
+        $raw = file_get_contents("{$dir}/acf.json");
+        self::assertIsString($raw);
+        $acf = json_decode($raw, true);
+        self::assertIsInt($acf['modified']);
+        self::assertGreaterThan(0, $acf['modified']);
+    }
+
     public function test_dry_run_writes_nothing(): void
     {
         $dir = $this->makeComponentDir('demo', "name: Demo\nfields:\n  title:\n    type: text\n    label: Nadpis\n");
