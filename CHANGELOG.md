@@ -6,6 +6,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-07-16
+
 ### Fixed
 
 - **Generated `block.json` no longer emits `"attributes": null`** — non-bleed blocks (and a
