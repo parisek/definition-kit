@@ -166,34 +166,36 @@ final class AcfJsonReaderTest extends TestCase
         ]], $tree['wp']['accordions']);
     }
 
-    public function test_accordion_nonzero_wpml_is_captured_verbatim(): void
+    public function test_accordion_nonbaseline_props_are_captured_verbatim_by_real_acf_name(): void
     {
-        // Reference-set accordions carry the baseline wpml_cf_preferences 0;
-        // real mairateam accordions (page-header-service, reference-slider,
-        // steps-slider) carry 1. A non-zero value is captured so it round-trips
-        // — the default 0 stays dropped, per the drop-defaults rule.
+        // Real mairateam accordions (page-header-service) carry section
+        // `instructions` and a non-zero `wpml_cf_preferences` where the tool's
+        // baseline is '' / 0. The generic self-diff captures every non-baseline
+        // prop verbatim, keyed by its real ACF prop name — no per-prop special
+        // case. Baseline props (name/type/required/…) stay dropped.
         $tree = $this->reader->read($this->group([
-            ['key' => 'field_demo_header_accordion', 'name' => '', 'type' => 'accordion', 'label' => 'Hlavička', 'open' => 0, 'wpml_cf_preferences' => 1],
+            ['key' => 'field_demo_header_accordion', 'name' => '', 'type' => 'accordion', 'label' => 'Menu', 'open' => 0, 'instructions' => 'Menu se vypisuje automaticky', 'wpml_cf_preferences' => 1],
             ['key' => 'field_demo_title', 'name' => 'title', 'label' => 'Nadpis', 'type' => 'text'],
         ]), 'demo');
 
         self::assertSame([[
             'key' => 'field_demo_header_accordion',
-            'label' => 'Hlavička',
+            'label' => 'Menu',
             'open' => 0,
-            'wpml' => 1,
+            'instructions' => 'Menu se vypisuje automaticky',
+            'wpml_cf_preferences' => 1,
             'before' => 'title',
         ]], $tree['wp']['accordions']);
     }
 
-    public function test_accordion_baseline_zero_wpml_is_not_captured(): void
+    public function test_fully_baseline_accordion_captures_no_residual(): void
     {
         $tree = $this->reader->read($this->group([
-            ['key' => 'field_demo_header_accordion', 'name' => '', 'type' => 'accordion', 'label' => 'Hlavička', 'open' => 0, 'wpml_cf_preferences' => 0],
+            ['key' => 'field_demo_header_accordion', 'name' => '', 'type' => 'accordion', 'label' => 'Hlavička', 'open' => 0, 'instructions' => '', 'wpml_cf_preferences' => 0],
             ['key' => 'field_demo_title', 'name' => 'title', 'label' => 'Nadpis', 'type' => 'text'],
         ]), 'demo');
 
-        self::assertArrayNotHasKey('wpml', $tree['wp']['accordions'][0]);
+        self::assertSame(['key', 'label', 'open', 'before'], array_keys($tree['wp']['accordions'][0]));
     }
 
     public function test_multiple_accordions_each_capture_their_own_before_field(): void

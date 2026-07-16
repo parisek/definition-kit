@@ -32,6 +32,7 @@ final class AcfJsonReader
         private readonly TypeDefaults $typeDefaults = new TypeDefaults(),
         private readonly TwigMetadataReader $twigMetadataReader = new TwigMetadataReader(),
         private readonly WpmlTranslatableMapper $wpmlMapper = new WpmlTranslatableMapper(),
+        private readonly AccordionResidualCapturer $accordionCapturer = new AccordionResidualCapturer(),
     ) {
     }
 
@@ -110,28 +111,27 @@ final class AcfJsonReader
         $pendingAccordion = null;
         foreach ((array) ($acfJson['fields'] ?? []) as $acfField) {
             if ('accordion' === ($acfField['type'] ?? null)) {
-                // A field carries no data of its own that survives migration
-                // elsewhere in this reader — its {key, label, open} triple plus
+                // An accordion carries no data of its own that survives migration
+                // elsewhere in this reader — its {key, label, open} identity plus
                 // "which field did it precede" is captured verbatim here, since
                 // it is genuinely unrecoverable from any other part of the
                 // semantic layer (accordion section titles are freely-authored
                 // and don't reliably derive from the fields they group — see
                 // the generator plan's Global Constraints). Replayed by
                 // Generator\RootFieldGroupBuilder.
+                //
+                // Any further non-baseline prop the accordion carries (section
+                // `instructions`, a non-zero `wpml_cf_preferences`, `multi_expand`,
+                // …) is captured verbatim by AccordionResidualCapturer via a
+                // self-diff against the generator's baseline — generalising the
+                // former wpml-only special case so no per-prop special case
+                // accumulates. A fully-baseline accordion adds no residual.
                 $pendingAccordion = [
                     'key' => (string) $acfField['key'],
                     'label' => (string) ($acfField['label'] ?? ''),
                     'open' => (int) ($acfField['open'] ?? 0),
+                    ...$this->accordionCapturer->capture($acfField),
                 ];
-                // Reference-set accordions carry the baseline wpml_cf_preferences
-                // 0; real mairateam accordions carry 1. A non-zero value is
-                // genuinely unrecoverable elsewhere, so capture it verbatim (0
-                // stays dropped, per the drop-defaults rule) — replayed by
-                // Generator\RootFieldGroupBuilder.
-                $accordionWpml = $acfField['wpml_cf_preferences'] ?? null;
-                if (is_int($accordionWpml) && 0 !== $accordionWpml) {
-                    $pendingAccordion['wpml'] = $accordionWpml;
-                }
                 continue;
             }
             if (null !== $pendingAccordion) {

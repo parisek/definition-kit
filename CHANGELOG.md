@@ -6,7 +6,19 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [0.1.0] - 2026-07-16
+### Fixed
+
+- **Accordion residual is captured generically via self-diff** — real accordions carry section
+  `instructions` (and other non-baseline props) that v0.1.0 dropped on round-trip, because
+  accordion capture kept only `{key, label, open}` plus a wpml-only special case. Migration now
+  self-diffs each accordion against the generator's baseline pseudo-field (new
+  `Migration\AccordionResidualCapturer`, the accordion analogue of `BlockResidualCapturer`) and
+  captures **every** deviating prop verbatim, keyed by its real ACF name (`instructions`,
+  `wpml_cf_preferences`, `multi_expand`, …); `RootFieldGroupBuilder` overlays them on replay.
+  This subsumes and removes the v0.1.0 `wpml` special case (accordion residual now stores the
+  real `wpml_cf_preferences` key, not the `wpml` alias) — no per-prop special case can accumulate
+  again. Fully-baseline accordions capture nothing (golden fixtures unchanged). Fixes the last
+  known round-trip data loss on the mairateam corpus (page-header-service now lints clean).
 
 ### Added
 
