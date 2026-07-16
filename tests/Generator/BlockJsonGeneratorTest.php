@@ -47,7 +47,7 @@ final class BlockJsonGeneratorTest extends TestCase
             $tree = '' === $render ? ['name' => 'Demo'] : ['name' => 'Demo', 'render' => $render];
             $block = $this->generator->generate($tree, 'demo');
             self::assertArrayNotHasKey('align', $block['supports'], "render={$render}");
-            self::assertNull($block['attributes'], "render={$render}");
+            self::assertArrayNotHasKey('attributes', $block, "render={$render}");
         }
     }
 
@@ -108,11 +108,15 @@ final class BlockJsonGeneratorTest extends TestCase
         self::assertSame(['full'], $block['supports']['align']);
     }
 
-    public function test_wp_block_overlay_can_set_a_section_to_a_captured_value_including_null(): void
+    public function test_wp_block_overlay_captured_null_attributes_removes_the_key(): void
     {
+        // A captured `attributes: null` means the original block.json carried
+        // an explicit null — invalid per acf-json-schema's block schema
+        // (`attributes` must be an object when present), so the generated
+        // output normalizes it away entirely instead of re-emitting it.
         $tree = ['name' => 'Demo', 'wp' => ['block' => ['attributes' => null]]];
         $block = $this->generator->generate($tree, 'demo');
-        self::assertNull($block['attributes']);
+        self::assertArrayNotHasKey('attributes', $block);
     }
 
     public function test_absent_wp_block_leaves_output_byte_identical_to_derivation(): void

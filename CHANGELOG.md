@@ -6,6 +6,14 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Generated `block.json` no longer emits `"attributes": null`** — non-bleed blocks (and a
+  captured `wp.block.attributes: null`) now omit the key entirely, matching real ACF exports and
+  `parisek/acf-json-schema`'s block schema (`attributes` must be an object when present). Found on
+  the first full downstream migration (mairateam, 49 blocks): 9 non-bleed blocks failed
+  `acf-lint --strict` on the freshly generated files.
+
 ### Removed
 
 - **`mcp-defaults.yaml` + `Mcp\McpDefaultsLibrary`** — the per-abstract-type default AI-guidance
