@@ -1,0 +1,5 @@
+name: Demo Malformed
+fields:
+  title:
+    type: text
+   label: Nadpis

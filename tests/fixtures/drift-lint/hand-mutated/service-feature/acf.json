@@ -1,0 +1,544 @@
+{
+    "menu_order": 0,
+    "position": "normal",
+    "style": "default",
+    "label_placement": "top",
+    "instruction_placement": "label",
+    "hide_on_screen": "",
+    "active": true,
+    "description": "",
+    "show_in_rest": 0,
+    "acfml_field_group_mode": "advanced",
+    "key": "group_service-feature",
+    "title": "Service - feature",
+    "fields": [
+        {
+            "key": "field_service-feature_header_accordion",
+            "allow_in_bindings": 0,
+            "label": "Hlavička",
+            "name": "",
+            "aria-label": "",
+            "type": "accordion",
+            "instructions": "",
+            "required": 0,
+            "conditional_logic": 0,
+            "wrapper": {
+                "width": "",
+                "class": "",
+                "id": ""
+            },
+            "wpml_cf_preferences": 0,
+            "open": 0,
+            "multi_expand": 0,
+            "endpoint": 0
+        },
+        {
+            "key": "field_service-feature_heading",
+            "allow_in_bindings": 0,
+            "label": "Nadpis",
+            "name": "heading",
+            "aria-label": "",
+            "type": "group",
+            "instructions": "Volitelný nadpis nad feature kartou.",
+            "required": 0,
+            "conditional_logic": false,
+            "wrapper": {
+                "width": "",
+                "class": "",
+                "id": ""
+            },
+            "layout": "block",
+            "wpml_cf_preferences": 3,
+            "sub_fields": [
+                {
+                    "key": "field_service-feature_heading_subtitle",
+                    "allow_in_bindings": 0,
+                    "label": "Podnadpis",
+                    "name": "subtitle",
+                    "aria-label": "",
+                    "type": "text",
+                    "instructions": "",
+                    "required": 0,
+                    "conditional_logic": false,
+                    "wrapper": {
+                        "width": "",
+                        "class": "",
+                        "id": ""
+                    },
+                    "placeholder": "",
+                    "prepend": "",
+                    "append": "",
+                    "default_value": "",
+                    "maxlength": "",
+                    "wpml_cf_preferences": 2
+                },
+                {
+                    "key": "field_service-feature_heading_title",
+                    "allow_in_bindings": 0,
+                    "label": "Nadpis",
+                    "name": "title",
+                    "aria-label": "",
+                    "type": "text",
+                    "instructions": "",
+                    "required": 0,
+                    "conditional_logic": false,
+                    "wrapper": {
+                        "width": "",
+                        "class": "",
+                        "id": ""
+                    },
+                    "placeholder": "Zadejte nadpis",
+                    "prepend": "",
+                    "append": "",
+                    "default_value": "",
+                    "maxlength": "",
+                    "wpml_cf_preferences": 1
+                },
+                {
+                    "key": "field_service-feature_heading_perex",
+                    "allow_in_bindings": 0,
+                    "label": "Popis",
+                    "name": "perex",
+                    "aria-label": "",
+                    "type": "textarea",
+                    "instructions": "",
+                    "required": 0,
+                    "conditional_logic": false,
+                    "wrapper": {
+                        "width": "",
+                        "class": "",
+                        "id": ""
+                    },
+                    "placeholder": "",
+                    "new_lines": "",
+                    "rows": "",
+                    "default_value": "",
+                    "maxlength": "",
+                    "wpml_cf_preferences": 2
+                }
+            ]
+        },
+        {
+            "key": "field_service-feature_content_accordion",
+            "allow_in_bindings": 0,
+            "label": "Feature karta",
+            "name": "",
+            "aria-label": "",
+            "type": "accordion",
+            "instructions": "",
+            "required": 0,
+            "conditional_logic": 0,
+            "wrapper": {
+                "width": "",
+                "class": "",
+                "id": ""
+            },
+            "wpml_cf_preferences": 0,
+            "open": 1,
+            "multi_expand": 0,
+            "endpoint": 0
+        },
+        {
+            "key": "field_service-feature_feature",
+            "allow_in_bindings": 0,
+            "label": "Feature karta",
+            "name": "feature",
+            "aria-label": "",
+            "type": "group",
+            "instructions": "Zvýrazněná karta — mockup produktu, plovoucí metriky a panel s informacemi.",
+            "required": 0,
+            "conditional_logic": false,
+            "wrapper": {
+                "width": "",
+                "class": "",
+                "id": ""
+            },
+            "layout": "block",
+            "wpml_cf_preferences": 3,
+            "sub_fields": [
+                {
+                    "key": "field_service-feature_feature_image",
+                    "allow_in_bindings": 0,
+                    "label": "Obrázek produktu",
+                    "name": "image",
+                    "aria-label": "",
+                    "type": "image",
+                    "instructions": "Mockup produktu. 524 x 412 (1048 x 824 @2x).",
+                    "required": 0,
+                    "conditional_logic": false,
+                    "wrapper": {
+                        "width": "",
+                        "class": "",
+                        "id": ""
+                    },
+                    "return_format": "array",
+                    "preview_size": "medium",
+                    "library": "all",
+                    "min_size": 0,
+                    "min_width": 0,
+                    "max_width": 0,
+                    "min_height": 0,
+                    "max_height": 0,
+                    "max_size": 0,
+                    "mime_types": "",
+                    "wpml_cf_preferences": 1
+                },
+                {
+                    "key": "field_service-feature_feature_badges",
+                    "allow_in_bindings": 0,
+                    "label": "Štítky",
+                    "name": "badges",
+                    "aria-label": "",
+                    "type": "repeater",
+                    "instructions": "Plovoucí metriky nad obrázkem produktu (např. CTR 3.3 %). Max 3.",
+                    "required": 0,
+                    "conditional_logic": false,
+                    "wrapper": {
+                        "width": "",
+                        "class": "",
+                        "id": ""
+                    },
+                    "rows_per_page": 20,
+                    "min": 0,
+                    "max": 3,
+                    "button_label": "Přidat štítek",
+                    "wpml_cf_preferences": 2,
+                    "collapsed": "",
+                    "layout": "table",
+                    "sub_fields": [
+                        {
+                            "key": "field_service-feature_feature_badges_label",
+                            "allow_in_bindings": 0,
+                            "label": "Popisek",
+                            "name": "label",
+                            "aria-label": "",
+                            "type": "text",
+                            "instructions": "",
+                            "required": 0,
+                            "conditional_logic": false,
+                            "wrapper": {
+                                "width": "",
+                                "class": "",
+                                "id": ""
+                            },
+                            "placeholder": "",
+                            "prepend": "",
+                            "append": "",
+                            "default_value": "",
+                            "maxlength": "",
+                            "wpml_cf_preferences": 2,
+                            "parent_repeater": "field_service-feature_feature_badges"
+                        },
+                        {
+                            "key": "field_service-feature_feature_badges_value",
+                            "allow_in_bindings": 0,
+                            "label": "Hodnota",
+                            "name": "value",
+                            "aria-label": "",
+                            "type": "text",
+                            "instructions": "",
+                            "required": 0,
+                            "conditional_logic": false,
+                            "wrapper": {
+                                "width": "",
+                                "class": "",
+                                "id": ""
+                            },
+                            "placeholder": "",
+                            "prepend": "",
+                            "append": "",
+                            "default_value": "",
+                            "maxlength": "",
+                            "wpml_cf_preferences": 2,
+                            "parent_repeater": "field_service-feature_feature_badges"
+                        }
+                    ]
+                },
+                {
+                    "key": "field_service-feature_feature_product_label",
+                    "allow_in_bindings": 0,
+                    "label": "Popisek produktu",
+                    "name": "product_label",
+                    "aria-label": "",
+                    "type": "text",
+                    "instructions": "Malý popisek nad názvem produktu, např. 'Váš obchod'.",
+                    "required": 0,
+                    "conditional_logic": false,
+                    "wrapper": {
+                        "width": "",
+                        "class": "",
+                        "id": ""
+                    },
+                    "placeholder": "",
+                    "prepend": "",
+                    "append": "",
+                    "default_value": "",
+                    "maxlength": "",
+                    "wpml_cf_preferences": 2
+                },
+                {
+                    "key": "field_service-feature_feature_product_title",
+                    "allow_in_bindings": 0,
+                    "label": "Název produktu",
+                    "name": "product_title",
+                    "aria-label": "",
+                    "type": "text",
+                    "instructions": "",
+                    "required": 0,
+                    "conditional_logic": false,
+                    "wrapper": {
+                        "width": "",
+                        "class": "",
+                        "id": ""
+                    },
+                    "placeholder": "",
+                    "prepend": "",
+                    "append": "",
+                    "default_value": "",
+                    "maxlength": "",
+                    "wpml_cf_preferences": 2
+                },
+                {
+                    "key": "field_service-feature_feature_product_price",
+                    "allow_in_bindings": 0,
+                    "label": "Cena produktu",
+                    "name": "product_price",
+                    "aria-label": "",
+                    "type": "text",
+                    "instructions": "",
+                    "required": 0,
+                    "conditional_logic": false,
+                    "wrapper": {
+                        "width": "",
+                        "class": "",
+                        "id": ""
+                    },
+                    "placeholder": "",
+                    "prepend": "",
+                    "append": "",
+                    "default_value": "",
+                    "maxlength": "",
+                    "wpml_cf_preferences": 2
+                },
+                {
+                    "key": "field_service-feature_feature_product_button",
+                    "allow_in_bindings": 0,
+                    "label": "Tlačítko produktu",
+                    "name": "product_button",
+                    "aria-label": "",
+                    "type": "text",
+                    "instructions": "Popisek tlačítka košíku, např. 'Přidat do košíku'. Dekorativní.",
+                    "required": 0,
+                    "conditional_logic": false,
+                    "wrapper": {
+                        "width": "",
+                        "class": "",
+                        "id": ""
+                    },
+                    "placeholder": "",
+                    "prepend": "",
+                    "append": "",
+                    "default_value": "",
+                    "maxlength": "",
+                    "wpml_cf_preferences": 2
+                },
+                {
+                    "key": "field_service-feature_feature_title",
+                    "allow_in_bindings": 0,
+                    "label": "Nadpis",
+                    "name": "title",
+                    "aria-label": "",
+                    "type": "text",
+                    "instructions": "",
+                    "required": 0,
+                    "conditional_logic": false,
+                    "wrapper": {
+                        "width": "",
+                        "class": "",
+                        "id": ""
+                    },
+                    "placeholder": "",
+                    "prepend": "",
+                    "append": "",
+                    "default_value": "",
+                    "maxlength": "",
+                    "wpml_cf_preferences": 2
+                },
+                {
+                    "key": "field_service-feature_feature_perex",
+                    "allow_in_bindings": 0,
+                    "label": "Popis",
+                    "name": "perex",
+                    "aria-label": "",
+                    "type": "wysiwyg",
+                    "instructions": "",
+                    "required": 0,
+                    "conditional_logic": false,
+                    "wrapper": {
+                        "width": "",
+                        "class": "",
+                        "id": ""
+                    },
+                    "tabs": "all",
+                    "toolbar": "basic",
+                    "media_upload": 0,
+                    "delay": 0,
+                    "default_value": "",
+                    "wpml_cf_preferences": 2,
+                    "new_lines": "wpautop"
+                },
+                {
+                    "key": "field_service-feature_feature_stats",
+                    "allow_in_bindings": 0,
+                    "label": "Statistiky",
+                    "name": "stats",
+                    "aria-label": "",
+                    "type": "repeater",
+                    "instructions": "Max 3 KPI hodnoty. Každá má vlastní hodnotu + popisek.",
+                    "required": 0,
+                    "conditional_logic": false,
+                    "wrapper": {
+                        "width": "",
+                        "class": "",
+                        "id": ""
+                    },
+                    "rows_per_page": 20,
+                    "min": 0,
+                    "max": 3,
+                    "button_label": "Přidat statistiku",
+                    "wpml_cf_preferences": 2,
+                    "collapsed": "",
+                    "layout": "table",
+                    "sub_fields": [
+                        {
+                            "key": "field_service-feature_feature_stats_value",
+                            "allow_in_bindings": 0,
+                            "label": "Hodnota",
+                            "name": "value",
+                            "aria-label": "",
+                            "type": "text",
+                            "instructions": "",
+                            "required": 0,
+                            "conditional_logic": false,
+                            "wrapper": {
+                                "width": "",
+                                "class": "",
+                                "id": ""
+                            },
+                            "placeholder": "",
+                            "prepend": "",
+                            "append": "",
+                            "default_value": "",
+                            "maxlength": "",
+                            "wpml_cf_preferences": 2,
+                            "parent_repeater": "field_service-feature_feature_stats"
+                        },
+                        {
+                            "key": "field_service-feature_feature_stats_label",
+                            "allow_in_bindings": 0,
+                            "label": "Popisek",
+                            "name": "label",
+                            "aria-label": "",
+                            "type": "text",
+                            "instructions": "",
+                            "required": 0,
+                            "conditional_logic": false,
+                            "wrapper": {
+                                "width": "",
+                                "class": "",
+                                "id": ""
+                            },
+                            "placeholder": "",
+                            "prepend": "",
+                            "append": "",
+                            "default_value": "",
+                            "maxlength": "",
+                            "wpml_cf_preferences": 2,
+                            "parent_repeater": "field_service-feature_feature_stats"
+                        }
+                    ]
+                },
+                {
+                    "key": "field_service-feature_feature_link",
+                    "allow_in_bindings": 0,
+                    "label": "Odkaz",
+                    "name": "link",
+                    "aria-label": "",
+                    "type": "link",
+                    "instructions": "",
+                    "required": 0,
+                    "conditional_logic": false,
+                    "wrapper": {
+                        "width": "",
+                        "class": "",
+                        "id": ""
+                    },
+                    "return_format": "array",
+                    "wpml_cf_preferences": 2
+                }
+            ]
+        },
+        {
+            "key": "field_service-feature_appearance_accordion",
+            "allow_in_bindings": 0,
+            "label": "Vzhled",
+            "name": "",
+            "aria-label": "",
+            "type": "accordion",
+            "instructions": "",
+            "required": 0,
+            "conditional_logic": 0,
+            "wrapper": {
+                "width": "",
+                "class": "",
+                "id": ""
+            },
+            "wpml_cf_preferences": 0,
+            "open": 0,
+            "multi_expand": 0,
+            "endpoint": 0
+        },
+        {
+            "key": "field_service-feature_spacing",
+            "allow_in_bindings": 1,
+            "label": "Rozestupy",
+            "name": "spacing",
+            "aria-label": "",
+            "type": "select",
+            "instructions": "Upravte rozestupy při kombinování komponent",
+            "required": 0,
+            "conditional_logic": false,
+            "wrapper": {
+                "width": "",
+                "class": "",
+                "id": ""
+            },
+            "allow_null": 0,
+            "multiple": 0,
+            "ui": 0,
+            "return_format": "value",
+            "ajax": 0,
+            "placeholder": "",
+            "create_options": 0,
+            "save_options": 0,
+            "default_value": "default",
+            "choices": {
+                "default": "Standardní",
+                "no-top": "Bez horního rozestupu",
+                "no-bottom": "Bez dolního rozestupu",
+                "no": "Žádný rozestup"
+            },
+            "wpml_cf_preferences": 1
+        }
+    ],
+    "location": [
+        [
+            {
+                "param": "block",
+                "operator": "==",
+                "value": "acf/service-feature"
+            }
+        ]
+    ],
+    "modified": 1781510953
+}

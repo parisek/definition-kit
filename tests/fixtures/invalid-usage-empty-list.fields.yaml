@@ -1,0 +1,6 @@
+name: Demo Usage Empty List
+usage: []
+fields:
+  title:
+    type: text
+    label: Nadpis

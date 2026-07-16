@@ -1,0 +1,6 @@
+name: Demo Invalid Unknown Property
+fields:
+  title:
+    type: text
+    label: Nadpis
+    bogus_property: true   # not declared in the schema; additionalProperties:false

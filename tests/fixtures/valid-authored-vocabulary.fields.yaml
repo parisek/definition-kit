@@ -1,0 +1,56 @@
+name: Authored Vocabulary Demo
+usage: homepage-v2
+category: Gutenberg
+render: bleed
+asana: 'https://app.asana.com/1/000/task/000'
+figma: 'https://figma.com/file/000'
+web: 'https://example.com/demo'
+drupal: paragraph_demo
+key: group_authored-vocabulary
+wp:
+  show_in_rest: 1
+fields:
+  title:
+    type: text
+    label: Nadpis
+    description: 'Editor-facing guidance.'
+    mcp:
+      - 'Keep it short.'
+      - 'Use a non-breaking space between short words.'
+    dev: 'Rendered via text-display-lg, see typography.md.'
+    translatable: true
+    required: true
+    maxlength: 60
+    placeholder: 'Zadejte nadpis'
+  quantity:
+    type: number
+    label: Množství
+    min: 1
+    max: 10
+    step: 1
+  brochure:
+    type: media
+    kind: file
+    label: Brožura
+    accept: [pdf, docx]
+    max_size: 10
+  photo:
+    type: media
+    kind: image
+    label: Fotka
+    min_width: 800
+    max_width: 3000
+    min_height: 600
+    max_height: 2000
+  items:
+    type: repeater
+    label: Položky
+    add_label: 'Přidat položku'
+    min: 1
+    max: 5
+    fields:
+      value: { type: text, label: Hodnota }
+  conditional_field:
+    type: text
+    label: 'Podmíněné pole'
+    visible_when: { field: title, not_empty: true }

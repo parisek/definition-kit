@@ -1,0 +1,159 @@
+# ACF type-defaults baseline — derived from the mairateam corpus (49 acf.json,
+# 404 fields incl. nested). Per-type prop => default value. The transformer drops
+# a prop from a field when its value equals the baseline default for that field's
+# type; anything left over (a value that deviates from this table) survives as
+# either a lifted semantic key (constraints/translatable/visible_when/options/of)
+# or, if there is no semantic slot for it, a small `wp:` escape hatch on the field.
+#
+# `common` applies to every ACF field type; type-specific blocks add/override on
+# top of it. Props that are semantically lifted elsewhere are NOT listed here
+# even though they vary per field: key, label, name, instructions (-> description),
+# required, wpml_cf_preferences (-> translatable), conditional_logic (-> visible_when),
+# choices (-> options), post_type (-> of), maxlength/min/max/step/mime_types/max_size/
+# min_width/max_width/min_height/max_height (-> constraints).
+#
+# `parent_repeater` is dropped unconditionally for every type — it is ACF-computed
+# structural metadata (the enclosing repeater's key) re-derivable from nesting in
+# the generator; it never carries authored intent.
+#
+# `default_value` is deliberately NOT in `common` — a full census over the same
+# 49-component corpus (Task 9 of the generator plan) shows it is carried ONLY by
+# text/textarea/wysiwyg/number/select/button_group/email/url/true_false (100% of
+# each of those types), and NEVER by group/repeater/accordion/image/file/gallery/
+# link/post_object (0% of each) — it is not a universal ACF prop, so it is listed
+# per-type below instead, on exactly the types that actually carry it.
+#
+# `repeater.pagination` is likewise NOT a universal default (unlike
+# `rows_per_page`, which is always `20` when present) — the same census shows it
+# present on only a minority of top-level repeaters and on NONE of the repeaters
+# nested inside a group, so it is dropped from this baseline entirely: an
+# authored `pagination` value survives verbatim via a field's `wp:` escape hatch
+# instead of being force-defaulted by the generator.
+#
+# `wysiwyg.new_lines` is likewise inconsistently present (11/31 corpus wysiwyg
+# fields carry it, always `wpautop` when present) — same treatment: dropped
+# from this baseline, survives via `wp:` when authored.
+
+common:
+  allow_in_bindings: 0
+  wrapper: { width: '', class: '', id: '' }
+  aria-label: ''
+
+text:
+  placeholder: ''
+  prepend: ''
+  append: ''
+  default_value: ''
+
+textarea: # -> text + multiline: true
+  placeholder: ''
+  new_lines: ''
+  rows: ''
+  default_value: ''
+
+wysiwyg: # -> richtext
+  tabs: all
+  toolbar: basic
+  media_upload: 0
+  delay: 0
+  default_value: ''
+
+number:
+  placeholder: ''
+  prepend: ''
+  append: ''
+  default_value: ''
+
+true_false: # -> boolean
+  ui: 1
+  ui_on_text: ''
+  ui_off_text: ''
+  message: ''
+  # Corpus census: 100% of true_false fields serialize default_value as
+  # the int 0 (never the bool `false`) in raw acf.json — a real generator
+  # bug caught by AcfJsonComparator's round-trip tightening (dávka 3
+  # review), not a documented residual: `0`/`false` are loosely
+  # equivalent for MIGRATION's own default-stripping (Baseline\
+  # TypeDefaults::valuesEqual() already treats them as the same value),
+  # so this was silently masked until the comparator stopped doing the
+  # same loose comparison on the GENERATION side.
+  default_value: 0
+
+select:
+  allow_null: 0
+  multiple: 0
+  ui: 0
+  return_format: value
+  ajax: 0
+  placeholder: ''
+  create_options: 0
+  save_options: 0
+  default_value: ''
+
+button_group: # -> select
+  layout: horizontal
+  return_format: value
+  default_value: ''
+
+email: # -> text
+  placeholder: ''
+  prepend: ''
+  append: ''
+  default_value: ''
+
+url: # -> link + shape:url
+  placeholder: ''
+  default_value: ''
+
+image: # -> media + kind:image
+  return_format: array
+  preview_size: medium
+  library: all
+  min_size: 0
+
+file: # -> media + kind:file
+  return_format: array
+  library: all
+  min_size: ''
+
+gallery: # -> media + kind:gallery + multiple:true
+  return_format: array
+  library: all
+  min_size: 0
+  preview_size: medium
+  insert: append
+
+link: # -> link + shape:link
+  return_format: array
+
+post_object: # -> reference
+  taxonomy: []
+  allow_null: 0
+  return_format: object
+  ui: 1
+  bidirectional_target: []
+  multiple: 0
+
+group:
+  layout: block
+
+repeater:
+  rows_per_page: 20
+
+accordion:
+  # entire pseudo-field type is dropped, not merged — kept here only for
+  # documentation. multi_expand/endpoint/open are ACF UI accordion knobs with
+  # no round-trip in this prototype (see report: "section markers" future work).
+  multi_expand: 0
+  endpoint: 0
+
+# Pseudo-"type" for the root ACF field-group object (the props sitting
+# alongside `fields`, not a field itself). Deliberately NOT merged with
+# `common` semantics beyond the generic YAML merge every type gets —
+# `hide_on_screen`/`show_in_rest` only ever apply at this scope. Kept in
+# sync by hand with Generator\RootFieldGroupBuilder::ROOT_DEFAULTS (the
+# two props actually consulted from here); see that class's own docblock
+# for why these two specifically carry a legacy round-trip residual.
+root:
+  hide_on_screen: ''
+  show_in_rest: 0

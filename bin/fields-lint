@@ -1,0 +1,104 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use Parisek\DefinitionKit\Lint\DriftLinter;
+
+foreach ([__DIR__ . '/../vendor/autoload.php', __DIR__ . '/../../../autoload.php'] as $autoload) {
+    if (is_file($autoload)) {
+        require $autoload;
+        break;
+    }
+}
+
+/** @return array{status: 'ok'|'drift'|'skip'|'fail', component: string, acfDrift?: list<string>, blockDrift?: list<string>, reason?: string} */
+function fields_lint_one(string $componentDir): array
+{
+    $componentDir = rtrim($componentDir, '/');
+    $componentName = basename($componentDir);
+    $yamlPath = "{$componentDir}/{$componentName}.yaml";
+
+    if (!is_file($yamlPath)) {
+        return ['status' => 'skip', 'component' => $componentName, 'reason' => "no {$componentName}.yaml yet"];
+    }
+
+    $result = (new DriftLinter())->lint($componentDir);
+
+    if (null !== $result->error) {
+        return ['status' => 'fail', 'component' => $componentName, 'reason' => $result->error];
+    }
+    if (!$result->clean) {
+        return ['status' => 'drift', 'component' => $componentName, 'acfDrift' => $result->acfDrift, 'blockDrift' => $result->blockDrift];
+    }
+    return ['status' => 'ok', 'component' => $componentName];
+}
+
+$args = array_slice($argv, 1);
+$root = null;
+$single = null;
+
+foreach ($args as $arg) {
+    if (str_starts_with($arg, '--root=')) {
+        $root = substr($arg, 7);
+        continue;
+    }
+    $single = $arg;
+}
+
+if (null === $root && null === $single) {
+    fwrite(STDERR, "usage: fields-lint <component-dir> | fields-lint --root=<components-root>\n");
+    exit(2);
+}
+
+if (null !== $root && !is_dir($root)) {
+    fwrite(STDERR, "not a directory: {$root}\n");
+    exit(2);
+}
+
+$results = [];
+if (null !== $root) {
+    $dirs = glob(rtrim($root, '/') . '/*', GLOB_ONLYDIR) ?: [];
+    sort($dirs);
+    foreach ($dirs as $dir) {
+        $results[] = fields_lint_one($dir);
+    }
+} else {
+    $results[] = fields_lint_one($single);
+}
+
+$failures = 0;
+foreach ($results as $result) {
+    switch ($result['status']) {
+        case 'ok':
+            echo "OK   {$result['component']}\n";
+            break;
+        case 'skip':
+            echo "SKIP {$result['component']}: {$result['reason']}\n";
+            break;
+        case 'drift':
+            $failures++;
+            echo "DRIFT {$result['component']}\n";
+            if ([] !== $result['acfDrift']) {
+                echo "  acf.json:\n";
+                foreach ($result['acfDrift'] as $line) {
+                    echo "    {$line}\n";
+                }
+            }
+            if ([] !== $result['blockDrift']) {
+                echo "  block.json:\n";
+                foreach ($result['blockDrift'] as $line) {
+                    echo "    {$line}\n";
+                }
+            }
+            echo "  fix: vendor/bin/fields-generate {$result['component']}\n";
+            break;
+        case 'fail':
+            $failures++;
+            echo "FAIL {$result['component']}: {$result['reason']}\n";
+            break;
+    }
+}
+echo sprintf("%d component(s), %d failed\n", count($results), $failures);
+
+exit($failures > 0 ? 1 : 0);

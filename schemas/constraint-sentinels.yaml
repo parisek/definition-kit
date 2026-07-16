@@ -1,0 +1,61 @@
+# Per (ACF field type, constraint prop) "no constraint authored" sentinel
+# value. Deliberately separate from acf-defaults-baseline.yaml — that
+# file's own header comment excludes constraint props (maxlength/min/max/
+# step/mime_types/max_size/min_width/max_width/min_height/max_height)
+# because Migration\AcfJsonReader always lifts them regardless of value,
+# so the baseline was never taught their empty representation. But the
+# GENERATOR still needs to emit a raw value when the semantic layer
+# carries none, and that empty value is NOT uniform across ACF types:
+# some represent "no limit" as numeric 0, others as the empty string ''.
+#
+# Derived from a full census over the 49-component mairateam corpus plus
+# the 2 dávka-2 corpus-sample fixtures (newsletter-signup, store-locator)
+# — see Task 1 of docs/superpowers/plans/2026-07-15-field-definition-generator.md
+# for the exact counts. Two ACF-version eras coexist in the corpus for
+# image dimension props (0 vs '') — this table uses the census majority
+# (0); components on the legacy '' convention are a documented,
+# deliberately-tolerated round-trip residual (see that plan's Global
+# Constraints and Generator/GenerationRoundTripTest.php).
+#
+# image.min_size is intentionally absent — unlike the other dimension
+# props it is never lifted by Migration\AcfJsonReader, so it is governed
+# by acf-defaults-baseline.yaml's image.min_size:0 alone.
+#
+# image.mime_types was discovered missing from the original Task 1 census
+# during Task 9's round-trip proof: a full re-check shows it is present on
+# 36/36 corpus `image` fields (35 empty '', 1 authored constraint) — same
+# empty-string convention as file/gallery. Added per Task 9's own guidance
+# to extend this table when a round-trip test surfaces a genuine gap.
+
+text:
+  maxlength: ''
+textarea:
+  maxlength: ''
+number:
+  min: ''
+  max: ''
+  step: ''
+repeater:
+  min: 0
+  max: 0
+file:
+  min_size: ''
+  max_size: ''
+  mime_types: ''
+gallery:
+  min: 0
+  max: 0
+  min_width: 0
+  max_width: 0
+  min_height: 0
+  max_height: 0
+  min_size: 0
+  max_size: 0
+  mime_types: ''
+image:
+  min_width: 0
+  max_width: 0
+  min_height: 0
+  max_height: 0
+  max_size: 0
+  mime_types: ''

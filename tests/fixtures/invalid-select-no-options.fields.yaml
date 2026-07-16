@@ -1,0 +1,5 @@
+name: Demo Invalid Select
+fields:
+  spacing:
+    type: select       # missing required `options` when type is select
+    label: Rozestupy

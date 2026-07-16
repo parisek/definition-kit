@@ -1,0 +1,114 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://schemas.parisek.dev/definition-kit/component.fields.schema.json",
+    "title": "Component field definition",
+    "type": "object",
+    "required": ["name", "fields"],
+    "additionalProperties": false,
+    "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "key": { "type": "string", "pattern": "^group_" },
+        "usage": {
+            "oneOf": [
+                { "type": "string", "minLength": 1 },
+                { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1 }
+            ]
+        },
+        "category": { "type": "string", "minLength": 1 },
+        "render": { "type": "string", "minLength": 1 },
+        "web": { "type": "string", "minLength": 1 },
+        "asana": { "type": "string", "minLength": 1 },
+        "figma": { "type": "string", "minLength": 1 },
+        "drupal": { "type": "string", "minLength": 1 },
+        "description": { "type": "string" },
+        "weight": { "type": "integer" },
+        "responsive": { "type": "boolean" },
+        "wp": { "type": "object" },
+        "fields": { "$ref": "#/$defs/fieldMap" }
+    },
+    "$defs": {
+        "fieldMap": {
+            "type": "object",
+            "minProperties": 1,
+            "additionalProperties": { "$ref": "#/$defs/field" }
+        },
+        "multivalueAnnotation": {
+            "oneOf": [
+                { "type": "string", "minLength": 1 },
+                { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1 }
+            ]
+        },
+        "visibleWhen": {
+            "type": "object",
+            "required": ["field"],
+            "additionalProperties": false,
+            "properties": {
+                "field": { "type": "string", "minLength": 1 },
+                "equals": {},
+                "not_equals": {},
+                "empty": { "const": true },
+                "not_empty": { "const": true },
+                "contains": {}
+            },
+            "oneOf": [
+                { "required": ["equals"] },
+                { "required": ["not_equals"] },
+                { "required": ["empty"] },
+                { "required": ["not_empty"] },
+                { "required": ["contains"] }
+            ]
+        },
+        "field": {
+            "type": "object",
+            "required": ["type", "label"],
+            "additionalProperties": false,
+            "properties": {
+                "type": {
+                    "enum": ["text", "richtext", "number", "boolean", "select", "media", "link", "reference", "group", "repeater", "date"]
+                },
+                "role": { "enum": ["field", "query", "computed", "global"] },
+                "label": { "type": "string", "minLength": 1 },
+                "description": { "type": "string" },
+                "mcp": { "$ref": "#/$defs/multivalueAnnotation" },
+                "dev": { "$ref": "#/$defs/multivalueAnnotation" },
+                "translatable": { "type": "boolean" },
+                "required": { "type": "boolean" },
+                "key": { "type": "string", "pattern": "^field_" },
+                "multiline": { "type": "boolean" },
+                "kind": { "enum": ["image", "file", "gallery"] },
+                "shape": { "enum": ["url", "link"] },
+                "of": { "type": "string" },
+                "multiple": { "type": "boolean" },
+                "min": { "type": "integer", "minimum": 0 },
+                "max": { "type": "integer", "minimum": 0 },
+                "step": { "type": "number", "minimum": 0 },
+                "maxlength": { "type": "integer", "minimum": 1 },
+                "accept": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1 },
+                "max_size": { "type": "number", "minimum": 0 },
+                "min_width": { "type": "integer", "minimum": 0 },
+                "max_width": { "type": "integer", "minimum": 0 },
+                "min_height": { "type": "integer", "minimum": 0 },
+                "max_height": { "type": "integer", "minimum": 0 },
+                "add_label": { "type": "string", "minLength": 1 },
+                "placeholder": { "type": "string", "minLength": 1 },
+                "visible_when": { "$ref": "#/$defs/visibleWhen" },
+                "options": { "type": "object", "minProperties": 1, "additionalProperties": { "type": "string" } },
+                "resolved_from": { "type": "array", "items": { "type": "string" } },
+                "source": { "type": "string" },
+                "demo": {},
+                "wp": { "type": "object" },
+                "fields": { "$ref": "#/$defs/fieldMap" }
+            },
+            "allOf": [
+                {
+                    "if": { "properties": { "type": { "const": "select" } }, "required": ["type"] },
+                    "then": { "required": ["options"] }
+                },
+                {
+                    "if": { "properties": { "type": { "enum": ["group", "repeater"] } }, "required": ["type"] },
+                    "then": { "required": ["fields"] }
+                }
+            ]
+        }
+    }
+}

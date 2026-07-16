@@ -1,0 +1,15 @@
+name: Demo Flat
+fields:
+  title:
+    type: text
+    label: Nadpis
+    required: true
+    description: "Section heading."
+  perex:
+    type: richtext
+    label: Perex
+  count:
+    type: number
+    label: Count
+    min: 1
+    max: 10

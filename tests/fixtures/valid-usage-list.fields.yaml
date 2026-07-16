@@ -1,0 +1,10 @@
+name: Demo Usage List
+usage:
+    - '404'
+    - article-list
+    - homepage
+category: Gutenberg
+fields:
+  title:
+    type: text
+    label: Nadpis

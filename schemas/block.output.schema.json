@@ -1,0 +1,22 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://schemas.parisek.dev/definition-kit/block.output.schema.json",
+    "title": "Generated block.json (structural sanity check)",
+    "type": "object",
+    "required": ["apiVersion", "name", "title", "category", "icon", "acf"],
+    "properties": {
+        "apiVersion": { "const": 3 },
+        "name": { "type": "string", "pattern": "^acf/" },
+        "title": { "type": "string", "minLength": 1 },
+        "category": { "type": "string", "minLength": 1 },
+        "icon": { "type": "string", "minLength": 1 },
+        "acf": {
+            "type": "object",
+            "required": ["mode", "renderCallback"],
+            "properties": {
+                "mode": { "type": "string" },
+                "renderCallback": { "type": "string", "minLength": 1 }
+            }
+        }
+    }
+}

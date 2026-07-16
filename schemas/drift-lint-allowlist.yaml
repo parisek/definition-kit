@@ -1,0 +1,80 @@
+# Narrow, README-documented round-trip residuals that Lint\DriftAllowlist
+# filters out of Support\StructuralDiff's output before the drift-lint
+# decides pass/fail. Every rule matches on an EXACT (prop, expected,
+# actual) triple, plus a scope (a field type, root-only, or a closed
+# component-slug list) — never a bare prop-name wildcard. A hand-edit
+# that changes the same prop to any OTHER value still fails: these rules
+# exist to un-flag ALREADY-UNDERSTOOD legacy export-era artifacts, not to
+# loosen the comparison generally. Source of truth for these five values:
+# static/tools/definition-kit/README.md "Known, documented round-trip
+# residuals" — keep this file and that section in sync; if that section
+# changes, this file must change with it, not silently diverge.
+#
+# `true_false.default_value` is deliberately NOT here — the README says
+# that one was fixed at the baseline source (schemas/acf-defaults-
+# baseline.yaml), not left as a residual. If it ever reappears as a
+# drift-lint failure, that is a real regression, not something to
+# allowlist.
+
+rules:
+  - id: legacy-image-dimension-sentinel
+    kind: value
+    props: [min_width, max_width, min_height, max_height, max_size]
+    when_type: image
+    expected: 0
+    actual: ''
+
+  - id: legacy-hide-on-screen
+    kind: value
+    props: [hide_on_screen]
+    root_only: true
+    expected: ''
+    actual: [[], null, false]
+
+  - id: legacy-show-in-rest
+    kind: value
+    props: [show_in_rest]
+    root_only: true
+    expected: 0
+    actual: [null, false]
+
+  - id: select-default-value-tie
+    kind: value
+    props: [default_value]
+    when_type: select
+    expected: ''
+    actual: false
+
+  - id: legacy-minimal-export-prop-set
+    kind: missing
+    props:
+      - aria-label
+      - conditional_logic
+      - wrapper
+      - prepend
+      - append
+      - ajax
+      - placeholder
+      - rows_per_page
+      - create_options
+      - save_options
+      - parent_repeater
+      - hide_on_screen
+      - show_in_rest
+    components:
+      - reference-detail
+      - creative-slider
+      - funnel-default
+      - graph-budget
+      - hero-home
+      - signpost-team
+      - stats-list
+      - tool-list
+      - tool-marquee
+      - ebook
+      - contact
+      - contact-link
+      - article-video-play
+      - article-video-loop
+      - article-video-related
+      - certificate-list

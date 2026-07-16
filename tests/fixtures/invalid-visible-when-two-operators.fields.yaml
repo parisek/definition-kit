@@ -1,0 +1,6 @@
+name: Invalid Visible When
+fields:
+  conditional_field:
+    type: text
+    label: 'Podmíněné pole'
+    visible_when: { field: title, equals: foo, not_empty: true }

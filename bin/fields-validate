@@ -1,0 +1,36 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use Parisek\DefinitionKit\Schema\FieldsSchemaValidator;
+
+foreach ([__DIR__ . '/../vendor/autoload.php', __DIR__ . '/../../../autoload.php'] as $autoload) {
+    if (is_file($autoload)) {
+        require $autoload;
+        break;
+    }
+}
+
+$paths = array_slice($argv, 1);
+if ([] === $paths) {
+    fwrite(STDERR, "usage: fields-validate <file.yaml> [...]\n");
+    exit(2);
+}
+
+$validator = new FieldsSchemaValidator();
+$failed = false;
+foreach ($paths as $path) {
+    $result = $validator->validateFile($path);
+    if ($result->valid) {
+        echo "OK   {$path}\n";
+        continue;
+    }
+    $failed = true;
+    echo "FAIL {$path}\n";
+    foreach ($result->errors as $error) {
+        echo "       {$error['pointer']}: {$error['message']}\n";
+    }
+}
+
+exit($failed ? 1 : 0);

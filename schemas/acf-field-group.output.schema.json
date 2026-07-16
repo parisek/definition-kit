@@ -1,0 +1,28 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://schemas.parisek.dev/definition-kit/acf-field-group.output.schema.json",
+    "title": "Generated ACF field group (structural sanity check)",
+    "type": "object",
+    "required": ["key", "title", "fields", "location", "menu_order", "modified"],
+    "properties": {
+        "key": { "type": "string", "pattern": "^group_" },
+        "title": { "type": "string" },
+        "fields": { "type": "array", "items": { "$ref": "#/$defs/field" } },
+        "location": { "type": "array", "minItems": 1 },
+        "menu_order": { "type": "integer" },
+        "modified": { "type": "integer" }
+    },
+    "$defs": {
+        "field": {
+            "type": "object",
+            "required": ["key", "name", "type", "label"],
+            "properties": {
+                "key": { "type": "string", "minLength": 1 },
+                "name": { "type": "string" },
+                "type": { "type": "string", "minLength": 1 },
+                "label": { "type": "string" },
+                "sub_fields": { "type": "array", "items": { "$ref": "#/$defs/field" } }
+            }
+        }
+    }
+}

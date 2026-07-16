@@ -1,0 +1,6 @@
+name: Invalid Root Key
+key: not-a-group-key
+fields:
+  title:
+    type: text
+    label: Nadpis

@@ -1,0 +1,5 @@
+name: Demo Invalid Bad Type
+fields:
+  headline:
+    type: heading      # not in the abstract-type enum
+    label: Headline

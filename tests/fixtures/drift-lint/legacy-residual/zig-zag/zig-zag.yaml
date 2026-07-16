@@ -1,0 +1,76 @@
+name: Zig-zag
+key: group_zig_zag
+fields:
+  first_image_right:
+    type: boolean
+    label: 'První obrázek vpravo'
+    translatable: true
+    key: field_zig_zag_first_image_right
+  items:
+    type: repeater
+    label: Položky
+    add_label: 'Přidat položku'
+    fields:
+      image:
+        type: media
+        label: Obrázek
+        description: 'Doporučené rozměry: 2500x1700px'
+        kind: image
+        key: field_zig_zag_item_image
+        wp:
+          min_size: ''
+          preview_size: thumbnail
+      suptitle:
+        type: text
+        label: Podnadpis
+        translatable: true
+        placeholder: 'Zadejte podnadpis'
+        key: field_zig_zag_item_suptitle
+      title:
+        type: text
+        label: Nadpis
+        translatable: true
+        required: true
+        placeholder: 'Zadejte nadpis'
+        key: field_zig_zag_item_title
+      perex:
+        type: richtext
+        label: Perex
+        translatable: true
+        key: field_zig_zag_item_perex
+      button:
+        type: link
+        label: Tlačítko
+        translatable: true
+        shape: link
+        key: field_zig_zag_item_button
+    key: field_zig_zag_items
+    wp:
+      collapsed: ''
+      layout: block
+      pagination: 0
+  spacing:
+    type: select
+    label: Rozestupy
+    description: 'Upravte rozestupy při kombinování komponent'
+    options:
+      default: Standardní
+      no-top: 'Bez horního rozestupu'
+      no-bottom: 'Bez dolního rozestupu'
+      'no': 'Žádný rozestup'
+    key: field_zig_zag_spacing
+    wp:
+      allow_in_bindings: 1
+      default_value: default
+wp:
+  accordions:
+    -
+      key: field_68f22fd8b670a
+      label: Položky
+      open: 0
+      before: first_image_right
+    -
+      key: field_68f22fc9b6709
+      label: Vzhled
+      open: 0
+      before: spacing

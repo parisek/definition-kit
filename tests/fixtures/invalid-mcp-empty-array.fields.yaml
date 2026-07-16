@@ -1,0 +1,6 @@
+name: Invalid Mcp
+fields:
+  title:
+    type: text
+    label: Nadpis
+    mcp: []

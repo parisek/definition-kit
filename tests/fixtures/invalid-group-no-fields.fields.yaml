@@ -1,0 +1,5 @@
+name: Demo Invalid Group
+fields:
+  heading:
+    type: group        # missing required `fields` when type is group/repeater
+    label: Heading

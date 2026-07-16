@@ -1,0 +1,7 @@
+name: Demo Invalid Key
+fields:
+  logo:
+    type: media
+    kind: image
+    label: Obrázek
+    key: not_a_field_key   # must match ^field_

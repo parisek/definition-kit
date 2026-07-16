@@ -1,0 +1,4 @@
+name: Demo Invalid Missing Label
+fields:
+  orphan:
+    type: text         # missing required `label`

@@ -1,0 +1,136 @@
+name: 'Service - feature'
+usage:
+  - homepage-v2
+category: Gutenberg
+render: bleed
+asana: 'https://app.asana.com/1/311854867024856/task/1215711477693484'
+fields:
+  heading:
+    type: group
+    label: Nadpis
+    description: 'Volitelný nadpis nad feature kartou.'
+    fields:
+      subtitle:
+        type: text
+        label: Podnadpis
+        translatable: true
+      title:
+        type: text
+        label: Nadpis
+        translatable: true
+        placeholder: 'Zadejte nadpis'
+      perex:
+        type: text
+        label: Popis
+        translatable: true
+        multiline: true
+  feature:
+    type: group
+    label: 'Feature karta'
+    description: 'Zvýrazněná karta — mockup produktu, plovoucí metriky a panel s informacemi.'
+    fields:
+      image:
+        type: media
+        label: 'Obrázek produktu'
+        description: 'Mockup produktu. 524 x 412 (1048 x 824 @2x).'
+        kind: image
+      badges:
+        type: repeater
+        label: Štítky
+        description: 'Plovoucí metriky nad obrázkem produktu (např. CTR 3.3 %). Max 3.'
+        max: 3
+        add_label: 'Přidat štítek'
+        fields:
+          label:
+            type: text
+            label: Popisek
+            translatable: true
+          value:
+            type: text
+            label: Hodnota
+            translatable: true
+        wp:
+          collapsed: ''
+          layout: table
+          wpml_cf_preferences: 2
+      product_label:
+        type: text
+        label: 'Popisek produktu'
+        description: "Malý popisek nad názvem produktu, např. 'Váš obchod'."
+        translatable: true
+      product_title:
+        type: text
+        label: 'Název produktu'
+        translatable: true
+      product_price:
+        type: text
+        label: 'Cena produktu'
+        translatable: true
+      product_button:
+        type: text
+        label: 'Tlačítko produktu'
+        description: "Popisek tlačítka košíku, např. 'Přidat do košíku'. Dekorativní."
+        translatable: true
+      title:
+        type: text
+        label: Nadpis
+        translatable: true
+      perex:
+        type: richtext
+        label: Popis
+        translatable: true
+        wp:
+          new_lines: wpautop
+      stats:
+        type: repeater
+        label: Statistiky
+        description: 'Max 3 KPI hodnoty. Každá má vlastní hodnotu + popisek.'
+        max: 3
+        add_label: 'Přidat statistiku'
+        fields:
+          value:
+            type: text
+            label: Hodnota
+            translatable: true
+          label:
+            type: text
+            label: Popisek
+            translatable: true
+        wp:
+          collapsed: ''
+          layout: table
+          wpml_cf_preferences: 2
+      link:
+        type: link
+        label: Odkaz
+        translatable: true
+        shape: link
+  spacing:
+    type: select
+    label: Rozestupy
+    description: 'Upravte rozestupy při kombinování komponent'
+    options:
+      default: Standardní
+      no-top: 'Bez horního rozestupu'
+      no-bottom: 'Bez dolního rozestupu'
+      'no': 'Žádný rozestup'
+    wp:
+      allow_in_bindings: 1
+      default_value: default
+wp:
+  accordions:
+    -
+      key: field_service-feature_header_accordion
+      label: Hlavička
+      open: 0
+      before: heading
+    -
+      key: field_service-feature_content_accordion
+      label: 'Feature karta'
+      open: 1
+      before: feature
+    -
+      key: field_service-feature_appearance_accordion
+      label: Vzhled
+      open: 0
+      before: spacing

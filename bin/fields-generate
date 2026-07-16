@@ -1,0 +1,141 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use Parisek\DefinitionKit\Generator\AcfJsonWriter;
+use Parisek\DefinitionKit\Generator\BlockJsonGenerator;
+use Parisek\DefinitionKit\Generator\BlockJsonWriter;
+use Parisek\DefinitionKit\Generator\FieldsGenerator;
+use Parisek\DefinitionKit\Schema\FieldsSchemaValidator;
+use Symfony\Component\Yaml\Yaml;
+
+foreach ([__DIR__ . '/../vendor/autoload.php', __DIR__ . '/../../../autoload.php'] as $autoload) {
+    if (is_file($autoload)) {
+        require $autoload;
+        break;
+    }
+}
+
+/**
+ * @return array{ok: bool, component: string, out?: string, error?: string}
+ */
+function fields_generate_one(string $componentDir, bool $dryRun): array
+{
+    $componentDir = rtrim($componentDir, '/');
+    $componentName = basename($componentDir);
+    $yamlPath = "{$componentDir}/{$componentName}.yaml";
+
+    if (!is_file($yamlPath)) {
+        return ['ok' => false, 'component' => $componentName, 'error' => "no {$componentName}.yaml at {$yamlPath}"];
+    }
+
+    $validation = (new FieldsSchemaValidator())->validateFile($yamlPath);
+    if (!$validation->valid) {
+        $messages = array_map(
+            static fn (array $e): string => "{$e['pointer']}: {$e['message']}",
+            $validation->errors,
+        );
+        return ['ok' => false, 'component' => $componentName, 'error' => 'invalid definition: ' . implode('; ', $messages)];
+    }
+
+    $tree = Yaml::parseFile($yamlPath);
+    if (!is_array($tree)) {
+        return ['ok' => false, 'component' => $componentName, 'error' => 'malformed YAML'];
+    }
+
+    try {
+        $fieldGroup = (new FieldsGenerator())->generate($tree, $componentName, time());
+    } catch (\Throwable $e) {
+        // Broad on purpose: AbstractTypeReverseMapper throws DomainException
+        // for an unsupported abstract type/kind/shape/of combination — one
+        // bad component must be reported and skipped, not abort the batch.
+        return ['ok' => false, 'component' => $componentName, 'error' => $e->getMessage()];
+    }
+
+    $existingBlockJsonPath = "{$componentDir}/block.json";
+    $existingBlockJson = is_file($existingBlockJsonPath)
+        ? json_decode(file_get_contents($existingBlockJsonPath), true)
+        : null;
+    $block = (new BlockJsonGenerator())->generate(
+        $tree,
+        $componentName,
+        is_array($existingBlockJson) ? $existingBlockJson : null,
+    );
+
+    $acfOutPath = $dryRun ? tempnam(sys_get_temp_dir(), 'fields-generate-dry-run-acf-') : "{$componentDir}/acf.json";
+    $blockOutPath = $dryRun ? tempnam(sys_get_temp_dir(), 'fields-generate-dry-run-block-') : $existingBlockJsonPath;
+
+    try {
+        (new AcfJsonWriter())->write($fieldGroup, $acfOutPath);
+        (new BlockJsonWriter())->write($block, $blockOutPath);
+    } catch (\Throwable $e) {
+        if ($dryRun) {
+            @unlink($acfOutPath);
+            @unlink($blockOutPath);
+        }
+        return ['ok' => false, 'component' => $componentName, 'error' => $e->getMessage()];
+    }
+
+    if ($dryRun) {
+        @unlink($acfOutPath);
+        @unlink($blockOutPath);
+        return ['ok' => true, 'component' => $componentName];
+    }
+
+    return ['ok' => true, 'component' => $componentName, 'out' => $acfOutPath];
+}
+
+$args = array_slice($argv, 1);
+$root = null;
+$dryRun = false;
+$single = null;
+
+foreach ($args as $arg) {
+    if (str_starts_with($arg, '--root=')) {
+        $root = substr($arg, 7);
+        continue;
+    }
+    if ('--dry-run' === $arg) {
+        $dryRun = true;
+        continue;
+    }
+    $single = $arg;
+}
+
+if (null === $root && null === $single) {
+    fwrite(STDERR, "usage: fields-generate <component-dir> | fields-generate --root=<components-root> [--dry-run]\n");
+    exit(2);
+}
+
+if (null !== $root && !is_dir($root)) {
+    fwrite(STDERR, "not a directory: {$root}\n");
+    exit(2);
+}
+
+$results = [];
+if (null !== $root) {
+    $dirs = glob(rtrim($root, '/') . '/*', GLOB_ONLYDIR) ?: [];
+    sort($dirs);
+    foreach ($dirs as $dir) {
+        $name = basename($dir);
+        if (is_file("{$dir}/{$name}.yaml")) {
+            $results[] = fields_generate_one($dir, $dryRun);
+        }
+    }
+} else {
+    $results[] = fields_generate_one($single, $dryRun);
+}
+
+$failures = 0;
+foreach ($results as $result) {
+    if ($result['ok']) {
+        echo "OK   {$result['component']}" . (isset($result['out']) ? " -> {$result['out']}" : '') . "\n";
+        continue;
+    }
+    $failures++;
+    echo "FAIL {$result['component']}: {$result['error']}\n";
+}
+echo sprintf("%d component(s), %d failed\n", count($results), $failures);
+
+exit($failures > 0 ? 1 : 0);

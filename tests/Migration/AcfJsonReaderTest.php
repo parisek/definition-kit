@@ -1,0 +1,399 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Parisek\DefinitionKit\Tests\Migration;
+
+use PHPUnit\Framework\TestCase;
+use Parisek\DefinitionKit\Migration\AcfJsonReader;
+
+final class AcfJsonReaderTest extends TestCase
+{
+    private AcfJsonReader $reader;
+
+    protected function setUp(): void
+    {
+        $this->reader = new AcfJsonReader();
+    }
+
+    /**
+     * @param list<array<string,mixed>> $fields
+     * @return array<string,mixed>
+     */
+    private function group(array $fields, string $key = 'group_demo'): array
+    {
+        return ['key' => $key, 'title' => 'Demo', 'fields' => $fields];
+    }
+
+    public function test_root_name_falls_back_to_acf_title_without_twig(): void
+    {
+        $tree = $this->reader->read($this->group([
+            ['key' => 'field_demo_title', 'name' => 'title', 'label' => 'Nadpis', 'type' => 'text'],
+        ]), 'demo');
+        self::assertSame('Demo', $tree['name']);
+    }
+
+    public function test_root_name_prefers_twig_front_comment(): void
+    {
+        $twig = "{#\nname: Demo (twig)\nusage: homepage\nfields:\n#}\n";
+        $tree = $this->reader->read($this->group([
+            ['key' => 'field_demo_title', 'name' => 'title', 'label' => 'Nadpis', 'type' => 'text'],
+        ]), 'demo', $twig);
+        self::assertSame('Demo (twig)', $tree['name']);
+        self::assertSame(['homepage'], $tree['usage']);
+    }
+
+    public function test_usage_is_distilled_into_a_native_list_even_for_a_single_value(): void
+    {
+        // `usage` is a multi-value list in the definition: a single twig
+        // front-comment value still becomes a 1-element list so the key's
+        // type is uniform for every downstream consumer.
+        $twig = "{#\nname: Demo\nusage: homepage\nfields:\n#}\n";
+        $tree = $this->reader->read($this->group([
+            ['key' => 'field_demo_title', 'name' => 'title', 'label' => 'Nadpis', 'type' => 'text'],
+        ]), 'demo', $twig);
+        self::assertSame(['homepage'], $tree['usage']);
+    }
+
+    public function test_usage_comma_string_is_split_into_a_trimmed_list(): void
+    {
+        // Twig authoring convention is a comma-separated string; the
+        // migration splits it into YAML's native sequence, trimming each id
+        // and dropping empty entries (trailing comma, doubled comma).
+        $twig = "{#\nname: Demo\nusage: 404, article-list ,, homepage,\nfields:\n#}\n";
+        $tree = $this->reader->read($this->group([
+            ['key' => 'field_demo_title', 'name' => 'title', 'label' => 'Nadpis', 'type' => 'text'],
+        ]), 'demo', $twig);
+        self::assertSame(['404', 'article-list', 'homepage'], $tree['usage']);
+    }
+
+    public function test_root_metadata_description_weight_responsive_are_distilled_and_coerced(): void
+    {
+        $twig = "{#\nname: Demo\nusage: homepage\ndescription: Demo description\nweight: 20\nresponsive: true\nfields:\n#}\n";
+        $tree = $this->reader->read($this->group([
+            ['key' => 'field_demo_title', 'name' => 'title', 'label' => 'Nadpis', 'type' => 'text'],
+        ]), 'demo', $twig);
+
+        self::assertSame('Demo description', $tree['description']);
+        self::assertSame(20, $tree['weight']);
+        self::assertTrue($tree['responsive']);
+    }
+
+    public function test_acf_root_description_is_captured_into_wp_description_not_metadata_description(): void
+    {
+        // Two DIFFERENT descriptions on the same component: the twig
+        // front-comment `description` (component documentation metadata)
+        // and the acf.json field-group's own root `description` (an ACF
+        // prop, usually the baseline ''). They must land in distinct keys —
+        // conflating them would leak twig doc text into acf.json or drop
+        // the ACF group's real description.
+        $twig = "{#\nname: Demo\nusage: homepage\ndescription: Twig doc description\nfields:\n#}\n";
+        $acf = $this->group([
+            ['key' => 'field_demo_title', 'name' => 'title', 'label' => 'Nadpis', 'type' => 'text'],
+        ]);
+        $acf['description'] = 'ACF group own description';
+
+        $tree = $this->reader->read($acf, 'demo', $twig);
+
+        self::assertSame('Twig doc description', $tree['description']);
+        self::assertSame('ACF group own description', $tree['wp']['description']);
+    }
+
+    public function test_acf_root_baseline_empty_description_is_not_lifted_into_wp(): void
+    {
+        $acf = $this->group([
+            ['key' => 'field_demo_title', 'name' => 'title', 'label' => 'Nadpis', 'type' => 'text'],
+        ]);
+        $acf['description'] = '';
+
+        $tree = $this->reader->read($acf, 'demo');
+
+        self::assertArrayNotHasKey('wp', $tree);
+    }
+
+    public function test_root_key_order_is_metadata_then_fields_then_wp_last(): void
+    {
+        // Accordion presence forces a root `wp:` bag — proves it lands after
+        // `fields:`, matching FieldsYamlWriter's dumped key order.
+        $twig = "{#\nname: Demo\nusage: homepage\nfields:\n#}\n";
+        $acf = $this->group([
+            ['key' => 'field_demo_acc', 'type' => 'accordion', 'label' => 'Section', 'open' => 0],
+            ['key' => 'field_demo_title', 'name' => 'title', 'label' => 'Nadpis', 'type' => 'text'],
+        ]);
+        $tree = $this->reader->read($acf, 'demo', $twig);
+
+        self::assertSame(['name', 'usage', 'fields', 'wp'], array_keys($tree));
+    }
+
+    public function test_group_key_matching_convention_is_not_pinned(): void
+    {
+        $tree = $this->reader->read($this->group([
+            ['key' => 'field_demo_title', 'name' => 'title', 'label' => 'Nadpis', 'type' => 'text'],
+        ], 'group_demo'), 'demo');
+        self::assertArrayNotHasKey('key', $tree);
+    }
+
+    public function test_group_key_deviating_from_convention_is_pinned(): void
+    {
+        $tree = $this->reader->read($this->group([
+            ['key' => 'field_service-feature_title', 'name' => 'title', 'label' => 'Nadpis', 'type' => 'text'],
+        ], 'group_service-feature'), 'service-feature');
+        self::assertArrayNotHasKey('key', $tree); // hyphenated slug IS the convention here — no pin
+    }
+
+    public function test_accordion_fields_are_dropped(): void
+    {
+        $tree = $this->reader->read($this->group([
+            ['key' => 'field_demo_acc', 'name' => '', 'type' => 'accordion', 'label' => 'Section'],
+            ['key' => 'field_demo_title', 'name' => 'title', 'label' => 'Nadpis', 'type' => 'text'],
+        ]), 'demo');
+        self::assertCount(1, $tree['fields']);
+        self::assertArrayHasKey('title', $tree['fields']);
+    }
+
+    public function test_accordion_metadata_is_captured_into_root_wp_accordions(): void
+    {
+        $tree = $this->reader->read($this->group([
+            ['key' => 'field_demo_header_accordion', 'name' => '', 'type' => 'accordion', 'label' => 'Hlavička', 'open' => 0],
+            ['key' => 'field_demo_title', 'name' => 'title', 'label' => 'Nadpis', 'type' => 'text'],
+        ]), 'demo');
+
+        self::assertSame([[
+            'key' => 'field_demo_header_accordion',
+            'label' => 'Hlavička',
+            'open' => 0,
+            'before' => 'title',
+        ]], $tree['wp']['accordions']);
+    }
+
+    public function test_accordion_nonzero_wpml_is_captured_verbatim(): void
+    {
+        // Reference-set accordions carry the baseline wpml_cf_preferences 0;
+        // real mairateam accordions (page-header-service, reference-slider,
+        // steps-slider) carry 1. A non-zero value is captured so it round-trips
+        // — the default 0 stays dropped, per the drop-defaults rule.
+        $tree = $this->reader->read($this->group([
+            ['key' => 'field_demo_header_accordion', 'name' => '', 'type' => 'accordion', 'label' => 'Hlavička', 'open' => 0, 'wpml_cf_preferences' => 1],
+            ['key' => 'field_demo_title', 'name' => 'title', 'label' => 'Nadpis', 'type' => 'text'],
+        ]), 'demo');
+
+        self::assertSame([[
+            'key' => 'field_demo_header_accordion',
+            'label' => 'Hlavička',
+            'open' => 0,
+            'wpml' => 1,
+            'before' => 'title',
+        ]], $tree['wp']['accordions']);
+    }
+
+    public function test_accordion_baseline_zero_wpml_is_not_captured(): void
+    {
+        $tree = $this->reader->read($this->group([
+            ['key' => 'field_demo_header_accordion', 'name' => '', 'type' => 'accordion', 'label' => 'Hlavička', 'open' => 0, 'wpml_cf_preferences' => 0],
+            ['key' => 'field_demo_title', 'name' => 'title', 'label' => 'Nadpis', 'type' => 'text'],
+        ]), 'demo');
+
+        self::assertArrayNotHasKey('wpml', $tree['wp']['accordions'][0]);
+    }
+
+    public function test_multiple_accordions_each_capture_their_own_before_field(): void
+    {
+        $tree = $this->reader->read($this->group([
+            ['key' => 'field_demo_a_accordion', 'name' => '', 'type' => 'accordion', 'label' => 'A', 'open' => 0],
+            ['key' => 'field_demo_title', 'name' => 'title', 'label' => 'Nadpis', 'type' => 'text'],
+            ['key' => 'field_demo_b_accordion', 'name' => '', 'type' => 'accordion', 'label' => 'B', 'open' => 1],
+            ['key' => 'field_demo_spacing', 'name' => 'spacing', 'label' => 'Spacing', 'type' => 'select', 'choices' => ['a' => 'A']],
+        ]), 'demo');
+
+        self::assertSame('title', $tree['wp']['accordions'][0]['before']);
+        self::assertSame(1, $tree['wp']['accordions'][1]['open']);
+        self::assertSame('spacing', $tree['wp']['accordions'][1]['before']);
+    }
+
+    public function test_trailing_accordion_with_nothing_after_captures_null_before(): void
+    {
+        $tree = $this->reader->read($this->group([
+            ['key' => 'field_demo_title', 'name' => 'title', 'label' => 'Nadpis', 'type' => 'text'],
+            ['key' => 'field_demo_trailing_accordion', 'name' => '', 'type' => 'accordion', 'label' => 'Trailing', 'open' => 0],
+        ]), 'demo');
+
+        self::assertNull($tree['wp']['accordions'][0]['before']);
+    }
+
+    public function test_no_accordions_means_no_root_wp_key_at_all(): void
+    {
+        $tree = $this->reader->read($this->group([
+            ['key' => 'field_demo_title', 'name' => 'title', 'label' => 'Nadpis', 'type' => 'text'],
+        ]), 'demo');
+
+        self::assertArrayNotHasKey('wp', $tree);
+    }
+
+    public function test_field_with_no_deviation_carries_no_wp_key(): void
+    {
+        $tree = $this->reader->read($this->group([[
+            'key' => 'field_demo_title', 'name' => 'title', 'label' => 'Nadpis', 'type' => 'text',
+            'instructions' => '', 'required' => 0, 'conditional_logic' => false,
+            'wrapper' => ['width' => '', 'class' => '', 'id' => ''], 'aria-label' => '',
+            'allow_in_bindings' => 0, 'default_value' => '', 'placeholder' => '',
+            'prepend' => '', 'append' => '', 'wpml_cf_preferences' => 1,
+        ]]), 'demo');
+        self::assertArrayNotHasKey('wp', $tree['fields']['title']);
+    }
+
+    public function test_wpml_2_lifts_to_translatable_true(): void
+    {
+        $tree = $this->reader->read($this->group([[
+            'key' => 'field_demo_title', 'name' => 'title', 'label' => 'Nadpis', 'type' => 'text',
+            'wpml_cf_preferences' => 2,
+        ]]), 'demo');
+        self::assertTrue($tree['fields']['title']['translatable']);
+    }
+
+    public function test_wpml_1_does_not_emit_translatable(): void
+    {
+        $tree = $this->reader->read($this->group([[
+            'key' => 'field_demo_title', 'name' => 'title', 'label' => 'Nadpis', 'type' => 'text',
+            'wpml_cf_preferences' => 1,
+        ]]), 'demo');
+        self::assertArrayNotHasKey('translatable', $tree['fields']['title']);
+    }
+
+    public function test_maxlength_lifted_when_nonzero(): void
+    {
+        $tree = $this->reader->read($this->group([[
+            'key' => 'field_demo_title', 'name' => 'title', 'label' => 'Nadpis', 'type' => 'text', 'maxlength' => '60',
+        ]]), 'demo');
+        self::assertSame(60, $tree['fields']['title']['maxlength']);
+    }
+
+    public function test_number_min_max_step_lifted_including_zero(): void
+    {
+        $tree = $this->reader->read($this->group([[
+            'key' => 'field_demo_qty', 'name' => 'qty', 'label' => 'Množství', 'type' => 'number',
+            'min' => 0, 'max' => 10, 'step' => 1,
+        ]]), 'demo');
+        self::assertSame(0, $tree['fields']['qty']['min']);
+        self::assertSame(10, $tree['fields']['qty']['max']);
+        self::assertSame(1, $tree['fields']['qty']['step']);
+    }
+
+    public function test_repeater_min_max_zero_is_omitted_as_acf_no_limit_sentinel(): void
+    {
+        $tree = $this->reader->read($this->group([[
+            'key' => 'field_demo_items', 'name' => 'items', 'label' => 'Položky', 'type' => 'repeater',
+            'min' => 0, 'max' => 0,
+            'sub_fields' => [['key' => 'field_demo_items_v', 'name' => 'v', 'label' => 'V', 'type' => 'text']],
+        ]]), 'demo');
+        self::assertArrayNotHasKey('min', $tree['fields']['items']);
+        self::assertArrayNotHasKey('max', $tree['fields']['items']);
+    }
+
+    public function test_repeater_max_nonzero_is_lifted_closing_the_prototype_gap(): void
+    {
+        $tree = $this->reader->read($this->group([[
+            'key' => 'field_demo_items', 'name' => 'items', 'label' => 'Položky', 'type' => 'repeater',
+            'min' => 0, 'max' => 3,
+            'sub_fields' => [['key' => 'field_demo_items_v', 'name' => 'v', 'label' => 'V', 'type' => 'text']],
+        ]]), 'demo');
+        self::assertSame(3, $tree['fields']['items']['max']);
+    }
+
+    public function test_mime_types_lifted_to_accept_list(): void
+    {
+        $tree = $this->reader->read($this->group([[
+            'key' => 'field_demo_doc', 'name' => 'doc', 'label' => 'Dokument', 'type' => 'file',
+            'mime_types' => 'pdf, docx',
+        ]]), 'demo');
+        self::assertSame(['pdf', 'docx'], $tree['fields']['doc']['accept']);
+    }
+
+    public function test_placeholder_lifted_when_nonempty(): void
+    {
+        $tree = $this->reader->read($this->group([[
+            'key' => 'field_demo_title', 'name' => 'title', 'label' => 'Nadpis', 'type' => 'text',
+            'placeholder' => 'Zadejte nadpis',
+        ]]), 'demo');
+        self::assertSame('Zadejte nadpis', $tree['fields']['title']['placeholder']);
+    }
+
+    public function test_visible_when_lifted_from_conditional_logic(): void
+    {
+        $tree = $this->reader->read($this->group([
+            ['key' => 'field_demo_title', 'name' => 'title', 'label' => 'Nadpis', 'type' => 'text'],
+            [
+                'key' => 'field_demo_sub', 'name' => 'sub', 'label' => 'Sub', 'type' => 'text',
+                'conditional_logic' => [[['field' => 'field_demo_title', 'operator' => '!=empty']]],
+            ],
+        ]), 'demo');
+        self::assertSame(['field' => 'title', 'not_empty' => true], $tree['fields']['sub']['visible_when']);
+    }
+
+    public function test_unmappable_conditional_logic_falls_back_to_wp(): void
+    {
+        $cl = [[
+            ['field' => 'field_x', 'operator' => '==', 'value' => 'a'],
+            ['field' => 'field_y', 'operator' => '==', 'value' => 'b'],
+        ]];
+        $tree = $this->reader->read($this->group([[
+            'key' => 'field_demo_sub', 'name' => 'sub', 'label' => 'Sub', 'type' => 'text',
+            'conditional_logic' => $cl,
+        ]]), 'demo');
+        self::assertArrayNotHasKey('visible_when', $tree['fields']['sub']);
+        self::assertSame($cl, $tree['fields']['sub']['wp']['conditional_logic']);
+    }
+
+    public function test_field_key_matching_convention_is_not_pinned(): void
+    {
+        $tree = $this->reader->read($this->group([
+            ['key' => 'field_demo_title', 'name' => 'title', 'label' => 'Nadpis', 'type' => 'text'],
+        ]), 'demo');
+        self::assertArrayNotHasKey('key', $tree['fields']['title']);
+    }
+
+    public function test_field_key_deviating_from_convention_is_pinned(): void
+    {
+        $tree = $this->reader->read($this->group([
+            ['key' => 'field_demo_legacy_hash_abc123', 'name' => 'title', 'label' => 'Nadpis', 'type' => 'text'],
+        ]), 'demo');
+        self::assertSame('field_demo_legacy_hash_abc123', $tree['fields']['title']['key']);
+    }
+
+    public function test_nested_group_key_uses_dotted_name_chain(): void
+    {
+        $tree = $this->reader->read($this->group([[
+            'key' => 'field_demo_heading', 'name' => 'heading', 'label' => 'Nadpis', 'type' => 'group',
+            'sub_fields' => [
+                ['key' => 'field_demo_heading_title', 'name' => 'title', 'label' => 'T', 'type' => 'text'],
+            ],
+        ]]), 'demo');
+        self::assertArrayNotHasKey('key', $tree['fields']['heading']['fields']['title']);
+    }
+
+    public function test_leftover_non_default_prop_lands_in_wp(): void
+    {
+        $tree = $this->reader->read($this->group([[
+            'key' => 'field_demo_body', 'name' => 'body', 'label' => 'Text', 'type' => 'wysiwyg',
+            'toolbar' => 'full', // deviates from baseline default 'basic'
+        ]]), 'demo');
+        self::assertSame('full', $tree['fields']['body']['wp']['toolbar']);
+    }
+
+    public function test_mcp_and_dev_are_never_emitted_by_the_migrator(): void
+    {
+        $tree = $this->reader->read($this->group([
+            ['key' => 'field_demo_title', 'name' => 'title', 'label' => 'Nadpis', 'type' => 'text'],
+        ]), 'demo');
+        self::assertArrayNotHasKey('mcp', $tree['fields']['title']);
+        self::assertArrayNotHasKey('dev', $tree['fields']['title']);
+    }
+
+    public function test_group_with_zero_non_accordion_sub_fields_throws(): void
+    {
+        $this->expectException(\RuntimeException::class);
+        $this->reader->read($this->group([[
+            'key' => 'field_demo_g', 'name' => 'g', 'label' => 'G', 'type' => 'group',
+            'sub_fields' => [['key' => 'field_demo_g_acc', 'name' => '', 'type' => 'accordion', 'label' => 'S']],
+        ]]), 'demo');
+    }
+}

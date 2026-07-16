@@ -1,0 +1,62 @@
+name: Demo Nested
+fields:
+  heading:
+    type: group
+    label: Heading
+    fields:
+      title: { type: text, label: Nadpis }
+      subtitle: { type: text, label: Podnadpis, multiline: true }
+  logo:
+    type: media
+    kind: image
+    label: Obrázek
+    key: field_demo_nested_logo
+  attachments:
+    type: media
+    kind: file
+    label: Soubory
+    multiple: true
+  cta:
+    type: link
+    shape: link
+    label: Tlačítko
+  homepage:
+    type: link
+    shape: url
+    label: URL
+  related:
+    type: reference
+    of: post:article
+    multiple: true
+    label: Vybrané články
+  spacing:
+    type: select
+    label: Rozestupy
+    options:
+      default: Standardní
+      no-top: Bez horního
+      no-bottom: Bez dolního
+    wp:
+      allow_in_bindings: 1
+  items:
+    type: repeater
+    label: Položky
+    min: 0
+    max: 3
+    fields:
+      value: { type: text, label: Hodnota }
+  posts:
+    type: repeater
+    role: query
+    label: Články
+    resolved_from: [related]
+    demo:
+      - { title: "Demo article" }
+    fields:
+      title: { type: text, label: Nadpis }
+  breadcrumb:
+    type: text
+    role: global
+    label: Drobečková navigace
+    source: global.breadcrumb
+    demo: "Home / Section"

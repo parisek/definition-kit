@@ -1,0 +1,37 @@
+{
+    "apiVersion": 3,
+    "name": "acf/service-feature",
+    "title": "Service - feature",
+    "description": null,
+    "category": "theme",
+    "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 762.4 664.7\"><svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"438.8 0.5 762.4 664.7\"><defs/><g id=\"SvgjsG1158\"><path id=\"SvgjsPath1157\" d=\"M452.2 464.2h-.8V201.4h.8z\" fill=\"currentColor\"/><path id=\"SvgjsPath1156\" d=\"M487.9 464.2h-2V201.4h2z\" fill=\"currentColor\"/><path id=\"SvgjsPath1155\" d=\"M523.6 464.2h-3.3V201.4h3.3z\" fill=\"currentColor\"/><path id=\"SvgjsPath1154\" d=\"M559.2 464.2h-4.4V201.4h4.4z\" fill=\"currentColor\"/><path id=\"SvgjsPath1153\" d=\"M594.9 464.2h-5.6V201.4h5.6z\" fill=\"currentColor\"/><path id=\"SvgjsPath1152\" d=\"M630.6 464.2h-6.9V201.4h6.9z\" fill=\"currentColor\"/><path id=\"SvgjsPath1151\" d=\"M666.2 464.2h-8V201.4h8z\" fill=\"currentColor\"/><path id=\"SvgjsPath1150\" d=\"M701.9 464.2h-9.2V201.4h9.2z\" fill=\"currentColor\"/><path id=\"SvgjsPath1149\" d=\"M737.5 464.2h-10.4V201.4h10.4z\" fill=\"currentColor\"/><path id=\"SvgjsPath1148\" d=\"M773.2 464.2h-11.6V201.4h11.6z\" fill=\"currentColor\"/><path id=\"SvgjsPath1147\" d=\"M808.9 464.2h-12.8V201.4h12.8z\" fill=\"currentColor\"/><path id=\"SvgjsPath1146\" d=\"M844.5 464.2h-14V201.4h14z\" fill=\"currentColor\"/><path id=\"SvgjsPath1145\" d=\"M880.2 464.2H865V201.4h15.2z\" fill=\"currentColor\"/><path id=\"SvgjsPath1144\" d=\"M915.9 464.2h-16.4V201.4h16.4z\" fill=\"currentColor\"/><path id=\"SvgjsPath1143\" d=\"M951.5 464.2h-17.6V201.4h17.6z\" fill=\"currentColor\"/><path id=\"SvgjsPath1142\" d=\"M987.2 464.2h-18.8V201.4h18.8z\" fill=\"currentColor\"/><path id=\"SvgjsPath1141\" d=\"M1022.8 464.2h-19.9V201.4h19.9z\" fill=\"currentColor\"/><path id=\"SvgjsPath1140\" d=\"M1058.5 464.2h-21.2V201.4h21.2z\" fill=\"currentColor\"/><path id=\"SvgjsPath1139\" d=\"M1094.2 464.2h-22.4V201.4h22.4z\" fill=\"currentColor\"/><path id=\"SvgjsPath1138\" d=\"M1129.8 464.2h-23.5V201.4h23.5z\" fill=\"currentColor\"/><path id=\"SvgjsPath1137\" d=\"M1165.5 464.2h-24.8V201.4h24.8z\" fill=\"currentColor\"/><path id=\"SvgjsPath1136\" d=\"M1201.2 464.2h-26V201.4h26z\" fill=\"currentColor\"/><path id=\"SvgjsPath1135\" d=\"M1188.6 665.2h-.8V402.3h.8z\" fill=\"currentColor\"/><path id=\"SvgjsPath1134\" d=\"M1154.1 665.2h-2V402.3h2z\" fill=\"currentColor\"/><path id=\"SvgjsPath1133\" d=\"M1119.7 665.2h-3.3V402.3h3.3z\" fill=\"currentColor\"/><path id=\"SvgjsPath1132\" d=\"M1085.2 665.2h-4.4V402.3h4.4z\" fill=\"currentColor\"/><path id=\"SvgjsPath1131\" d=\"M1050.7 665.2h-5.6V402.3h5.6z\" fill=\"currentColor\"/><path id=\"SvgjsPath1130\" d=\"M1016.3 665.2h-6.9V402.3h6.9z\" fill=\"currentColor\"/><path id=\"SvgjsPath1129\" d=\"M981.8 665.2h-8V402.3h8z\" fill=\"currentColor\"/><path id=\"SvgjsPath1128\" d=\"M947.3 665.2h-9.2V402.3h9.2z\" fill=\"currentColor\"/><path id=\"SvgjsPath1127\" d=\"M912.9 665.2h-10.4V402.3h10.4z\" fill=\"currentColor\"/><path id=\"SvgjsPath1126\" d=\"M878.4 665.2h-11.6V402.3h11.6z\" fill=\"currentColor\"/><path id=\"SvgjsPath1125\" d=\"M843.9 665.2h-12.8V402.3h12.8z\" fill=\"currentColor\"/><path id=\"SvgjsPath1124\" d=\"M809.5 665.2h-14V402.3h14z\" fill=\"currentColor\"/><path id=\"SvgjsPath1123\" d=\"M775 665.2h-15.2V402.3H775z\" fill=\"currentColor\"/><path id=\"SvgjsPath1122\" d=\"M724.1 665.2V402.3h16.4v262.9z\" fill=\"currentColor\"/><path id=\"SvgjsPath1121\" d=\"M706.1 665.2h-17.6V402.3h17.6z\" fill=\"currentColor\"/><path id=\"SvgjsPath1120\" d=\"M671.6 665.2h-18.8V402.3h18.8z\" fill=\"currentColor\"/><path id=\"SvgjsPath1119\" d=\"M637.1 665.2h-19.9V402.3h19.9z\" fill=\"currentColor\"/><path id=\"SvgjsPath1118\" d=\"M602.7 665.2h-21.2V402.3h21.2z\" fill=\"currentColor\"/><path id=\"SvgjsPath1117\" d=\"M568.2 665.2h-22.4V402.3h22.4z\" fill=\"currentColor\"/><path id=\"SvgjsPath1116\" d=\"M533.7 665.2h-23.5V402.3h23.5z\" fill=\"currentColor\"/><path id=\"SvgjsPath1115\" d=\"M499.3 665.2h-24.8V402.3h24.8z\" fill=\"currentColor\"/><path id=\"SvgjsPath1114\" d=\"M438.8 665.2V402.3h26v262.9z\" fill=\"currentColor\"/><path id=\"SvgjsPath1113\" d=\"M1188.8 263.3h-1.3V.5h1.3z\" fill=\"currentColor\"/><path id=\"SvgjsPath1112\" d=\"M1154.4 263.3h-2.5V.5h2.5z\" fill=\"currentColor\"/><path id=\"SvgjsPath1111\" d=\"M1119.9 263.3h-3.7V.5h3.7z\" fill=\"currentColor\"/><path id=\"SvgjsPath1110\" d=\"M1085.4 263.3h-4.8V.5h4.8z\" fill=\"currentColor\"/><path id=\"SvgjsPath1109\" d=\"M1050.9 263.3h-6V.5h6z\" fill=\"currentColor\"/><path id=\"SvgjsPath1108\" d=\"M1016.4 263.3h-7.1V.5h7.1z\" fill=\"currentColor\"/><path id=\"SvgjsPath1107\" d=\"M982 263.3h-8.4V.5h8.4z\" fill=\"currentColor\"/><path id=\"SvgjsPath1106\" d=\"M947.5 263.3H938V.5h9.5z\" fill=\"currentColor\"/><path id=\"SvgjsPath1105\" d=\"M913 263.3h-10.7V.5H913z\" fill=\"currentColor\"/><path id=\"SvgjsPath1104\" d=\"M878.5 263.3h-11.8V.5h11.8z\" fill=\"currentColor\"/><path id=\"SvgjsPath1103\" d=\"M844.1 263.3H831V.5h13.1z\" fill=\"currentColor\"/><path id=\"SvgjsPath1102\" d=\"M795.4 263.3V.5h14.2v262.8z\" fill=\"currentColor\"/><path id=\"SvgjsPath1101\" d=\"M775.1 263.3h-15.4V.5h15.4z\" fill=\"currentColor\"/><path id=\"SvgjsPath1100\" d=\"M740.6 263.3h-16.5V.5h16.5z\" fill=\"currentColor\"/><path id=\"SvgjsPath1099\" d=\"M706.1 263.3h-17.7V.5h17.7z\" fill=\"currentColor\"/><path id=\"SvgjsPath1098\" d=\"M671.7 263.3h-18.9V.5h18.9z\" fill=\"currentColor\"/><path id=\"SvgjsPath1097\" d=\"M617.1 263.3V.5h20.1v262.8z\" fill=\"currentColor\"/><path id=\"SvgjsPath1096\" d=\"M602.7 263.3h-21.3V.5h21.3z\" fill=\"currentColor\"/><path id=\"SvgjsPath1095\" d=\"M545.8 263.3V.5h22.4v262.8z\" fill=\"currentColor\"/><path id=\"SvgjsPath1094\" d=\"M533.7 263.3h-23.6V.5h23.6z\" fill=\"currentColor\"/><path id=\"SvgjsPath1093\" d=\"M499.3 263.3h-24.8V.5h24.8z\" fill=\"currentColor\"/><path id=\"SvgjsPath1092\" d=\"M438.8 263.3V.5h26v262.8z\" fill=\"currentColor\"/></g></svg></svg>",
+    "keywords": null,
+    "supports": {
+        "align": [
+            "full"
+        ],
+        "mode": false,
+        "spacing": false,
+        "anchor": true,
+        "className": true
+    },
+    "attributes": {
+        "align": {
+            "type": "string",
+            "default": "full"
+        }
+    },
+    "example": {
+        "viewportWidth": 1280,
+        "attributes": {
+            "align": "full",
+            "mode": "preview",
+            "data": []
+        }
+    },
+    "acf": {
+        "mode": "preview",
+        "renderCallback": "Parisek\\TimberKit\\BlockRenderer::render",
+        "postTypes": []
+    }
+}

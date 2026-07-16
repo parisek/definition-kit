@@ -1,0 +1,61 @@
+{
+    "name": "parisek/definition-kit",
+    "description": "Authored per-component definition (YAML) → CMS projection generator + drift-lint. Migrates ACF field groups to a semantic definition, regenerates acf.json/block.json, and fails CI when they drift.",
+    "license": "GPL-3.0-or-later",
+    "type": "library",
+    "keywords": [
+        "acf",
+        "advanced custom fields",
+        "wordpress",
+        "gutenberg",
+        "yaml",
+        "code-generation",
+        "drift-lint"
+    ],
+    "authors": [
+        {
+            "name": "Petr Parimucha",
+            "email": "petr.parimucha@portadesign.cz"
+        }
+    ],
+    "homepage": "https://github.com/parisek/definition-kit",
+    "require": {
+        "php": "^8.3",
+        "opis/json-schema": "^2.3",
+        "symfony/yaml": "^6.4 || ^7.0"
+    },
+    "require-dev": {
+        "ergebnis/composer-normalize": "^2.0",
+        "phpstan/phpstan": "^2.0",
+        "phpunit/phpunit": "^11.0 || ^12.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Parisek\\DefinitionKit\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Parisek\\DefinitionKit\\Tests\\": "tests/"
+        }
+    },
+    "bin": [
+        "bin/fields-migrate",
+        "bin/fields-generate",
+        "bin/fields-validate",
+        "bin/fields-lint"
+    ],
+    "config": {
+        "allow-plugins": {
+            "ergebnis/composer-normalize": true
+        }
+    },
+    "scripts": {
+        "check": [
+            "@test",
+            "@phpstan"
+        ],
+        "phpstan": "vendor/bin/phpstan analyse --memory-limit=512M",
+        "test": "vendor/bin/phpunit"
+    }
+}

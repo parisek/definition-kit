@@ -1,0 +1,8 @@
+name: Demo Empty Wp
+fields:
+  spacing:
+    type: select
+    label: Rozestupy
+    options:
+      default: Standardní
+    wp: {}

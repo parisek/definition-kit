@@ -1,0 +1,119 @@
+name: 'Reference - detail'
+key: group_reference_detail
+fields:
+  heading:
+    type: group
+    label: Nadpis
+    fields:
+      subtitle:
+        type: text
+        label: Podnadpis
+        translatable: true
+        key: field_reference_detail_heading_subtitle
+      title:
+        type: text
+        label: Nadpis
+        translatable: true
+        key: field_reference_detail_heading_title
+    key: field_reference_detail_heading
+  items:
+    type: repeater
+    label: Položky
+    required: true
+    add_label: 'Přidat položku'
+    fields:
+      tab_title:
+        type: text
+        label: 'Nadpis záložky'
+        translatable: true
+        key: field_reference_detail_items_tab_title
+      image:
+        type: media
+        label: 'Obrázek produktu'
+        description: '272 x 320px'
+        kind: image
+        key: field_reference_detail_items_image
+        wp:
+          min_size: ''
+      highlight_value:
+        type: text
+        label: 'Zvýrazněná hodnota'
+        translatable: true
+        key: field_reference_detail_items_highlight_value
+      highlight_label:
+        type: text
+        label: 'Zvýrazněný popisek'
+        translatable: true
+        key: field_reference_detail_items_highlight_label
+      title:
+        type: text
+        label: 'Nadpis značky'
+        translatable: true
+        key: field_reference_detail_items_title
+      tags:
+        type: repeater
+        label: Štítky
+        add_label: 'Přidat položku'
+        fields:
+          label:
+            type: text
+            label: Popisek
+            translatable: true
+            key: field_reference_detail_items_tags_label
+        key: field_reference_detail_items_tags
+        wp:
+          collapsed: ''
+          layout: table
+          wpml_cf_preferences: 2
+      subtitle:
+        type: text
+        label: Podnadpis
+        translatable: true
+        key: field_reference_detail_items_subtitle
+      perex:
+        type: richtext
+        label: Popisek
+        translatable: true
+        key: field_reference_detail_items_perex
+      stats:
+        type: repeater
+        label: Statistiky
+        add_label: 'Přidat položku'
+        fields:
+          value:
+            type: text
+            label: Hodnota
+            translatable: true
+            key: field_reference_detail_items_stats_value
+          label:
+            type: text
+            label: Popisek
+            translatable: true
+            key: field_reference_detail_items_stats_label
+        key: field_reference_detail_items_stats
+        wp:
+          collapsed: ''
+          layout: table
+          wpml_cf_preferences: 2
+      link:
+        type: link
+        label: Tlačítko
+        translatable: true
+        shape: link
+        key: field_reference_detail_items_link
+    key: field_reference_detail_items
+    wp:
+      collapsed: field_reference_detail_items_tab_title
+      layout: block
+      wpml_cf_preferences: 2
+  spacing:
+    type: select
+    label: Spacing
+    description: 'Adjust spacing when combining components'
+    options:
+      default: Standardní
+      no-top: 'Bez horního rozestupu'
+      no-bottom: 'Bez dolního rozestupu'
+    key: field_reference_detail_spacing
+    wp:
+      default_value: default
