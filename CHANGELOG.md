@@ -6,8 +6,6 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [0.1.2] - 2026-07-16
-
 ### Fixed
 
 - **Generated `block.json` no longer emits `"attributes": null`** — non-bleed blocks (and a
@@ -25,6 +23,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   ACF field of a type across *all* blocks — not only definition-kit-generated ones. definition-kit
   remains the authoritative schema/validator for the authored `<name>.yaml`; it does not own the
   type-default guidance.
+
+## [0.1.2] - 2026-07-16
 
 ### Fixed
 
