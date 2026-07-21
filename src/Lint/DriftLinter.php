@@ -20,13 +20,13 @@ use Symfony\Component\Yaml\Yaml;
  * disk>," and the fix is always `fields-generate`, never editing the
  * definition to match acf.json.
  *
- * Two forms of "not real drift" are handled by construction, not by
+ * Three forms of "not real drift" are handled by construction, not by
  * allowlisting: `modified` (injected from the committed file's own
  * value, so it can never differ) and block.json's
- * `example.attributes.data` (BlockJsonGenerator already preserves an
- * existing block.json's `example` verbatim when handed one — see that
- * class's own docblock, "owned by the sync-gutenberg-block-examples
- * skill").
+ * `example.attributes.data` + `icon` (BlockJsonGenerator already preserves
+ * an existing block.json's `example` and `icon` verbatim when handed one —
+ * see that class's own docblock for why neither is derivable from the
+ * definition).
  */
 final class DriftLinter
 {
@@ -111,9 +111,16 @@ final class DriftLinter
                 return DriftResult::error($componentName, 'block.json is not valid JSON / not an object');
             }
             // Passing the COMMITTED block.json as $existingBlockJson makes
-            // BlockJsonGenerator echo its `example` back verbatim — see
-            // this class's own docblock. Everything else is still generated
-            // fresh from the definition and compared for real.
+            // BlockJsonGenerator echo its `example` AND `icon` back verbatim —
+            // see this class's own docblock. Everything else is still
+            // generated fresh from the definition and compared for real.
+            //
+            // Consequence, by design: neither prop can ever surface as drift,
+            // because neither is derivable from the definition — `example` is
+            // owned by the sync-gutenberg-block-examples skill, `icon` is a
+            // project brand asset. Their SHAPE is validated one layer up, by
+            // `acf-lint` (parisek/acf-json-schema) against the block schema;
+            // asserting it here would be a check in the wrong layer.
             $generatedBlock = $this->blockJsonGenerator->generate($tree, $componentName, $committedBlock);
             $blockDiffs = $this->allowlist->filter(
                 $componentName,

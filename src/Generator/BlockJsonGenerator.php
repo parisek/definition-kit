@@ -11,10 +11,19 @@ namespace Parisek\DefinitionKit\Generator;
  * byte-identical across the whole corpus); the one genuine axis of
  * variation (`supports.align` + `attributes.align`) derives cleanly from
  * the `render:` root metadata dávka 2's TwigMetadataReader already
- * captures. `example.attributes.data` is explicitly out of scope — owned
- * by the sync-gutenberg-block-examples skill — so an existing block.json's
- * `example` is preserved verbatim; only a first-time generation emits the
- * empty placeholder.
+ * captures.
+ *
+ * Two props are NOT derivable from the definition and are therefore
+ * preserved verbatim from an existing block.json, with the generated value
+ * acting only as a first-time-generation default:
+ *
+ * - `example.attributes.data` — owned by the sync-gutenberg-block-examples
+ *   skill.
+ * - `icon` — a project-level brand asset (doctrine: every block in a theme
+ *   shares one icon, derived from that project's favicon).
+ *
+ * Neither can surface as drift, by design; their shape is validated one
+ * layer up by `acf-lint` (parisek/acf-json-schema) against the block schema.
  */
 final class BlockJsonGenerator
 {

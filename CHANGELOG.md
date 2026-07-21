@@ -32,6 +32,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   would have silently rewritten all 38 blocks' icons to the packaged one, buried inside an
   otherwise-mechanical normalisation diff.
 
+  Note that `icon`, like `example`, can therefore never surface as drift — neither is derivable
+  from the definition. Their shape is validated one layer up by `acf-lint`
+  (`parisek/acf-json-schema`) against the block schema.
+
 ## [0.1.3] - 2026-07-16
 
 ### Fixed
