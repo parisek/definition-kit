@@ -6,6 +6,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-07-21
+
 ### Added
 
 - **ACF `checkbox` and `taxonomy` field types are now migratable.** Both previously threw
