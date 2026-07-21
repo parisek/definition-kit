@@ -11,10 +11,19 @@ namespace Parisek\DefinitionKit\Generator;
  * byte-identical across the whole corpus); the one genuine axis of
  * variation (`supports.align` + `attributes.align`) derives cleanly from
  * the `render:` root metadata dávka 2's TwigMetadataReader already
- * captures. `example.attributes.data` is explicitly out of scope — owned
- * by the sync-gutenberg-block-examples skill — so an existing block.json's
- * `example` is preserved verbatim; only a first-time generation emits the
- * empty placeholder.
+ * captures.
+ *
+ * Two props are NOT derivable from the definition and are therefore
+ * preserved verbatim from an existing block.json, with the generated value
+ * acting only as a first-time-generation default:
+ *
+ * - `example.attributes.data` — owned by the sync-gutenberg-block-examples
+ *   skill.
+ * - `icon` — a project-level brand asset (doctrine: every block in a theme
+ *   shares one icon, derived from that project's favicon).
+ *
+ * Neither can surface as drift, by design; their shape is validated one
+ * layer up by `acf-lint` (parisek/acf-json-schema) against the block schema.
  */
 final class BlockJsonGenerator
 {
@@ -57,7 +66,7 @@ final class BlockJsonGenerator
             'title' => (string) ($definitionTree['name'] ?? ''),
             'description' => null,
             'category' => 'theme',
-            'icon' => $this->loadIcon(),
+            'icon' => $this->icon($existingBlockJson),
             'keywords' => null,
             'supports' => $supports,
             'attributes' => $attributes,
@@ -88,6 +97,29 @@ final class BlockJsonGenerator
         }
 
         return $block;
+    }
+
+    /**
+     * The block icon is a PROJECT-level brand asset (doctrine: every block in
+     * a theme shares one icon, derived from that project's favicon), not a
+     * package constant — so an existing block.json's icon is preserved
+     * verbatim, exactly like `example`. The bundled SVG is only a cold-start
+     * default for a first-time generation.
+     *
+     * Without this, `fields-generate --root` silently rewrites every block's
+     * icon to the packaged one on the first run in a project whose brand
+     * differs — a 38-file brand regression buried in an otherwise-mechanical
+     * normalisation diff.
+     *
+     * @param array<string,mixed>|null $existingBlockJson
+     */
+    private function icon(?array $existingBlockJson): string
+    {
+        $existing = $existingBlockJson['icon'] ?? null;
+        if (is_string($existing) && '' !== $existing) {
+            return $existing;
+        }
+        return $this->loadIcon();
     }
 
     private function loadIcon(): string
