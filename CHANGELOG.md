@@ -19,6 +19,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     axis) is left unconsumed: `select` falls out via the type-defaults baseline, the other three
     values survive verbatim in the field's `wp:` bag.
   - Type-defaults baseline gains `checkbox:` and `taxonomy:` blocks.
+  - A taxonomy field with no `taxonomy` target (migration) and a `term:` reference with an empty
+    taxonomy name (generation) both fail loudly instead of emitting a dead ACF field.
 
 ## [0.1.3] - 2026-07-16
 

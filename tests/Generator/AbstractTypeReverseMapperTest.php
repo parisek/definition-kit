@@ -37,6 +37,12 @@ final class AbstractTypeReverseMapperTest extends TestCase
         self::assertSame(['taxonomy' => 'product_cat'], $result['extra']);
     }
 
+    public function test_reference_with_empty_term_target_throws(): void
+    {
+        $this->expectException(\DomainException::class);
+        $this->mapper->reverse(['type' => 'reference', 'label' => 'T', 'of' => 'term:']);
+    }
+
     public function test_text_reverses_to_text_by_default(): void
     {
         $result = $this->mapper->reverse(['type' => 'text', 'label' => 'T']);

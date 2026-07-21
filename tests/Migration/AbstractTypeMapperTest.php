@@ -82,6 +82,13 @@ final class AbstractTypeMapperTest extends TestCase
         self::assertSame(['of' => 'term:product_cat'], $result['extra']);
     }
 
+    public function test_taxonomy_without_a_target_throws(): void
+    {
+        $this->expectException(\DomainException::class);
+        $this->expectExceptionMessageMatches('/category/');
+        $this->mapper->map(['type' => 'taxonomy', 'name' => 'category']);
+    }
+
     public function test_taxonomy_leaves_field_type_unconsumed(): void
     {
         // `field_type` has no abstract home — it must fall through to the

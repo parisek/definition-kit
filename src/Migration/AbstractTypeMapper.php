@@ -76,11 +76,7 @@ final class AbstractTypeMapper
             // NOT consumed: it is an ACF-only editor-UI axis with no abstract
             // home, so the common value falls out via the type-defaults
             // baseline and anything else survives verbatim in the `wp:` bag.
-            'taxonomy' => [
-                'type' => 'reference',
-                'extra' => ['of' => 'term:' . (string) ($acfField['taxonomy'] ?? '')],
-                'consumed' => ['type', 'taxonomy'],
-            ],
+            'taxonomy' => $this->taxonomy($acfField),
             'date_picker' => ['type' => 'date', 'extra' => [], 'consumed' => ['type']],
             'group' => ['type' => 'group', 'extra' => [], 'consumed' => ['type', 'sub_fields']],
             'repeater' => $this->repeater($acfField),
@@ -103,6 +99,29 @@ final class AbstractTypeMapper
             $extra['multiple'] = true;
         }
         return ['type' => 'select', 'extra' => $extra, 'consumed' => ['type', 'choices', 'multiple']];
+    }
+
+    /**
+     * @param array<string,mixed> $acfField
+     * @return array{type: string, extra: array<string,mixed>, consumed: list<string>}
+     */
+    private function taxonomy(array $acfField): array
+    {
+        $taxonomy = (string) ($acfField['taxonomy'] ?? '');
+        // A taxonomy field with no target is a broken ACF export; migrating it
+        // would produce `of: "term:"`, which the reverse mapper rejects anyway.
+        // Fail here, where the offending field name is still in scope.
+        if ('' === $taxonomy) {
+            throw new \DomainException(sprintf(
+                "ACF taxonomy field '%s' has no 'taxonomy' target — cannot derive a 'term:<taxonomy>' reference.",
+                (string) ($acfField['name'] ?? '?'),
+            ));
+        }
+        return [
+            'type' => 'reference',
+            'extra' => ['of' => 'term:' . $taxonomy],
+            'consumed' => ['type', 'taxonomy'],
+        ];
     }
 
     /**

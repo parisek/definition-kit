@@ -112,7 +112,15 @@ final class AbstractTypeReverseMapper
             return ['acfType' => 'google_map', 'extra' => []];
         }
         if (str_starts_with($of, 'term:')) {
-            return ['acfType' => 'taxonomy', 'extra' => ['taxonomy' => substr($of, strlen('term:'))]];
+            $taxonomy = substr($of, strlen('term:'));
+            // An ACF taxonomy field with `taxonomy: ""` renders an empty term
+            // picker — fail loudly rather than emit a dead field.
+            if ('' === $taxonomy) {
+                throw new \DomainException(
+                    "reference field has an empty 'term:' target — expected 'term:<taxonomy>'.",
+                );
+            }
+            return ['acfType' => 'taxonomy', 'extra' => ['taxonomy' => $taxonomy]];
         }
         if (str_starts_with($of, 'post:')) {
             $postTypes = array_map(
