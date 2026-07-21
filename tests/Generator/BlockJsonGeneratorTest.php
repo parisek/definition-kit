@@ -34,6 +34,24 @@ final class BlockJsonGeneratorTest extends TestCase
         self::assertStringStartsWith('<svg', $block['icon']);
     }
 
+    public function test_existing_icon_is_preserved_verbatim(): void
+    {
+        $block = $this->generator->generate(
+            ['name' => 'Demo'],
+            'demo',
+            ['icon' => '<svg id="project-brand"></svg>'],
+        );
+        self::assertSame('<svg id="project-brand"></svg>', $block['icon']);
+    }
+
+    public function test_missing_or_empty_existing_icon_falls_back_to_the_shared_asset(): void
+    {
+        foreach ([[], ['icon' => ''], ['icon' => null]] as $existing) {
+            $block = $this->generator->generate(['name' => 'Demo'], 'demo', $existing);
+            self::assertStringStartsWith('<svg', $block['icon']);
+        }
+    }
+
     public function test_bleed_render_gets_full_align_support_and_attribute(): void
     {
         $block = $this->generator->generate(['name' => 'Demo', 'render' => 'bleed'], 'demo');

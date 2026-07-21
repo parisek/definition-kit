@@ -22,6 +22,16 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - A taxonomy field with no `taxonomy` target (migration) and a `term:` reference with an empty
     taxonomy name (generation) both fail loudly instead of emitting a dead ACF field.
 
+### Fixed
+
+- **`fields-generate` no longer overwrites a project's block icon.** An existing `block.json`'s
+  `icon` is now preserved verbatim (exactly like `example`); the bundled `schemas/block-icon.svg`
+  is only a cold-start default for a first-time generation. The block icon is a project-level
+  brand asset — every block in a theme shares one icon derived from that project's favicon — not
+  a package constant. Found on the keypers migration, where the first `fields-generate --root`
+  would have silently rewritten all 38 blocks' icons to the packaged one, buried inside an
+  otherwise-mechanical normalisation diff.
+
 ## [0.1.3] - 2026-07-16
 
 ### Fixed
