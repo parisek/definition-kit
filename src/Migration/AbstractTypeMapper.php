@@ -54,6 +54,17 @@ final class AbstractTypeMapper
                 'consumed' => ['type', 'choices'],
                 'wp' => ['acf_type' => 'button_group'],
             ],
+            // Collides with a multiple `select` (identical signature) —
+            // `select` is the majority/default case, so `checkbox` carries the
+            // `wp.acf_type` marker. ACF's checkbox has no `multiple` prop of
+            // its own; it is multi-value by field design, which is exactly
+            // what the abstract `multiple: true` records.
+            'checkbox' => [
+                'type' => 'select',
+                'extra' => ['options' => (array) ($acfField['choices'] ?? []), 'multiple' => true],
+                'consumed' => ['type', 'choices'],
+                'wp' => ['acf_type' => 'checkbox'],
+            ],
             'image' => ['type' => 'media', 'extra' => ['kind' => 'image'], 'consumed' => ['type']],
             'file' => ['type' => 'media', 'extra' => ['kind' => 'file'], 'consumed' => ['type']],
             'gallery' => ['type' => 'media', 'extra' => ['kind' => 'gallery', 'multiple' => true], 'consumed' => ['type']],
@@ -61,6 +72,11 @@ final class AbstractTypeMapper
             'url' => ['type' => 'link', 'extra' => ['shape' => 'url'], 'consumed' => ['type']],
             'post_object' => $this->postObject($acfField),
             'google_map' => ['type' => 'reference', 'extra' => ['of' => 'geo'], 'consumed' => ['type']],
+            // `field_type` (select|multi_select|checkbox|radio) is deliberately
+            // NOT consumed: it is an ACF-only editor-UI axis with no abstract
+            // home, so the common value falls out via the type-defaults
+            // baseline and anything else survives verbatim in the `wp:` bag.
+            'taxonomy' => $this->taxonomy($acfField),
             'date_picker' => ['type' => 'date', 'extra' => [], 'consumed' => ['type']],
             'group' => ['type' => 'group', 'extra' => [], 'consumed' => ['type', 'sub_fields']],
             'repeater' => $this->repeater($acfField),
@@ -83,6 +99,29 @@ final class AbstractTypeMapper
             $extra['multiple'] = true;
         }
         return ['type' => 'select', 'extra' => $extra, 'consumed' => ['type', 'choices', 'multiple']];
+    }
+
+    /**
+     * @param array<string,mixed> $acfField
+     * @return array{type: string, extra: array<string,mixed>, consumed: list<string>}
+     */
+    private function taxonomy(array $acfField): array
+    {
+        $taxonomy = (string) ($acfField['taxonomy'] ?? '');
+        // A taxonomy field with no target is a broken ACF export; migrating it
+        // would produce `of: "term:"`, which the reverse mapper rejects anyway.
+        // Fail here, where the offending field name is still in scope.
+        if ('' === $taxonomy) {
+            throw new \DomainException(sprintf(
+                "ACF taxonomy field '%s' has no 'taxonomy' target — cannot derive a 'term:<taxonomy>' reference.",
+                (string) ($acfField['name'] ?? '?'),
+            ));
+        }
+        return [
+            'type' => 'reference',
+            'extra' => ['of' => 'term:' . $taxonomy],
+            'consumed' => ['type', 'taxonomy'],
+        ];
     }
 
     /**

@@ -95,6 +95,18 @@ button_group: # -> select
   return_format: value
   default_value: ''
 
+checkbox: # -> select + multiple:true
+  layout: vertical
+  return_format: value
+  allow_custom: 0
+  default_value: []
+
+taxonomy: # -> reference + of:term:<taxonomy>
+  # The editor-UI cardinality axis. `select` is ACF's own default and the
+  # only value the abstract vocabulary has no home for; the other three
+  # (multi_select/checkbox/radio) survive verbatim in the field's `wp:` bag.
+  field_type: select
+
 email: # -> text
   placeholder: ''
   prepend: ''

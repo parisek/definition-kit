@@ -6,6 +6,22 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **ACF `checkbox` and `taxonomy` field types are now migratable.** Both previously threw
+  `Unsupported ACF field type` and aborted the whole component, blocking any project that uses
+  them (found on the keypers migration: 2 of 40 components dead in the water).
+  - `checkbox` → `select` + `multiple: true`, disambiguated from a multiple `select` by
+    `wp.acf_type: checkbox`. ACF's checkbox has no `multiple` prop of its own, so the reverse
+    mapping deliberately emits none.
+  - `taxonomy` → `reference` + `of: "term:<taxonomy>"`, mirroring the existing
+    `of: "post:<type>"` / `of: "geo"` targets. `field_type` (the ACF-only editor-UI cardinality
+    axis) is left unconsumed: `select` falls out via the type-defaults baseline, the other three
+    values survive verbatim in the field's `wp:` bag.
+  - Type-defaults baseline gains `checkbox:` and `taxonomy:` blocks.
+  - A taxonomy field with no `taxonomy` target (migration) and a `term:` reference with an empty
+    taxonomy name (generation) both fail loudly instead of emitting a dead ACF field.
+
 ## [0.1.3] - 2026-07-16
 
 ### Fixed

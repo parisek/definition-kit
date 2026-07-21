@@ -62,6 +62,11 @@ final class AbstractTypeReverseMapper
     private function select(array $field, mixed $wpAcfType): array
     {
         $extra = ['choices' => (array) ($field['options'] ?? [])];
+        // ACF's checkbox is multi-value by field design and has no `multiple`
+        // prop — emitting one would be an invented ACF key.
+        if ('checkbox' === $wpAcfType) {
+            return ['acfType' => 'checkbox', 'extra' => $extra];
+        }
         if (true === ($field['multiple'] ?? false)) {
             $extra['multiple'] = 1;
         }
@@ -106,6 +111,17 @@ final class AbstractTypeReverseMapper
         if ('geo' === $of) {
             return ['acfType' => 'google_map', 'extra' => []];
         }
+        if (str_starts_with($of, 'term:')) {
+            $taxonomy = substr($of, strlen('term:'));
+            // An ACF taxonomy field with `taxonomy: ""` renders an empty term
+            // picker — fail loudly rather than emit a dead field.
+            if ('' === $taxonomy) {
+                throw new \DomainException(
+                    "reference field has an empty 'term:' target — expected 'term:<taxonomy>'.",
+                );
+            }
+            return ['acfType' => 'taxonomy', 'extra' => ['taxonomy' => $taxonomy]];
+        }
         if (str_starts_with($of, 'post:')) {
             $postTypes = array_map(
                 static fn (string $part): string => substr($part, strlen('post:')),
@@ -118,7 +134,7 @@ final class AbstractTypeReverseMapper
             return ['acfType' => 'post_object', 'extra' => $extra];
         }
         throw new \DomainException(sprintf(
-            "reference field has unsupported 'of' target '%s' — expected 'geo' or a 'post:<type>[,post:<type>...]' list.",
+            "reference field has unsupported 'of' target '%s' — expected 'geo', 'term:<taxonomy>', or a 'post:<type>[,post:<type>...]' list.",
             $of,
         ));
     }
