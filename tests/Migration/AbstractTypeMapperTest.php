@@ -67,6 +67,29 @@ final class AbstractTypeMapperTest extends TestCase
         self::assertSame(['options' => ['x' => 'X']], $result['extra']);
     }
 
+    public function test_checkbox_maps_to_multiple_select_with_marker(): void
+    {
+        $result = $this->mapper->map(['type' => 'checkbox', 'name' => 'f', 'choices' => ['x' => 'X']]);
+        self::assertSame('select', $result['type']);
+        self::assertSame(['options' => ['x' => 'X'], 'multiple' => true], $result['extra']);
+        self::assertSame(['acf_type' => 'checkbox'], $result['wp'] ?? null);
+    }
+
+    public function test_taxonomy_maps_to_reference_with_term_target(): void
+    {
+        $result = $this->mapper->map(['type' => 'taxonomy', 'name' => 'f', 'taxonomy' => 'product_cat']);
+        self::assertSame('reference', $result['type']);
+        self::assertSame(['of' => 'term:product_cat'], $result['extra']);
+    }
+
+    public function test_taxonomy_leaves_field_type_unconsumed(): void
+    {
+        // `field_type` has no abstract home — it must fall through to the
+        // type-defaults baseline / `wp:` residue, not be silently dropped.
+        $result = $this->mapper->map(['type' => 'taxonomy', 'name' => 'f', 'taxonomy' => 'category', 'field_type' => 'radio']);
+        self::assertNotContains('field_type', $result['consumed']);
+    }
+
     public function test_media_types_carry_kind(): void
     {
         self::assertSame(['kind' => 'image'], $this->mapper->map(['type' => 'image', 'name' => 'f'])['extra']);

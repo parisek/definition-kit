@@ -16,6 +16,27 @@ final class AbstractTypeReverseMapperTest extends TestCase
         $this->mapper = new AbstractTypeReverseMapper();
     }
 
+    public function test_select_with_wp_acf_type_checkbox_reverses_to_checkbox(): void
+    {
+        $result = $this->mapper->reverse([
+            'type' => 'select',
+            'label' => 'T',
+            'options' => ['x' => 'X'],
+            'multiple' => true,
+            'wp' => ['acf_type' => 'checkbox'],
+        ]);
+        self::assertSame('checkbox', $result['acfType']);
+        // ACF's checkbox has no `multiple` prop — emitting one would invent a key.
+        self::assertSame(['choices' => ['x' => 'X']], $result['extra']);
+    }
+
+    public function test_reference_with_term_target_reverses_to_taxonomy(): void
+    {
+        $result = $this->mapper->reverse(['type' => 'reference', 'label' => 'T', 'of' => 'term:product_cat']);
+        self::assertSame('taxonomy', $result['acfType']);
+        self::assertSame(['taxonomy' => 'product_cat'], $result['extra']);
+    }
+
     public function test_text_reverses_to_text_by_default(): void
     {
         $result = $this->mapper->reverse(['type' => 'text', 'label' => 'T']);
