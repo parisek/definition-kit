@@ -38,7 +38,16 @@ final class KindLinter
             ]];
         }
 
-        $hasBlockJson = is_file(dirname($definitionPath) . '/block.json');
+        // Resolve symlinks before deriving the component directory. A definition
+        // reached through a symlinked FILE would otherwise have dirname() point at
+        // the link's directory rather than the component's, so a perfectly valid
+        // `kind: block` next to its block.json reports as a contradiction. Falls
+        // back to the raw path when realpath() fails (file does not exist yet —
+        // callers may lint an in-memory definition).
+        $resolved = realpath($definitionPath);
+        $componentDir = dirname(false !== $resolved ? $resolved : $definitionPath);
+
+        $hasBlockJson = is_file($componentDir . '/block.json');
 
         if ('block' === $kind && !$hasBlockJson) {
             return [[

@@ -62,6 +62,33 @@ final class KindLinterTest extends TestCase
         $this->assertSame('error', $findings[0]['severity']);
     }
 
+    /**
+     * Regression: reaching a definition through a symlinked FILE used to make
+     * dirname() point at the link's directory instead of the component's, so a
+     * valid `kind: block` sitting next to its block.json reported as a
+     * contradiction. Found in review of PR #7.
+     */
+    public function testABlockReachedThroughASymlinkedFileStillFindsItsBlockJson(): void
+    {
+        $componentDir = $this->fixtureDirWithBlockJson();
+
+        $linkDir = sys_get_temp_dir() . '/kind-linter-link-' . uniqid('', true);
+        mkdir($linkDir);
+        $link = "{$linkDir}/hero.yaml";
+        symlink("{$componentDir}/hero.yaml", $link);
+
+        try {
+            $this->assertSame(
+                [],
+                (new KindLinter())->lint($link, ['kind' => 'block']),
+                'the real component directory has a block.json — the symlink must not hide it'
+            );
+        } finally {
+            unlink($link);
+            rmdir($linkDir);
+        }
+    }
+
     public function testIntentKindsAreNeverSecondGuessed(): void
     {
         // part/element/section/utility cannot be derived — the linter must not try.
