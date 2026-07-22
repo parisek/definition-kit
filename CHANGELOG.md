@@ -6,6 +6,28 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Component `kind` — a closed enum (`block`, `section`, `element`, `part`,
+  `utility`) declaring what a component IS, as distinct from `category`, the
+  styleguide sidebar bucket. Drives visual-baseline inclusion, catalogue
+  presentation and Gutenberg eligibility. See tailwind-base ADR 0012.
+- `fields-validate` checks it: presence (warning, until the downstream backfill
+  lands) and `block` <-> `block.json` consistency (error, both directions).
+
+### Changed
+
+- **BREAKING:** `render` is now constrained to `inset`/`bleed`/`chrome`/`overlay`
+  — the modes `parisek/styleguide` has always enforced. It previously accepted
+  any non-empty string while the package silently rewrote unknown values to the
+  default, so a typo produced a wrong preview with no signal anywhere. A
+  definition carrying an invalid `render` stops validating.
+
+### Notes
+
+- `kind` is NOT in the schema's `required` array. Existing definitions keep
+  validating; presence is reported, not enforced.
+
 ## [0.1.4] - 2026-07-21
 
 ### Added
