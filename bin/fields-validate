@@ -3,7 +3,9 @@
 
 declare(strict_types=1);
 
+use Parisek\DefinitionKit\Lint\KindLinter;
 use Parisek\DefinitionKit\Schema\FieldsSchemaValidator;
+use Symfony\Component\Yaml\Yaml;
 
 foreach ([__DIR__ . '/../vendor/autoload.php', __DIR__ . '/../../../autoload.php'] as $autoload) {
     if (is_file($autoload)) {
@@ -19,17 +21,39 @@ if ([] === $paths) {
 }
 
 $validator = new FieldsSchemaValidator();
+$kindLinter = new KindLinter();
 $failed = false;
 foreach ($paths as $path) {
     $result = $validator->validateFile($path);
-    if ($result->valid) {
-        echo "OK   {$path}\n";
+    if (!$result->valid) {
+        $failed = true;
+        echo "FAIL {$path}\n";
+        foreach ($result->errors as $error) {
+            echo "       {$error['pointer']}: {$error['message']}\n";
+        }
         continue;
     }
-    $failed = true;
-    echo "FAIL {$path}\n";
-    foreach ($result->errors as $error) {
-        echo "       {$error['pointer']}: {$error['message']}\n";
+
+    // KindLinter's rules only apply once the document itself is schema-valid
+    // — an array-typed $definition needs a normal (non-object-for-map) parse.
+    /** @var array<string,mixed> $definition */
+    $definition = Yaml::parseFile($path) ?? [];
+    $findings = $kindLinter->lint($path, $definition);
+
+    $errors = array_filter($findings, static fn (array $f): bool => 'error' === $f['severity']);
+    if ([] !== $errors) {
+        $failed = true;
+        echo "FAIL {$path}\n";
+        foreach ($findings as $finding) {
+            echo "       [{$finding['severity']}] {$finding['message']}\n";
+        }
+        continue;
+    }
+
+    echo "OK   {$path}\n";
+    foreach ($findings as $finding) {
+        // Warnings are reported but never flip the exit code.
+        echo "       [{$finding['severity']}] {$finding['message']}\n";
     }
 }
 
