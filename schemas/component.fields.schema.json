@@ -20,7 +20,11 @@
             "enum": ["block", "section", "element", "part", "utility"],
             "description": "What the component IS, as opposed to `category`, which is the styleguide sidebar bucket. block = editor-insertable (has block.json); section = page-level chrome, not editor-insertable; element = self-contained and reusable across unrelated parents; part = fragment authored for one specific parent's structure; utility = rendering helper with no visual identity of its own. Drives visual-baseline inclusion, catalogue presentation and Gutenberg eligibility. See tailwind-base ADR 0012."
         },
-        "render": { "type": "string", "minLength": 1 },
+        "render": {
+            "type": "string",
+            "enum": ["inset", "bleed", "chrome", "overlay"],
+            "description": "Iframe-wrapper mode for the styleguide preview — how the component is FRAMED, not what it is (that is `kind`). Mirrors ComponentParser::RENDER_MODES in parisek/styleguide, which silently defaults an unknown value; this enum makes the mistake loud instead."
+        },
         "web": { "type": "string", "minLength": 1 },
         "asana": { "type": "string", "minLength": 1 },
         "figma": { "type": "string", "minLength": 1 },
