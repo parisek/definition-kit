@@ -6,6 +6,15 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- `fields-migrate` now carries the twig front-comment `kind:` into the generated
+  `<name>.yaml` root. v0.2.0 added `kind` to the schema and `KindLinter`, but the
+  migration reader's metadata passthrough still omitted it, so every migrated
+  definition lost its `kind` and — because `parisek/styleguide` is YAML-first —
+  tripped `KindLinter`'s "declares no kind" warning. Completes the `kind` feature
+  (PR #7 tasks 1-3); no schema or projection change.
+
 ## [0.2.0] - 2026-07-22
 
 ### Added

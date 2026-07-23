@@ -66,7 +66,7 @@ final class AcfJsonReader
                 $root['usage'] = $usageIds;
             }
         }
-        foreach (['category', 'render', 'web', 'asana', 'figma', 'drupal', 'description'] as $metaKey) {
+        foreach (['category', 'kind', 'render', 'web', 'asana', 'figma', 'drupal', 'description'] as $metaKey) {
             if (isset($twigMeta[$metaKey]) && '' !== $twigMeta[$metaKey]) {
                 $root[$metaKey] = $twigMeta[$metaKey];
             }
