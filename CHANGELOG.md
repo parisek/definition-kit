@@ -6,6 +6,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-07-23
+
 ### Fixed
 
 - `fields-migrate` now carries the twig front-comment `kind:` into the generated
