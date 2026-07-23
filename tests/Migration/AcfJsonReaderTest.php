@@ -79,6 +79,20 @@ final class AcfJsonReaderTest extends TestCase
         self::assertTrue($tree['responsive']);
     }
 
+    public function test_kind_is_carried_from_twig_front_comment(): void
+    {
+        // `kind` (block/section/element/part/utility — ADR 0012) is styleguide
+        // root metadata the schema models and KindLinter validates. It must
+        // survive migration or the styleguide (YAML-first) reads no kind and
+        // every migrated definition trips KindLinter's "declares no kind".
+        $twig = "{#\nname: Demo\nusage: homepage\ncategory: Gutenberg\nkind: block\nrender: bleed\nfields:\n#}\n";
+        $tree = $this->reader->read($this->group([
+            ['key' => 'field_demo_title', 'name' => 'title', 'label' => 'Nadpis', 'type' => 'text'],
+        ]), 'demo', $twig);
+
+        self::assertSame('block', $tree['kind']);
+    }
+
     public function test_acf_root_description_is_captured_into_wp_description_not_metadata_description(): void
     {
         // Two DIFFERENT descriptions on the same component: the twig

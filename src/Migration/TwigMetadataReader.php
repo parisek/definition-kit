@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Parisek\DefinitionKit\Migration;
 
 /**
- * Extracts ONLY root component metadata (name/usage/category/render/web/
+ * Extracts ONLY root component metadata (name/usage/category/kind/render/web/
  * asana/figma/drupal/description/weight/responsive) from a twig file's
  * leading `{# ... #}` front-comment block, stopping at the `fields:` line.
  * Every value is handed back as a raw string — type coercion for the
