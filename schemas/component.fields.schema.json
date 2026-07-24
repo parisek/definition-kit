@@ -137,6 +137,7 @@
             "properties": {
                 "label": { "type": "string", "minLength": 1 },
                 "key": { "type": "string", "pattern": "^layout_" },
+                "name": { "type": "string", "minLength": 1 },
                 "min": { "type": "integer", "minimum": 0 },
                 "max": { "type": "integer", "minimum": 0 },
                 "wp": { "type": "object" },

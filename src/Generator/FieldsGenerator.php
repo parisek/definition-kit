@@ -245,7 +245,19 @@ final class FieldsGenerator
     {
         $layouts = [];
         foreach ($layoutDefs as $layoutName => $layoutDef) {
-            $layoutChain = [...$nameChain, (string) $layoutName];
+            // Finding 1 (round 4, CRITICAL) — the ACF `name` (what WordPress
+            // stores in `acf_fc_layout` postmeta) is pinned verbatim by
+            // AcfJsonReader::readLayouts() via the layout's own `name:` key,
+            // exactly like `key` already was per round 3. The YAML map key
+            // (`$layoutName`) is a cosmetic authoring label a maintainer can
+            // rename freely; trusting it as the ACF name would silently
+            // rewrite postmeta identity on every rename. Prefer the pinned
+            // `name:` when present; fall back to the map key only for
+            // hand-authored definitions that never went through migration
+            // (a brand-new layout authored directly in YAML, where the map
+            // key genuinely IS the only name that has ever existed).
+            $acfName = (string) ($layoutDef['name'] ?? $layoutName);
+            $layoutChain = [...$nameChain, $acfName];
             $layoutKey = (string) ($layoutDef['key'] ?? ('layout_' . $componentSlug . '_' . implode('_', $layoutChain)));
 
             $childFields = (array) ($layoutDef['fields'] ?? []);
@@ -266,7 +278,7 @@ final class FieldsGenerator
 
             $layout = [
                 'key' => $layoutKey,
-                'name' => (string) $layoutName,
+                'name' => $acfName,
                 'label' => (string) ($layoutDef['label'] ?? ''),
                 // Finding C — `display`/`location` are canonical ACF
                 // layout props (block|table|row for display) captured

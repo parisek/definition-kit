@@ -464,6 +464,19 @@ final class AcfJsonReader
             // renamed to afterwards.
             $layoutOut['key'] = (string) $layout['key'];
 
+            // Finding 1 (round 4, CRITICAL) — the round-3 fix pinned `key`
+            // but left `name` implicit (derived from the YAML map key by
+            // FieldsGenerator::buildLayouts()). That's the wrong half: ACF
+            // stores `acf_fc_layout` postmeta BY NAME, not by key, and a
+            // layout's map key is a purely cosmetic authoring label (see
+            // the `key` pinning rationale above — the same asymmetry
+            // applies identically to `name`). Renaming the map key must
+            // not change what's stored in postmeta, so `name` is pinned
+            // verbatim here exactly like `key`, unconditionally — not only
+            // when it deviates from the map key. FieldsGenerator now reads
+            // this pinned `name` instead of trusting the map key.
+            $layoutOut['name'] = $layoutName;
+
             $out[$layoutName] = $layoutOut;
         }
         return $out;

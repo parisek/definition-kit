@@ -512,12 +512,60 @@ final class AcfJsonReaderTest extends TestCase
         $generated = (new \Parisek\DefinitionKit\Generator\FieldsGenerator())->generate($renamedTree, 'demo', 1);
         $regeneratedLayout = $generated['fields'][0]['layouts'][0];
 
-        self::assertSame('heading', $regeneratedLayout['name']);
         self::assertSame(
             'layout_demo_items_title',
             $regeneratedLayout['key'],
             'Renaming the layout map key must not change its ACF key — otherwise '
             . 'every acf_fc_layout="title" value already stored in postmeta is orphaned.',
+        );
+    }
+
+    /**
+     * Finding 1 (round 4, CRITICAL) — the round-3 fix pinned the layout's
+     * `key` but left the layout's ACF `name` derived from the YAML map key.
+     * `FieldsGenerator::buildLayouts()` emits `'name' => (string) $layoutName`
+     * — the map key IS the regenerated ACF `name`. WordPress stores
+     * `acf_fc_layout` postmeta BY NAME, not by key, so renaming the map key
+     * silently changes what every existing content row's `acf_fc_layout`
+     * value must match against — exactly the same class of orphaning the
+     * key-pin was meant to prevent, just on the other identity half.
+     *
+     * This asserts the name-preservation half directly: migrate a layout,
+     * rename its YAML map key (an innocent-looking refactor), regenerate,
+     * and require the regenerated ACF `name` to still be the ORIGINAL
+     * `title` — not the renamed map key `heading`. Before this fix, the
+     * regenerated `name` silently became `heading`, orphaning any
+     * `acf_fc_layout: "title"` postmeta already stored in production and
+     * breaking every `{% if layout.acf_fc_layout == 'title' %}` Twig branch.
+     */
+    public function test_flexible_content_layout_name_is_pinned_so_renaming_the_map_key_does_not_orphan_acf_fc_layout(): void
+    {
+        $tree = $this->reader->read($this->group([[
+            'key' => 'field_demo_items', 'name' => 'items', 'label' => 'Položky', 'type' => 'flexible_content',
+            'layouts' => [[
+                'key' => 'layout_demo_items_title', 'name' => 'title', 'label' => 'Nadpis', 'display' => 'block',
+                'sub_fields' => [
+                    ['key' => 'field_demo_items_title_title', 'name' => 'title', 'label' => 'Nadpis', 'type' => 'text'],
+                ],
+            ]],
+        ]]), 'demo');
+
+        $migratedLayout = $tree['fields']['items']['layouts']['title'];
+
+        // Simulate the maintainer renaming the map key post-migration.
+        $renamedLayouts = ['heading' => $migratedLayout];
+        $renamedTree = $tree;
+        $renamedTree['fields']['items']['layouts'] = $renamedLayouts;
+
+        $generated = (new \Parisek\DefinitionKit\Generator\FieldsGenerator())->generate($renamedTree, 'demo', 1);
+        $regeneratedLayout = $generated['fields'][0]['layouts'][0];
+
+        self::assertSame(
+            'title',
+            $regeneratedLayout['name'],
+            'Renaming the layout map key must not change its ACF name — otherwise '
+            . 'every acf_fc_layout="title" value already stored in postmeta is orphaned '
+            . 'and every Twig branch on acf_fc_layout breaks.',
         );
     }
 
