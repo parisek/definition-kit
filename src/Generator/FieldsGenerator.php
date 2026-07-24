@@ -60,7 +60,75 @@ final class FieldsGenerator
             );
         }
 
+        $this->assertGloballyUniqueKeys($orderedRawFields);
+
         return $this->rootBuilder->build($definitionTree, $orderedRawFields, $componentSlug, $modifiedAt);
+    }
+
+    /**
+     * Finding A (CRITICAL) — key derivation underscore-joins the name
+     * chain, so a flexible_content layout `a_b` + field `c` and a
+     * sibling layout `a` + field `b_c` both derive `field_<slug>_a_b_c`.
+     * Two ACF fields sharing one key alias the SAME WordPress postmeta
+     * row — silent, irreversible editor data loss the moment both are
+     * ever populated. No ambiguity is acceptable regardless of how it
+     * arose (ordinary nesting, repeater sub_fields, or flexible_content
+     * layouts) — walk the ENTIRE generated tree (fields, their
+     * sub_fields, and every flexible_content layout's own key plus its
+     * own sub_fields) and fail loudly the moment two nodes claim the
+     * same `key`.
+     *
+     * @param list<array<string,mixed>> $fields
+     */
+    private function assertGloballyUniqueKeys(array $fields): void
+    {
+        $seen = [];
+        $this->collectKeys($fields, $seen);
+    }
+
+    /**
+     * @param list<array<string,mixed>> $fields
+     * @param array<string,bool> $seen
+     */
+    private function collectKeys(array $fields, array &$seen): void
+    {
+        foreach ($fields as $field) {
+            $this->assertKeyUnseen((string) $field['key'], $seen);
+
+            if (!empty($field['sub_fields'])) {
+                /** @var list<array<string,mixed>> $subFields */
+                $subFields = (array) $field['sub_fields'];
+                $this->collectKeys($subFields, $seen);
+            }
+
+            if (!empty($field['layouts'])) {
+                /** @var list<array<string,mixed>> $layouts */
+                $layouts = (array) $field['layouts'];
+                foreach ($layouts as $layout) {
+                    $this->assertKeyUnseen((string) $layout['key'], $seen);
+                    /** @var list<array<string,mixed>> $layoutSubFields */
+                    $layoutSubFields = (array) ($layout['sub_fields'] ?? []);
+                    $this->collectKeys($layoutSubFields, $seen);
+                }
+            }
+        }
+    }
+
+    /**
+     * @param array<string,bool> $seen
+     */
+    private function assertKeyUnseen(string $key, array &$seen): void
+    {
+        if (isset($seen[$key])) {
+            throw new GenerationValidationException(sprintf(
+                "Generated key '%s' collides with another field/layout in the same component. "
+                . 'Two ACF elements sharing one key would alias the same WordPress postmeta row — '
+                . 'rename one of the colliding fields/layouts (or pin an explicit `key:` on one of '
+                . 'them) so the underscore-joined name chains no longer produce the same key.',
+                $key,
+            ));
+        }
+        $seen[$key] = true;
     }
 
     /**
@@ -182,15 +250,22 @@ final class FieldsGenerator
                 );
             }
 
+            $layoutWp = (array) ($layoutDef['wp'] ?? []);
+
             $layout = [
                 'key' => $layoutKey,
                 'name' => (string) $layoutName,
                 'label' => (string) ($layoutDef['label'] ?? ''),
-                'display' => 'block',
+                // Finding C — `display`/`location` are canonical ACF
+                // layout props (block|table|row for display) captured
+                // verbatim by AcfJsonReader::readLayouts() into the
+                // layout's `wp:` escape hatch whenever authored non-default;
+                // replay them here instead of hardcoding the default.
+                'display' => (string) ($layoutWp['display'] ?? 'block'),
                 'sub_fields' => $subFields,
                 'min' => $layoutDef['min'] ?? '',
                 'max' => $layoutDef['max'] ?? '',
-                'location' => null,
+                'location' => $layoutWp['location'] ?? null,
             ];
 
             $layouts[] = $layout;

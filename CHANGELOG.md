@@ -6,6 +6,45 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `flexible_content` field support end-to-end: migration (`fields-migrate`)
+  lifts raw ACF `layouts` into a `layouts:` map keyed by layout name, and
+  generation (`fields-generate`) replays it back into ACF's raw `layouts`
+  list. Layout-level `label`/`min`/`max` and non-default `display`/`location`
+  round-trip verbatim; a layout's own `fields` recurse through the same
+  nesting machinery as an ordinary `group`/`repeater`, including
+  `flexible_content` nested inside another `flexible_content`'s layout.
+
+### Fixed
+
+- Generator now enforces GLOBAL key uniqueness across an entire generated
+  field group — including flexible_content layouts and their sub-fields —
+  and throws a `GenerationValidationException` instead of silently emitting
+  two ACF fields that alias the same WordPress postmeta key. Underscore-joined
+  name-chain derivation could otherwise collide across unrelated
+  fields/layouts (e.g. layout `a_b` + field `c` vs. layout `a` + field `b_c`).
+- `AcfJsonReader::readLayouts()` now throws on duplicate layout names instead
+  of silently overwriting the earlier layout (and its key) with no
+  diagnostic. `MigrationCompletenessAuditor` independently detects the same
+  duplicate in the raw ACF source — it previously could mask the collision
+  entirely when both duplicate layouts happened to share an identical
+  sub-field shape.
+- Layout `display` (`block`/`table`/`row`) and `location` are now captured
+  verbatim by the migration reader (into the layout's `wp:` escape hatch when
+  non-default) and replayed by the generator, instead of the generator
+  hardcoding `display: block` / `location: null` unconditionally.
+- `component.fields.schema.json`'s `layout` `$defs` now requires `label` (not
+  just `fields`) and constrains layout map keys to `^[a-z][a-z0-9_]*$` —
+  bringing it into parity with `parisek/acf-json-schema`'s
+  `field-flexible_content.schema.json`, which already rejected the empty
+  `label: ""` a label-less layout would generate.
+- `acf-lint` (from `parisek/acf-json-schema`) is now wired into this
+  project's own test suite, validating every generated `acf.json` fixture
+  against the ecosystem's canonical ACF-shape validator — closing the gap
+  that let the `display`/`location` and schema-parity regressions above ship
+  unnoticed.
+
 ## [0.2.1] - 2026-07-23
 
 ### Fixed

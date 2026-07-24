@@ -363,6 +363,20 @@ final class AcfJsonReader
             $layoutName = (string) $layout['name'];
             $layoutChain = [...$nameChain, $layoutName];
 
+            // Finding B (CRITICAL) — `$out[$layoutName] = …` below would
+            // silently overwrite an earlier layout of the same name (and
+            // discard its key) with no diagnostic at all. Mirrors the
+            // adjacent empty-layouts / empty-sub-fields guards' style.
+            if (array_key_exists($layoutName, $out)) {
+                throw new \RuntimeException(sprintf(
+                    "Duplicate layout name '%s' in flexible_content field '%s' — "
+                    . 'two ACF layouts sharing one name would collapse into a single '
+                    . 'migrated layout, silently discarding the earlier one and its key.',
+                    $layoutName,
+                    implode('.', $nameChain),
+                ));
+            }
+
             $children = [];
             foreach ((array) ($layout['sub_fields'] ?? []) as $sub) {
                 if ('accordion' === ($sub['type'] ?? null)) {
@@ -392,6 +406,26 @@ final class AcfJsonReader
                 }
             }
             $layoutOut['fields'] = $children;
+
+            // Finding C (CRITICAL) — `display` (block|table|row) and
+            // `location` are canonical ACF layout props the generator
+            // side previously hardcoded to 'block' / null unconditionally,
+            // silently rewriting any layout authored with a non-default
+            // value. Capture them verbatim into the layout's own `wp:`
+            // escape hatch whenever they deviate from the ACF default, so
+            // FieldsGenerator can replay them instead of guessing.
+            $layoutWp = [];
+            $display = (string) ($layout['display'] ?? 'block');
+            if ('block' !== $display) {
+                $layoutWp['display'] = $display;
+            }
+            $location = $layout['location'] ?? null;
+            if (null !== $location) {
+                $layoutWp['location'] = $location;
+            }
+            if ([] !== $layoutWp) {
+                $layoutOut['wp'] = $layoutWp;
+            }
 
             $expectedLayoutKey = 'layout_' . $componentSlug . '_' . implode('_', $layoutChain);
             if ((string) $layout['key'] !== $expectedLayoutKey) {

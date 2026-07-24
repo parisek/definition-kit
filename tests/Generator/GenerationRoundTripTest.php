@@ -340,4 +340,91 @@ final class GenerationRoundTripTest extends TestCase
             self::assertArrayNotHasKey('parent_repeater', $headingChild);
         }
     }
+
+    /**
+     * Finding E(i) — a synthetic two-level fixture: a flexible_content
+     * field whose layout itself contains ANOTHER flexible_content field.
+     * An adversarial reviewer built this by hand and confirmed it works;
+     * this pins the behaviour as a regression test rather than leaving it
+     * as an unverified claim.
+     */
+    public function test_flexible_content_nested_inside_another_flexible_content_layout_round_trips(): void
+    {
+        $original = [
+            'key' => 'group_nested_fc',
+            'title' => 'Nested FC',
+            'fields' => [[
+                'key' => 'field_nested_outer', 'name' => 'outer', 'label' => 'Outer', 'type' => 'flexible_content',
+                'layouts' => [[
+                    'key' => 'layout_nested_outer_wrap', 'name' => 'wrap', 'label' => 'Wrap', 'display' => 'block',
+                    'min' => '', 'max' => '', 'location' => null,
+                    'sub_fields' => [[
+                        'key' => 'field_nested_outer_wrap_inner', 'name' => 'inner', 'label' => 'Inner', 'type' => 'flexible_content',
+                        'layouts' => [[
+                            'key' => 'layout_nested_outer_wrap_inner_leaf', 'name' => 'leaf', 'label' => 'Leaf', 'display' => 'block',
+                            'min' => '', 'max' => '', 'location' => null,
+                            'sub_fields' => [[
+                                'key' => 'field_nested_outer_wrap_inner_leaf_title', 'name' => 'title', 'label' => 'Title', 'type' => 'text',
+                            ]],
+                        ]],
+                    ]],
+                ]],
+            ]],
+        ];
+
+        $tree = (new AcfJsonReader())->read($original, 'nested');
+        $regenerated = (new FieldsGenerator())->generate($tree, 'nested', 1700000000);
+
+        // Not a full structural-exact diff (this hand-typed minimal
+        // fixture doesn't carry every real-ACF baseline prop) — the
+        // regression this test pins is specifically that a nested
+        // flexible_content-inside-a-flexible_content-layout round-trips
+        // its own layouts/keys/names correctly, which the assertions
+        // below verify directly against both original and regenerated.
+        $outer = $regenerated['fields'][0];
+        self::assertSame('outer', $outer['name']);
+        self::assertSame('flexible_content', $outer['type']);
+        self::assertSame('wrap', $outer['layouts'][0]['name']);
+
+        $innerFcField = $outer['layouts'][0]['sub_fields'][0];
+        self::assertSame('inner', $innerFcField['name']);
+        self::assertSame('flexible_content', $innerFcField['type']);
+        self::assertSame('leaf', $innerFcField['layouts'][0]['name']);
+        self::assertSame('title', $innerFcField['layouts'][0]['sub_fields'][0]['name']);
+        self::assertSame('field_nested_outer_wrap_inner_leaf_title', $innerFcField['layouts'][0]['sub_fields'][0]['key']);
+    }
+
+    /**
+     * Finding E(ii) — layout-level non-sentinel `min`/`max` round-trip
+     * through the FULL reader -> generator pipeline (each half is
+     * unit-tested separately in AcfJsonReaderTest /
+     * FieldsGeneratorTest already, but the combined pipeline wasn't
+     * pinned end-to-end until this test).
+     */
+    public function test_flexible_content_layout_non_sentinel_min_max_round_trips_end_to_end(): void
+    {
+        $original = [
+            'key' => 'group_layout_bounds',
+            'title' => 'Layout Bounds',
+            'fields' => [[
+                'key' => 'field_bounds_items', 'name' => 'items', 'label' => 'Items', 'type' => 'flexible_content',
+                'layouts' => [[
+                    'key' => 'layout_bounds_items_title', 'name' => 'title', 'label' => 'Title', 'display' => 'block',
+                    'min' => 1, 'max' => 3, 'location' => null,
+                    'sub_fields' => [[
+                        'key' => 'field_bounds_items_title_title', 'name' => 'title', 'label' => 'Title', 'type' => 'text',
+                    ]],
+                ]],
+            ]],
+        ];
+
+        $tree = (new AcfJsonReader())->read($original, 'bounds');
+        self::assertSame(1, $tree['fields']['items']['layouts']['title']['min']);
+        self::assertSame(3, $tree['fields']['items']['layouts']['title']['max']);
+
+        $regenerated = (new FieldsGenerator())->generate($tree, 'bounds', 1700000000);
+        $layout = $regenerated['fields'][0]['layouts'][0];
+        self::assertSame(1, $layout['min']);
+        self::assertSame(3, $layout['max']);
+    }
 }

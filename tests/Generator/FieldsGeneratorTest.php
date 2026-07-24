@@ -327,4 +327,104 @@ final class FieldsGeneratorTest extends TestCase
 
         self::assertSame(['accordion', 'text'], array_column($group['fields'], 'type'));
     }
+
+    /**
+     * Finding A (CRITICAL) — a flexible_content field named `a_b` with a
+     * layout `c` derives the exact same underscore-joined key
+     * (`field_demo_items_a_b_c`) as a sibling flexible_content field `a`
+     * whose layout is `b_c`. Two different ACF fields aliasing one
+     * postmeta key is irreversible editor data loss the moment both
+     * layouts are ever populated on the same post. The generator must
+     * refuse to emit such a tree rather than silently produce a
+     * colliding pair of `field_*` keys.
+     */
+    public function test_flexible_content_layout_name_ambiguity_produces_colliding_keys_without_a_guard(): void
+    {
+        $this->expectException(\Parisek\DefinitionKit\Generator\GenerationValidationException::class);
+        $this->expectExceptionMessageMatches('/field_demo_items_a_b_c/');
+
+        $this->generator->generate($this->tree([
+            'items' => ['type' => 'flexible_content', 'label' => 'Items', 'layouts' => [
+                'a_b' => ['label' => 'A B', 'fields' => [
+                    'c' => ['type' => 'text', 'label' => 'C'],
+                ]],
+                'a' => ['label' => 'A', 'fields' => [
+                    'b_c' => ['type' => 'text', 'label' => 'B C'],
+                ]],
+            ]],
+        ], ['name' => 'Demo']), 'demo', 1700000000);
+    }
+
+    /**
+     * Same collision class without flexible_content at all — two ordinary
+     * fields whose name-chain segments underscore-join identically
+     * (`a` + `b_c` vs `a_b` + `c`). The uniqueness guard must be global,
+     * not flexible_content-specific.
+     */
+    public function test_ordinary_nested_group_field_name_ambiguity_is_rejected(): void
+    {
+        $this->expectException(\Parisek\DefinitionKit\Generator\GenerationValidationException::class);
+
+        $this->generator->generate($this->tree([
+            'a_b' => ['type' => 'group', 'label' => 'A B', 'fields' => [
+                'c' => ['type' => 'text', 'label' => 'C'],
+            ]],
+            'a' => ['type' => 'group', 'label' => 'A', 'fields' => [
+                'b_c' => ['type' => 'text', 'label' => 'B C'],
+            ]],
+        ]), 'demo', 1700000000);
+    }
+
+    /**
+     * Sanity control — the same fixture with distinguishable names must
+     * keep working (the guard must not be over-broad / false-positive).
+     */
+    public function test_distinct_flexible_content_layout_names_generate_without_collision(): void
+    {
+        $group = $this->generator->generate($this->tree([
+            'items' => ['type' => 'flexible_content', 'label' => 'Items', 'layouts' => [
+                'alpha' => ['label' => 'Alpha', 'fields' => [
+                    'c' => ['type' => 'text', 'label' => 'C'],
+                ]],
+            ]],
+            'other' => ['type' => 'flexible_content', 'label' => 'Other', 'layouts' => [
+                'beta' => ['label' => 'Beta', 'fields' => [
+                    'd' => ['type' => 'text', 'label' => 'D'],
+                ]],
+            ]],
+        ]), 'demo', 1700000000);
+
+        self::assertCount(2, $group['fields']);
+    }
+
+    /**
+     * Finding C (CRITICAL) — layout `display` and `location` must be
+     * captured verbatim when authored non-default, not hardcoded to
+     * `block` / `null`.
+     */
+    public function test_flexible_content_layout_display_is_reconstructed_when_non_default(): void
+    {
+        $group = $this->generator->generate($this->tree([
+            'items' => ['type' => 'flexible_content', 'label' => 'Položky', 'layouts' => [
+                'title' => ['label' => 'Nadpis', 'wp' => ['display' => 'table'], 'fields' => [
+                    'title' => ['type' => 'text', 'label' => 'Nadpis'],
+                ]],
+            ]],
+        ]), 'demo', 1700000000);
+
+        self::assertSame('table', $group['fields'][0]['layouts'][0]['display']);
+    }
+
+    public function test_flexible_content_layout_display_defaults_to_block_when_not_authored(): void
+    {
+        $group = $this->generator->generate($this->tree([
+            'items' => ['type' => 'flexible_content', 'label' => 'Položky', 'layouts' => [
+                'title' => ['label' => 'Nadpis', 'fields' => [
+                    'title' => ['type' => 'text', 'label' => 'Nadpis'],
+                ]],
+            ]],
+        ]), 'demo', 1700000000);
+
+        self::assertSame('block', $group['fields'][0]['layouts'][0]['display']);
+    }
 }

@@ -1,0 +1,12 @@
+name: Demo Invalid Flexible Content Layout Label
+fields:
+  items:
+    type: flexible_content
+    label: Položky
+    layouts:
+      title:
+        # missing required `label` -- generator would emit "label": ""
+        # which parisek/acf-json-schema's field-flexible_content schema
+        # rejects (required: ["key","name","label"], label minLength 1).
+        fields:
+          title: { type: text, label: Nadpis }

@@ -163,6 +163,31 @@ final class FieldsSchemaValidatorTest extends TestCase
         );
     }
 
+    /**
+     * Finding D (HIGH) — this schema currently requires only `["fields"]`
+     * on a layout, so a layout without `label` passes here but the
+     * generator emits `"label": ""`, which fails
+     * parisek/acf-json-schema's field-flexible_content.schema.json
+     * (`required: ["key","name","label"]`, `label` `minLength: 1`).
+     * Bring the two schemas into parity.
+     */
+    public function test_flexible_content_layout_without_label_fails(): void
+    {
+        $result = (new FieldsSchemaValidator())->validateFile($this->fixture('invalid-flexible-content-layout-no-label.fields.yaml'));
+        self::assertFalse($result->valid);
+    }
+
+    /**
+     * Finding D (HIGH, second half) — layout map keys had no pattern
+     * constraint while downstream (parisek/acf-json-schema) requires
+     * `^[a-z][a-z0-9_]*$` for ACF `name` values.
+     */
+    public function test_flexible_content_layout_name_must_match_acf_name_pattern(): void
+    {
+        $result = (new FieldsSchemaValidator())->validateFile($this->fixture('invalid-flexible-content-bad-layout-name.fields.yaml'));
+        self::assertFalse($result->valid);
+    }
+
     public function test_key_not_matching_field_prefix_fails_with_pointer_to_field(): void
     {
         $result = (new FieldsSchemaValidator())->validateFile($this->fixture('invalid-bad-key-pattern.fields.yaml'));

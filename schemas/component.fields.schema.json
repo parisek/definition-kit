@@ -127,17 +127,19 @@
         "layoutMap": {
             "type": "object",
             "minProperties": 1,
+            "propertyNames": { "pattern": "^[a-z][a-z0-9_]*$" },
             "additionalProperties": { "$ref": "#/$defs/layout" }
         },
         "layout": {
             "type": "object",
-            "required": ["fields"],
+            "required": ["fields", "label"],
             "additionalProperties": false,
             "properties": {
                 "label": { "type": "string", "minLength": 1 },
                 "key": { "type": "string", "pattern": "^layout_" },
                 "min": { "type": "integer", "minimum": 0 },
                 "max": { "type": "integer", "minimum": 0 },
+                "wp": { "type": "object" },
                 "fields": { "$ref": "#/$defs/fieldMap" }
             }
         }

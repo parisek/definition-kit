@@ -189,4 +189,52 @@ final class MigrationCompletenessAuditorTest extends TestCase
         ]]];
         self::assertSame([], $this->auditor->audit($acf, $def));
     }
+
+    /**
+     * Finding B (CRITICAL, auditor half) — AcfJsonReader::readLayouts()
+     * collapses duplicate layout names via `$out[$layoutName] = …`
+     * (fixed elsewhere to throw), but the auditor has an INDEPENDENT
+     * masking bug: it iterates the raw ACF `$layouts` list one at a
+     * time and looks each one up in `$defLayouts` (already-collapsed to
+     * one key per name). When both duplicate layouts happen to share an
+     * identical sub-field shape, every iteration "matches" the same
+     * single migrated layout and the auditor reports zero violations —
+     * even though one whole raw layout was silently discarded. The
+     * auditor must independently detect the duplicate in the raw ACF
+     * source, regardless of what the reader does.
+     */
+    public function test_duplicate_layout_names_with_identical_shape_are_flagged_not_masked(): void
+    {
+        $acf = [[
+            'key' => 'field_demo_items', 'name' => 'items', 'label' => 'Items', 'type' => 'flexible_content',
+            'layouts' => [
+                [
+                    'key' => 'layout_demo_items_body_v1', 'name' => 'body', 'label' => 'Body', 'display' => 'block',
+                    'sub_fields' => [[
+                        'key' => 'field_demo_items_body_v1_text', 'name' => 'text', 'label' => 'Text', 'type' => 'text',
+                    ]],
+                ],
+                [
+                    'key' => 'layout_demo_items_body_v2', 'name' => 'body', 'label' => 'Body', 'display' => 'block',
+                    'sub_fields' => [[
+                        'key' => 'field_demo_items_body_v2_text', 'name' => 'text', 'label' => 'Text', 'type' => 'text',
+                    ]],
+                ],
+            ],
+        ]];
+        // Same shape as EITHER raw layout — this is exactly the case that
+        // previously slipped through undetected.
+        $def = ['items' => ['type' => 'flexible_content', 'label' => 'Items', 'layouts' => [
+            'body' => ['label' => 'Body', 'fields' => [
+                'text' => ['type' => 'text', 'label' => 'Text'],
+            ]],
+        ]]];
+
+        $violations = $this->auditor->audit($acf, $def);
+        self::assertNotEmpty($violations, 'duplicate layout name must be flagged, not silently masked');
+        self::assertTrue(
+            (bool) array_filter($violations, static fn (string $v): bool => str_contains(strtolower($v), 'duplicate')),
+            'expected a duplicate-layout violation, got: ' . implode(' | ', $violations),
+        );
+    }
 }

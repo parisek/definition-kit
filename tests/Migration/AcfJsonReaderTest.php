@@ -550,4 +550,73 @@ final class AcfJsonReaderTest extends TestCase
             ]],
         ]]), 'demo');
     }
+
+    /**
+     * Finding B (CRITICAL) — two layouts sharing the same `name` collapse
+     * into one PHP array key (`$out[$layoutName] = …`) with no collision
+     * check: the earlier layout AND its key silently vanish. Reproduced
+     * live against a synthetic ACF export by an adversarial reviewer.
+     * The reader must throw, matching the style of the adjacent
+     * empty-layouts / empty-sub-fields guards above.
+     */
+    public function test_flexible_content_duplicate_layout_names_throws_instead_of_silently_overwriting(): void
+    {
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessageMatches('/duplicate/i');
+
+        $this->reader->read($this->group([[
+            'key' => 'field_demo_items', 'name' => 'items', 'label' => 'Položky', 'type' => 'flexible_content',
+            'layouts' => [
+                [
+                    'key' => 'layout_demo_items_title_v1', 'name' => 'title', 'label' => 'Nadpis V1', 'display' => 'block',
+                    'sub_fields' => [
+                        ['key' => 'field_demo_items_title_v1_a', 'name' => 'a', 'label' => 'A', 'type' => 'text'],
+                    ],
+                ],
+                [
+                    'key' => 'layout_demo_items_title_v2', 'name' => 'title', 'label' => 'Nadpis V2', 'display' => 'block',
+                    'sub_fields' => [
+                        ['key' => 'field_demo_items_title_v2_b', 'name' => 'b', 'label' => 'B', 'type' => 'text'],
+                    ],
+                ],
+            ],
+        ]]), 'demo');
+    }
+
+    /**
+     * Finding C (CRITICAL) — a layout authored with a non-default
+     * `display` (`table` / `row`) must round-trip verbatim, not be
+     * silently dropped (the generator side currently hardcodes `block`
+     * unconditionally, so the reader must actually capture the raw
+     * value for the round-trip to be possible at all).
+     */
+    public function test_flexible_content_layout_non_default_display_is_captured(): void
+    {
+        $tree = $this->reader->read($this->group([[
+            'key' => 'field_demo_items', 'name' => 'items', 'label' => 'Položky', 'type' => 'flexible_content',
+            'layouts' => [[
+                'key' => 'layout_demo_items_title', 'name' => 'title', 'label' => 'Nadpis', 'display' => 'table',
+                'sub_fields' => [
+                    ['key' => 'field_demo_items_title_title', 'name' => 'title', 'label' => 'Nadpis', 'type' => 'text'],
+                ],
+            ]],
+        ]]), 'demo');
+
+        self::assertSame('table', $tree['fields']['items']['layouts']['title']['wp']['display']);
+    }
+
+    public function test_flexible_content_layout_default_display_leaves_no_wp_trace(): void
+    {
+        $tree = $this->reader->read($this->group([[
+            'key' => 'field_demo_items', 'name' => 'items', 'label' => 'Položky', 'type' => 'flexible_content',
+            'layouts' => [[
+                'key' => 'layout_demo_items_title', 'name' => 'title', 'label' => 'Nadpis', 'display' => 'block',
+                'sub_fields' => [
+                    ['key' => 'field_demo_items_title_title', 'name' => 'title', 'label' => 'Nadpis', 'type' => 'text'],
+                ],
+            ]],
+        ]]), 'demo');
+
+        self::assertArrayNotHasKey('wp', $tree['fields']['items']['layouts']['title']);
+    }
 }
