@@ -445,7 +445,14 @@ final class AcfJsonReaderTest extends TestCase
         self::assertSame(2, $items['max']);
         self::assertSame(['title', 'image'], array_keys($items['layouts']));
         self::assertSame('Nadpis', $items['layouts']['title']['label']);
-        self::assertArrayNotHasKey('key', $items['layouts']['title']); // matches convention, not pinned
+        // Finding 1 (round 3) — a layout's key is ALWAYS pinned, even when
+        // it matches the derived convention. Unlike ordinary fields (whose
+        // `name` IS the identity, so omit-if-matching is safe), a layout's
+        // YAML map key is cosmetic — only `key` is the real ACF identity.
+        // Always pinning means renaming the map key later can never
+        // silently re-derive a different key. See
+        // test_flexible_content_layout_key_is_pinned_even_when_matching_convention_so_renaming_the_map_key_is_safe.
+        self::assertSame('layout_demo_items_title', $items['layouts']['title']['key']);
         self::assertSame('text', $items['layouts']['title']['fields']['title']['type']);
         self::assertSame('media', $items['layouts']['image']['fields']['image']['type']);
         self::assertSame('image', $items['layouts']['image']['fields']['image']['kind']);
@@ -464,6 +471,54 @@ final class AcfJsonReaderTest extends TestCase
         ]]), 'demo');
 
         self::assertSame('layout_demo_legacy_hash_abc123', $tree['fields']['items']['layouts']['title']['key']);
+    }
+
+    /**
+     * Finding 1 (round 3, CRITICAL) — the regression this pinning fix
+     * exists for. Migrate a layout whose ACF key happens to already match
+     * the derived convention (so, pre-fix, AcfJsonReader would NOT have
+     * pinned it), then simulate a maintainer renaming the layout's YAML
+     * map key (`title` -> `heading`) — a routine, innocent-looking
+     * refactor. Assert the migrated layout's `key` is present and
+     * unchanged by that rename: FieldsGenerator must regenerate the exact
+     * same `layout_demo_items_title` key regardless of the map key,
+     * because AcfJsonReader always pins it verbatim at migration time.
+     * Before the fix, this key would silently re-derive to
+     * `layout_demo_items_heading`, orphaning any `acf_fc_layout: "title"`
+     * postmeta already stored in production.
+     */
+    public function test_flexible_content_layout_key_is_pinned_even_when_matching_convention_so_renaming_the_map_key_is_safe(): void
+    {
+        $tree = $this->reader->read($this->group([[
+            'key' => 'field_demo_items', 'name' => 'items', 'label' => 'Položky', 'type' => 'flexible_content',
+            'layouts' => [[
+                'key' => 'layout_demo_items_title', 'name' => 'title', 'label' => 'Nadpis', 'display' => 'block',
+                'sub_fields' => [
+                    ['key' => 'field_demo_items_title_title', 'name' => 'title', 'label' => 'Nadpis', 'type' => 'text'],
+                ],
+            ]],
+        ]]), 'demo');
+
+        $migratedLayout = $tree['fields']['items']['layouts']['title'];
+        self::assertSame('layout_demo_items_title', $migratedLayout['key']);
+
+        // Simulate the maintainer renaming the map key post-migration —
+        // the YAML the generator now sees carries the SAME pinned `key`
+        // under a different map key.
+        $renamedLayouts = ['heading' => $migratedLayout];
+        $renamedTree = $tree;
+        $renamedTree['fields']['items']['layouts'] = $renamedLayouts;
+
+        $generated = (new \Parisek\DefinitionKit\Generator\FieldsGenerator())->generate($renamedTree, 'demo', 1);
+        $regeneratedLayout = $generated['fields'][0]['layouts'][0];
+
+        self::assertSame('heading', $regeneratedLayout['name']);
+        self::assertSame(
+            'layout_demo_items_title',
+            $regeneratedLayout['key'],
+            'Renaming the layout map key must not change its ACF key — otherwise '
+            . 'every acf_fc_layout="title" value already stored in postmeta is orphaned.',
+        );
     }
 
     public function test_flexible_content_min_max_zero_is_omitted_as_acf_no_limit_sentinel(): void

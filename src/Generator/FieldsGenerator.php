@@ -60,9 +60,21 @@ final class FieldsGenerator
             );
         }
 
-        $this->assertGloballyUniqueKeys($orderedRawFields);
+        $built = $this->rootBuilder->build($definitionTree, $orderedRawFields, $componentSlug, $modifiedAt);
 
-        return $this->rootBuilder->build($definitionTree, $orderedRawFields, $componentSlug, $modifiedAt);
+        // Finding 2 (round 3, HIGH) — the uniqueness scan MUST run over the
+        // final assembled `fields` list (built['fields']), not
+        // $orderedRawFields. RootFieldGroupBuilder::build() interleaves
+        // accordion pseudo-fields (from root `wp.accordions`) into that
+        // list — an accordion's own `key` (or a collision between two
+        // accordions, or an accordion and an ordinary field) would
+        // otherwise slip past this guard entirely, since accordions don't
+        // exist yet at the point $orderedRawFields is assembled.
+        /** @var list<array<string,mixed>> $builtFields */
+        $builtFields = $built['fields'];
+        $this->assertGloballyUniqueKeys($builtFields);
+
+        return $built;
     }
 
     /**

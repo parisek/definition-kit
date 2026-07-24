@@ -414,6 +414,20 @@ final class AcfJsonReader
             // value. Capture them verbatim into the layout's own `wp:`
             // escape hatch whenever they deviate from the ACF default, so
             // FieldsGenerator can replay them instead of guessing.
+            //
+            // Deliberate canonicalisation, not presence-loss (round 3,
+            // finding 3): this is VALUE-level round-tripping, not
+            // presence-level. A layout's `display`/`location` keys are
+            // always present in real ACF Local JSON exports — every real
+            // corpus fixture with flexible_content confirms it (see
+            // `test_flexible_content_layout_non_default_display_and_location_round_trip_by_value`
+            // in GenerationRoundTripTest) — so "absent" never actually
+            // happens; the only thing this canonicalises is an EXPLICITLY
+            // authored default value (`display: "block"`, `location: null`)
+            // down to omitting the `wp:` entry, which regenerates the
+            // identical default value either way. A non-default value is
+            // never coerced — it always round-trips byte-for-byte via the
+            // `wp:` bag below.
             $layoutWp = [];
             $display = (string) ($layout['display'] ?? 'block');
             if ('block' !== $display) {
@@ -427,10 +441,28 @@ final class AcfJsonReader
                 $layoutOut['wp'] = $layoutWp;
             }
 
-            $expectedLayoutKey = 'layout_' . $componentSlug . '_' . implode('_', $layoutChain);
-            if ((string) $layout['key'] !== $expectedLayoutKey) {
-                $layoutOut['key'] = (string) $layout['key'];
-            }
+            // Finding 1 (round 3, CRITICAL) — unlike an ordinary field's key
+            // (only pinned when it deviates from the derived convention —
+            // that omit-if-matching behaviour is deliberate, long-tested
+            // doctrine for FIELDS, see `test_field_key_omitted_when_matches_convention`-
+            // style assertions elsewhere in this class), a LAYOUT's key is
+            // ALWAYS pinned verbatim, unconditionally. The two cases aren't
+            // symmetric: a field's `name` is itself the ACF-authoritative
+            // identity (renaming the YAML map key IS renaming the field,
+            // same postmeta key either way), but a flexible_content layout's
+            // map key is a purely cosmetic authoring label — the *real*
+            // ACF/WordPress identity of a layout is its `key`
+            // (`acf_fc_layout` values stored in postmeta reference the
+            // layout's `name`, and the layout's OWN identity for Admin
+            // "Sync" routing is `key`). If the key is pinned only when it
+            // deviates from the derived convention, renaming a layout whose
+            // key happens to already match the convention re-derives a
+            // DIFFERENT key on next generation — silently orphaning every
+            // `acf_fc_layout` value already stored for that layout, with no
+            // diagnostic. Always emitting `key` here freezes that identity
+            // at migration time regardless of what the YAML map key is
+            // renamed to afterwards.
+            $layoutOut['key'] = (string) $layout['key'];
 
             $out[$layoutName] = $layoutOut;
         }

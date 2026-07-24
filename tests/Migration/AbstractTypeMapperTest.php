@@ -149,6 +149,34 @@ final class AbstractTypeMapperTest extends TestCase
         self::assertSame(['type', 'sub_fields', 'button_label'], $result['consumed']);
     }
 
+    /**
+     * Round-1 finding #5, re-examined in round 3 (not fixed — deferral
+     * confirmed, not merely re-asserted): an explicitly-authored empty
+     * `button_label: ""` is treated identically to an absent one, so
+     * `add_label` is never lifted and the empty string isn't captured
+     * anywhere — not even the `wp:` escape hatch. Two things support
+     * keeping this as-is rather than treating it as a real defect:
+     *
+     *  1. This mirrors the SAME `'' === "not authored"` sentinel
+     *     convention already established project-wide for every other
+     *     ACF text-ish constraint (`maxlength`, `min`/`max`/`step`,
+     *     repeater/flexible_content row bounds — see
+     *     `schemas/constraint-sentinels.yaml` and this class's own
+     *     min/max handling). `button_label` isn't a special case that
+     *     accidentally fell through a gap; it consistently follows the
+     *     rule every other prop in this codebase follows.
+     *  2. No real corpus fixture in this repo authors an explicit empty
+     *     `button_label` (`rg '"button_label": ""'` across
+     *     `tests/fixtures/` finds nothing) — ACF's own admin UI/JS falls
+     *     back to its stock "Add Row" text whether the prop is absent OR
+     *     an empty string, so there is no distinguishable production
+     *     behaviour being lost by treating them the same.
+     *
+     * If a future corpus fixture is found with a genuinely meaningful
+     * empty `button_label` (e.g. a deliberately blanked button showing
+     * icon-only), re-open this — but as of round 3 there's no evidence
+     * that's a real authored state, so the low-risk deferral holds.
+     */
     public function test_repeater_omits_add_label_when_button_label_empty(): void
     {
         $result = $this->mapper->map(['type' => 'repeater', 'name' => 'f', 'button_label' => '']);

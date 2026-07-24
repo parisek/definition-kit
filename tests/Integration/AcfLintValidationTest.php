@@ -28,25 +28,38 @@ use Parisek\DefinitionKit\Migration\AcfJsonReader;
 final class AcfLintValidationTest extends TestCase
 {
     /**
-     * Pre-existing, out-of-scope data residuals this wiring surfaced that
-     * predate this PR and have nothing to do with flexible_content: the
-     * `store-locator` corpus fixture's raw `gallery` field carries
-     * `wpml_cf_preferences: 2`, while `parisek/acf-json-schema` requires
-     * `const 1` for `gallery` (non-translatable-media convention). This is
-     * a legacy corpus-data quirk (the fixture has no flexible_content
-     * field at all — `post_object`/`gallery`/`file`/`google_map`/
-     * `date_picker` only) that a maintainer should fix in the fixture or
-     * relax in the schema on its own merits — NOT something this PR's
-     * flexible_content work should silently paper over. Skipping it here
-     * (with this exact justification, mirroring
-     * GenerationRoundTripTest's own documented-residual pattern) keeps the
-     * wiring's actual job — catching flexible_content regressions —
-     * intact without blocking on an unrelated finding.
+     * Finding 5 (round 3, MODERATE) — round 2 skipped `store-locator` here,
+     * framing it as "two first-party packages disagreeing" (definition-kit
+     * regenerating `wpml_cf_preferences: 2` for a `gallery` field vs.
+     * `parisek/acf-json-schema` requiring `const 1`). Investigated on the
+     * merits instead of accepting that framing:
      *
-     * @var list<string>
+     *  - `parisek/acf-json-schema`'s `field-gallery.schema.json` /
+     *    `field-image.schema.json` both hardcode `const: 1` — deliberate,
+     *    matching this project's OWN documented doctrine
+     *    (`.claude/rules/wordpress/gutenberg.md` § ACF Field Type Mapping:
+     *    media fields are non-translatable, `wpml_cf_preferences: 1`).
+     *  - definition-kit's `WpmlTranslatableMapper` treats every non-container
+     *    leaf type uniformly (`isCanonical()` accepts 1 OR 2 for ANY leaf),
+     *    with no per-type awareness that media types are non-translatable-
+     *    only — so it faithfully round-trips whatever raw value the source
+     *    JSON had, including an anomalous `2` on a `gallery` field.
+     *  - The `store-locator` fixture's `photos` gallery field ("Galerie",
+     *    no locale-specific instructions, no per-language distinguishing
+     *    context) is an ordinary photo gallery with no plausible reason to
+     *    be marked "Translate" in WPML — it is legacy real-world ACF
+     *    Admin-authored data that itself violates the project's own
+     *    doctrine, not a case the doctrine failed to anticipate.
+     *
+     * Conclusion: the schema is right, definition-kit's round-trip is
+     * (correctly) faithful to a flawed input, and the fixture's data was
+     * simply wrong. Fixed the COPIED test fixture in this repo (not the
+     * live eprukaz/mairateam site — this repo's fixture is a static
+     * snapshot) from `wpml_cf_preferences: 2` to `1` on the `photos`
+     * field, and dropped the skip entirely — acf-lint now passes for every
+     * fixture with no exceptions. `parisek/acf-json-schema` was NOT
+     * touched; no draft PR was needed because the schema was correct.
      */
-    private const KNOWN_PRE_EXISTING_RESIDUALS = ['store-locator'];
-
     private AcfLinter $linter;
 
     protected function setUp(): void
@@ -89,10 +102,6 @@ final class AcfLintValidationTest extends TestCase
     #[DataProvider('migrationFixtureProvider')]
     public function test_regenerated_acf_json_passes_acf_lint(string $acfJsonPath, string $slug): void
     {
-        if (in_array($slug, self::KNOWN_PRE_EXISTING_RESIDUALS, true)) {
-            self::markTestSkipped("{$slug}: known pre-existing, out-of-scope data residual — see class docblock");
-        }
-
         $original = json_decode((string) file_get_contents($acfJsonPath), true, flags: JSON_THROW_ON_ERROR);
 
         $twigPath = dirname($acfJsonPath) . "/{$slug}.twig";
@@ -101,19 +110,24 @@ final class AcfLintValidationTest extends TestCase
         $tree = (new AcfJsonReader())->read($original, $slug, $twigSource ?: null);
         $regenerated = (new FieldsGenerator())->generate($tree, $slug, (int) $original['modified']);
 
-        $tmpPath = sys_get_temp_dir() . '/dk-acf-lint-' . $slug . '-' . bin2hex(random_bytes(4)) . '.json';
+        // Finding 6 (round 3, LOW) — acf-lint dispatches by filename for
+        // block.json; anything else with fields+location is treated as
+        // acf.json shape regardless of the actual basename (confirmed via
+        // AcfLinter::dispatch()). It still needs a FILE named exactly
+        // `acf.json` though, so a unique per-test DIRECTORY (not just a
+        // unique filename) is required — the previous implementation
+        // renamed into the shared `sys_get_temp_dir()` root as a fixed
+        // `acf.json`, which collides the moment two data-provider cases
+        // run concurrently (parallel test runners, e.g. paratest).
+        $tmpDir = sys_get_temp_dir() . '/dk-acf-lint-' . $slug . '-' . bin2hex(random_bytes(8));
+        mkdir($tmpDir);
+        $renamed = "{$tmpDir}/acf.json";
         file_put_contents(
-            $tmpPath,
+            $renamed,
             json_encode($regenerated, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . "\n",
         );
 
         try {
-            // acf-lint dispatches by filename for block.json; anything else
-            // with fields+location is treated as acf.json shape regardless
-            // of the temp file's actual basename, so a random tmp name is
-            // safe here (confirmed via AcfLinter::dispatch()).
-            $renamed = dirname($tmpPath) . '/acf.json';
-            rename($tmpPath, $renamed);
             $result = $this->linter->lintFile($renamed, fix: false);
 
             self::assertTrue(
@@ -126,7 +140,8 @@ final class AcfLintValidationTest extends TestCase
                 . json_encode($result->errors, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
             );
         } finally {
-            @unlink($renamed ?? $tmpPath);
+            @unlink($renamed);
+            @rmdir($tmpDir);
         }
     }
 }

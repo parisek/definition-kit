@@ -376,6 +376,56 @@ final class FieldsGeneratorTest extends TestCase
     }
 
     /**
+     * Finding 2 (round 3, HIGH) — `generate()` runs
+     * `assertGloballyUniqueKeys($orderedRawFields)` BEFORE
+     * `RootFieldGroupBuilder::build()` re-inserts accordion pseudo-fields
+     * from root `wp.accordions` into the final assembled `fields` list.
+     * A duplicate key hidden in an accordion (colliding with either an
+     * ordinary field's key or another accordion's key) therefore slips
+     * straight past the "global" uniqueness guard and reaches the
+     * generated acf.json — exactly the postmeta-aliasing hazard the guard
+     * exists to catch, just via a different injection point than
+     * fields/layouts. The guard must see the FINAL assembled fields list,
+     * accordions included, not just the ordinary fields it validates
+     * today.
+     */
+    public function test_accordion_key_colliding_with_an_ordinary_field_key_is_rejected(): void
+    {
+        $this->expectException(\Parisek\DefinitionKit\Generator\GenerationValidationException::class);
+        $this->expectExceptionMessageMatches('/field_demo_title/');
+
+        $this->generator->generate($this->tree([
+            'title' => ['type' => 'text', 'label' => 'Nadpis'],
+        ], [
+            'name' => 'Demo',
+            'wp' => ['accordions' => [
+                ['key' => 'field_demo_title', 'label' => 'Section', 'open' => 0, 'before' => 'title'],
+            ]],
+        ]), 'demo', 1700000000);
+    }
+
+    /**
+     * Same collision class, but between two accordions' own keys — no
+     * ordinary field involved at all, proving the guard must scan the
+     * accordion list itself, not just cross-check it against fields.
+     */
+    public function test_two_accordions_sharing_the_same_key_are_rejected(): void
+    {
+        $this->expectException(\Parisek\DefinitionKit\Generator\GenerationValidationException::class);
+        $this->expectExceptionMessageMatches('/field_demo_dup_accordion/');
+
+        $this->generator->generate($this->tree([
+            'title' => ['type' => 'text', 'label' => 'Nadpis'],
+        ], [
+            'name' => 'Demo',
+            'wp' => ['accordions' => [
+                ['key' => 'field_demo_dup_accordion', 'label' => 'A', 'open' => 0, 'before' => 'title'],
+                ['key' => 'field_demo_dup_accordion', 'label' => 'B', 'open' => 0],
+            ]],
+        ]), 'demo', 1700000000);
+    }
+
+    /**
      * Sanity control — the same fixture with distinguishable names must
      * keep working (the guard must not be over-broad / false-positive).
      */

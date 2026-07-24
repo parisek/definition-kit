@@ -427,4 +427,49 @@ final class GenerationRoundTripTest extends TestCase
         self::assertSame(1, $layout['min']);
         self::assertSame(3, $layout['max']);
     }
+
+    /**
+     * Finding 4 (round 3, MODERATE) — the value-level round-trip proof
+     * `AcfLintValidationTest` is missing. Schema validity (which that test
+     * checks) is not equivalence: `display: 'table'`/`display: 'row'` and
+     * a real non-null `location` are just as schema-valid as the
+     * hardcoded `display: 'block'` / `location: null` defaults would be —
+     * a regression that silently reverted Finding C (this generator
+     * hardcoding the default unconditionally again) would pass
+     * `acf-lint --strict` without a single failure. None of the two real
+     * corpus fixtures with flexible_content (`split-content`,
+     * `box-price-reference`) happen to author non-default display/
+     * location, so even `GenerationRoundTripTest`'s own full-diff
+     * assertions above don't exercise this path — they'd stay green
+     * through the same reversion.
+     *
+     * This fixture is therefore a definition-kit-authored synthetic
+     * corpus sample (not a real eprukaz/mairateam component) whose sole
+     * job is to carry non-default `display` (`table`/`row`) and a real,
+     * non-null `location` on two sibling layouts, then assert those exact
+     * VALUES survive read -> generate unchanged. Reverting either
+     * AcfJsonReader::readLayouts()'s capture or
+     * FieldsGenerator::buildLayouts()'s replay back to a hardcoded
+     * 'block'/null breaks this assertion immediately.
+     */
+    public function test_flexible_content_layout_non_default_display_and_location_round_trip_by_value(): void
+    {
+        $fixtureDir = __DIR__ . '/../fixtures/migration/non-default-layout-display';
+        $result = $this->roundTrip("{$fixtureDir}/acf.json", 'non-default-layout-display');
+
+        $originalLayouts = $result['original']['fields'][0]['layouts'];
+        $regeneratedLayouts = $result['regenerated']['fields'][0]['layouts'];
+
+        self::assertSame(['title', 'image'], array_column($regeneratedLayouts, 'name'));
+
+        self::assertSame('table', $originalLayouts[0]['display']);
+        self::assertSame($originalLayouts[0]['display'], $regeneratedLayouts[0]['display']);
+        self::assertSame($originalLayouts[0]['location'], $regeneratedLayouts[0]['location']);
+        self::assertNotNull($regeneratedLayouts[0]['location']);
+
+        self::assertSame('row', $originalLayouts[1]['display']);
+        self::assertSame($originalLayouts[1]['display'], $regeneratedLayouts[1]['display']);
+        self::assertSame($originalLayouts[1]['location'], $regeneratedLayouts[1]['location']);
+        self::assertNull($regeneratedLayouts[1]['location']);
+    }
 }
