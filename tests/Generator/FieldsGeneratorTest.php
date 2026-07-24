@@ -216,6 +216,71 @@ final class FieldsGeneratorTest extends TestCase
         self::assertSame('field_demo_items_tags', $tagsField['sub_fields'][0]['parent_repeater']);
     }
 
+    public function test_flexible_content_builds_layouts_keyed_by_layout_name(): void
+    {
+        $group = $this->generator->generate($this->tree([
+            'items' => ['type' => 'flexible_content', 'label' => 'Položky', 'add_label' => 'Add Položky', 'min' => 2, 'max' => 2, 'layouts' => [
+                'title' => ['label' => 'Nadpis', 'fields' => [
+                    'title' => ['type' => 'text', 'label' => 'Nadpis'],
+                ]],
+                'image' => ['label' => 'Obrázek', 'fields' => [
+                    'image' => ['type' => 'media', 'kind' => 'image', 'label' => 'Obrázek'],
+                ]],
+            ]],
+        ]), 'demo', 1700000000);
+
+        $itemsField = $group['fields'][0];
+        self::assertSame('flexible_content', $itemsField['type']);
+        self::assertSame('field_demo_items', $itemsField['key']);
+        self::assertSame('Add Položky', $itemsField['button_label']);
+        self::assertSame(2, $itemsField['min']);
+        self::assertSame(2, $itemsField['max']);
+        self::assertArrayNotHasKey('wpml_cf_preferences', $itemsField);
+
+        self::assertCount(2, $itemsField['layouts']);
+        [$titleLayout, $imageLayout] = $itemsField['layouts'];
+
+        self::assertSame('layout_demo_items_title', $titleLayout['key']);
+        self::assertSame('title', $titleLayout['name']);
+        self::assertSame('Nadpis', $titleLayout['label']);
+        self::assertSame('block', $titleLayout['display']);
+        self::assertSame('', $titleLayout['min']);
+        self::assertSame('', $titleLayout['max']);
+        self::assertNull($titleLayout['location']);
+        self::assertSame('field_demo_items_title_title', $titleLayout['sub_fields'][0]['key']);
+        self::assertArrayNotHasKey('parent_repeater', $titleLayout['sub_fields'][0]);
+
+        self::assertSame('layout_demo_items_image', $imageLayout['key']);
+        self::assertSame('field_demo_items_image_image', $imageLayout['sub_fields'][0]['key']);
+    }
+
+    public function test_flexible_content_layout_key_can_be_pinned(): void
+    {
+        $group = $this->generator->generate($this->tree([
+            'items' => ['type' => 'flexible_content', 'label' => 'Položky', 'layouts' => [
+                'title' => ['label' => 'Nadpis', 'key' => 'layout_legacy_hash_abc123', 'fields' => [
+                    'title' => ['type' => 'text', 'label' => 'Nadpis'],
+                ]],
+            ]],
+        ]), 'demo', 1700000000);
+
+        self::assertSame('layout_legacy_hash_abc123', $group['fields'][0]['layouts'][0]['key']);
+    }
+
+    public function test_flexible_content_layout_min_max_are_reconstructed_when_authored(): void
+    {
+        $group = $this->generator->generate($this->tree([
+            'items' => ['type' => 'flexible_content', 'label' => 'Položky', 'layouts' => [
+                'title' => ['label' => 'Nadpis', 'min' => 1, 'max' => 3, 'fields' => [
+                    'title' => ['type' => 'text', 'label' => 'Nadpis'],
+                ]],
+            ]],
+        ]), 'demo', 1700000000);
+
+        self::assertSame(1, $group['fields'][0]['layouts'][0]['min']);
+        self::assertSame(3, $group['fields'][0]['layouts'][0]['max']);
+    }
+
     public function test_visible_when_resolves_against_sibling_fields_only(): void
     {
         $group = $this->generator->generate($this->tree([
@@ -261,5 +326,246 @@ final class FieldsGeneratorTest extends TestCase
         ), 'demo', 1700000000);
 
         self::assertSame(['accordion', 'text'], array_column($group['fields'], 'type'));
+    }
+
+    /**
+     * Finding A (CRITICAL) — a flexible_content field named `a_b` with a
+     * layout `c` derives the exact same underscore-joined key
+     * (`field_demo_items_a_b_c`) as a sibling flexible_content field `a`
+     * whose layout is `b_c`. Two different ACF fields aliasing one
+     * postmeta key is irreversible editor data loss the moment both
+     * layouts are ever populated on the same post. The generator must
+     * refuse to emit such a tree rather than silently produce a
+     * colliding pair of `field_*` keys.
+     */
+    public function test_flexible_content_layout_name_ambiguity_produces_colliding_keys_without_a_guard(): void
+    {
+        $this->expectException(\Parisek\DefinitionKit\Generator\GenerationValidationException::class);
+        $this->expectExceptionMessageMatches('/field_demo_items_a_b_c/');
+
+        $this->generator->generate($this->tree([
+            'items' => ['type' => 'flexible_content', 'label' => 'Items', 'layouts' => [
+                'a_b' => ['label' => 'A B', 'fields' => [
+                    'c' => ['type' => 'text', 'label' => 'C'],
+                ]],
+                'a' => ['label' => 'A', 'fields' => [
+                    'b_c' => ['type' => 'text', 'label' => 'B C'],
+                ]],
+            ]],
+        ], ['name' => 'Demo']), 'demo', 1700000000);
+    }
+
+    /**
+     * Same collision class without flexible_content at all — two ordinary
+     * fields whose name-chain segments underscore-join identically
+     * (`a` + `b_c` vs `a_b` + `c`). The uniqueness guard must be global,
+     * not flexible_content-specific.
+     */
+    public function test_ordinary_nested_group_field_name_ambiguity_is_rejected(): void
+    {
+        $this->expectException(\Parisek\DefinitionKit\Generator\GenerationValidationException::class);
+
+        $this->generator->generate($this->tree([
+            'a_b' => ['type' => 'group', 'label' => 'A B', 'fields' => [
+                'c' => ['type' => 'text', 'label' => 'C'],
+            ]],
+            'a' => ['type' => 'group', 'label' => 'A', 'fields' => [
+                'b_c' => ['type' => 'text', 'label' => 'B C'],
+            ]],
+        ]), 'demo', 1700000000);
+    }
+
+    /**
+     * Finding 2 (round 3, HIGH) — `generate()` runs
+     * `assertGloballyUniqueKeys($orderedRawFields)` BEFORE
+     * `RootFieldGroupBuilder::build()` re-inserts accordion pseudo-fields
+     * from root `wp.accordions` into the final assembled `fields` list.
+     * A duplicate key hidden in an accordion (colliding with either an
+     * ordinary field's key or another accordion's key) therefore slips
+     * straight past the "global" uniqueness guard and reaches the
+     * generated acf.json — exactly the postmeta-aliasing hazard the guard
+     * exists to catch, just via a different injection point than
+     * fields/layouts. The guard must see the FINAL assembled fields list,
+     * accordions included, not just the ordinary fields it validates
+     * today.
+     */
+    public function test_accordion_key_colliding_with_an_ordinary_field_key_is_rejected(): void
+    {
+        $this->expectException(\Parisek\DefinitionKit\Generator\GenerationValidationException::class);
+        $this->expectExceptionMessageMatches('/field_demo_title/');
+
+        $this->generator->generate($this->tree([
+            'title' => ['type' => 'text', 'label' => 'Nadpis'],
+        ], [
+            'name' => 'Demo',
+            'wp' => ['accordions' => [
+                ['key' => 'field_demo_title', 'label' => 'Section', 'open' => 0, 'before' => 'title'],
+            ]],
+        ]), 'demo', 1700000000);
+    }
+
+    /**
+     * Same collision class, but between two accordions' own keys — no
+     * ordinary field involved at all, proving the guard must scan the
+     * accordion list itself, not just cross-check it against fields.
+     */
+    public function test_two_accordions_sharing_the_same_key_are_rejected(): void
+    {
+        $this->expectException(\Parisek\DefinitionKit\Generator\GenerationValidationException::class);
+        $this->expectExceptionMessageMatches('/field_demo_dup_accordion/');
+
+        $this->generator->generate($this->tree([
+            'title' => ['type' => 'text', 'label' => 'Nadpis'],
+        ], [
+            'name' => 'Demo',
+            'wp' => ['accordions' => [
+                ['key' => 'field_demo_dup_accordion', 'label' => 'A', 'open' => 0, 'before' => 'title'],
+                ['key' => 'field_demo_dup_accordion', 'label' => 'B', 'open' => 0],
+            ]],
+        ]), 'demo', 1700000000);
+    }
+
+    /**
+     * Sanity control — the same fixture with distinguishable names must
+     * keep working (the guard must not be over-broad / false-positive).
+     */
+    public function test_distinct_flexible_content_layout_names_generate_without_collision(): void
+    {
+        $group = $this->generator->generate($this->tree([
+            'items' => ['type' => 'flexible_content', 'label' => 'Items', 'layouts' => [
+                'alpha' => ['label' => 'Alpha', 'fields' => [
+                    'c' => ['type' => 'text', 'label' => 'C'],
+                ]],
+            ]],
+            'other' => ['type' => 'flexible_content', 'label' => 'Other', 'layouts' => [
+                'beta' => ['label' => 'Beta', 'fields' => [
+                    'd' => ['type' => 'text', 'label' => 'D'],
+                ]],
+            ]],
+        ]), 'demo', 1700000000);
+
+        self::assertCount(2, $group['fields']);
+    }
+
+    /**
+     * Round 5 — two layouts in the SAME flexible_content field pin
+     * different `key`s (so the existing key-uniqueness guard is silent)
+     * but the SAME `name:`. ACF matches a rendered flex-content row's
+     * layout by `acf_fc_layout` == the layout's `name`, not its `key` —
+     * two layouts sharing one name are indistinguishable to WordPress at
+     * render/save time even though their field-group keys never collide.
+     * This is a distinct hazard from the key-collision guard above and
+     * must be caught independently of it.
+     */
+    public function test_two_layouts_in_the_same_flexible_content_field_cannot_share_a_pinned_name(): void
+    {
+        $this->expectException(\Parisek\DefinitionKit\Generator\GenerationValidationException::class);
+        $this->expectExceptionMessageMatches('/title/');
+
+        $this->generator->generate($this->tree([
+            'items' => ['type' => 'flexible_content', 'label' => 'Items', 'layouts' => [
+                'layout_one' => ['label' => 'Layout One', 'key' => 'layout_demo_items_one', 'name' => 'title', 'fields' => [
+                    'c' => ['type' => 'text', 'label' => 'C'],
+                ]],
+                'layout_two' => ['label' => 'Layout Two', 'key' => 'layout_demo_items_two', 'name' => 'title', 'fields' => [
+                    'd' => ['type' => 'text', 'label' => 'D'],
+                ]],
+            ]],
+        ]), 'demo', 1700000000);
+    }
+
+    /**
+     * Sanity control — the SAME layout `name` in two DIFFERENT
+     * flexible_content fields must keep working; `acf_fc_layout` is only
+     * ambiguous within a single flex-content field's own rows.
+     */
+    public function test_same_layout_name_in_different_flexible_content_fields_does_not_collide(): void
+    {
+        $group = $this->generator->generate($this->tree([
+            'items' => ['type' => 'flexible_content', 'label' => 'Items', 'layouts' => [
+                'title' => ['label' => 'Title', 'fields' => [
+                    'c' => ['type' => 'text', 'label' => 'C'],
+                ]],
+            ]],
+            'other' => ['type' => 'flexible_content', 'label' => 'Other', 'layouts' => [
+                'title' => ['label' => 'Title', 'fields' => [
+                    'd' => ['type' => 'text', 'label' => 'D'],
+                ]],
+            ]],
+        ]), 'demo', 1700000000);
+
+        self::assertCount(2, $group['fields']);
+    }
+
+    /**
+     * Round 5 — `wp:` overlay deliberately wins over every derived prop
+     * (see test_wp_overlay_wins_over_baseline_and_reconstruction), and
+     * that includes `name` — the schema's `wp` bag is a fully open
+     * object with no key exclusions. Two sibling fields at the same
+     * nesting level (different YAML map keys, hence different derived
+     * `key`s, so the key-uniqueness guard stays silent) can each pin
+     * `wp: {name: "same"}` and collide on the ACTUAL ACF `name` — which
+     * is the WordPress postmeta key. Two fields sharing a `name` under
+     * the same parent alias the same postmeta row exactly like a `key`
+     * collision does; the generator must reject it with the same
+     * severity.
+     */
+    public function test_sibling_fields_cannot_collide_on_name_via_wp_overlay(): void
+    {
+        $this->expectException(\Parisek\DefinitionKit\Generator\GenerationValidationException::class);
+        $this->expectExceptionMessageMatches('/clash/');
+
+        $this->generator->generate($this->tree([
+            'field_one' => ['type' => 'text', 'label' => 'One', 'wp' => ['name' => 'clash']],
+            'field_two' => ['type' => 'text', 'label' => 'Two', 'wp' => ['name' => 'clash']],
+        ]), 'demo', 1700000000);
+    }
+
+    /**
+     * Sanity control — the same overridden name at DIFFERENT nesting
+     * levels (root vs inside a group) is not a collision; ACF namespaces
+     * a field's postmeta identity per parent container, not globally.
+     */
+    public function test_same_overridden_name_at_different_nesting_levels_does_not_collide(): void
+    {
+        $group = $this->generator->generate($this->tree([
+            'field_one' => ['type' => 'text', 'label' => 'One', 'wp' => ['name' => 'clash']],
+            'wrapper' => ['type' => 'group', 'label' => 'Wrapper', 'fields' => [
+                'field_two' => ['type' => 'text', 'label' => 'Two', 'wp' => ['name' => 'clash']],
+            ]],
+        ]), 'demo', 1700000000);
+
+        self::assertCount(2, $group['fields']);
+    }
+
+    /**
+     * Finding C (CRITICAL) — layout `display` and `location` must be
+     * captured verbatim when authored non-default, not hardcoded to
+     * `block` / `null`.
+     */
+    public function test_flexible_content_layout_display_is_reconstructed_when_non_default(): void
+    {
+        $group = $this->generator->generate($this->tree([
+            'items' => ['type' => 'flexible_content', 'label' => 'Položky', 'layouts' => [
+                'title' => ['label' => 'Nadpis', 'wp' => ['display' => 'table'], 'fields' => [
+                    'title' => ['type' => 'text', 'label' => 'Nadpis'],
+                ]],
+            ]],
+        ]), 'demo', 1700000000);
+
+        self::assertSame('table', $group['fields'][0]['layouts'][0]['display']);
+    }
+
+    public function test_flexible_content_layout_display_defaults_to_block_when_not_authored(): void
+    {
+        $group = $this->generator->generate($this->tree([
+            'items' => ['type' => 'flexible_content', 'label' => 'Položky', 'layouts' => [
+                'title' => ['label' => 'Nadpis', 'fields' => [
+                    'title' => ['type' => 'text', 'label' => 'Nadpis'],
+                ]],
+            ]],
+        ]), 'demo', 1700000000);
+
+        self::assertSame('block', $group['fields'][0]['layouts'][0]['display']);
     }
 }

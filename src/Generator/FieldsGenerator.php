@@ -12,6 +12,69 @@ use Parisek\DefinitionKit\Baseline\TypeDefaults;
  * (key/name/parent_repeater) ⊕ a field's own `wp:` overrides (highest
  * priority, always wins) — recursively, then handed to
  * RootFieldGroupBuilder for root assembly + accordion re-insertion.
+ *
+ * ## WordPress data-identity invariants (round 5)
+ *
+ * Every prior round's fix guarded ONE hole this YAML→ACF mapping could
+ * produce, one at a time (R1 `key` collisions, R2 the scan missing
+ * accordions, R3 a layout rename changing its `key`, R4 pinning the
+ * `key` not also pinning the `name`). Rather than wait for a sixth
+ * report, here is the complete set of identity invariants this class
+ * enforces — anything a future change adds to the mapping should be
+ * checked against this list, not discovered the hard way in production:
+ *
+ * 1. **Field `key` is globally unique** across the entire assembled
+ *    tree — every ordinary field, every container's sub_fields, every
+ *    flexible_content layout's OWN key, and every layout's sub_fields,
+ *    PLUS accordion pseudo-fields interleaved by RootFieldGroupBuilder.
+ *    Guarded by {@see assertGloballyUniqueKeys()} / {@see collectKeys()},
+ *    run over the FINAL assembled tree (`built['fields']`), not the
+ *    pre-accordion-interleave `$orderedRawFields` (R2's fix).
+ * 2. **Layout `key` is globally unique** — same guard, same global
+ *    `$seen` set as (1); a layout's key colliding with an ordinary
+ *    field's key (or another layout's) is caught identically.
+ * 3. **Layout `name` (the `acf_fc_layout` postmeta value) is unique
+ *    WITHIN its own flexible_content field** — checked independently of
+ *    (2) because `key` and `name` are two separate ACF identity axes: a
+ *    saved row is matched to its layout by `name`, never by `key`, so
+ *    two layouts can have distinct keys yet still collide on name. Only
+ *    scoped per-field (not globally) — the same layout name in two
+ *    DIFFERENT flexible_content fields is harmless, each field owns its
+ *    own `acf_fc_layout` namespace. Guarded in {@see buildLayouts()}.
+ * 4. **Field `name` (the WordPress postmeta key for the field's VALUE)
+ *    is unique among direct siblings under the same parent** — checked
+ *    independently of (1)/(2) because `key` and `name` are separate
+ *    axes here too: the schema's `wp:` overlay is a fully open object
+ *    (see FieldsGeneratorTest::test_wp_overlay_wins_over_baseline_and_reconstruction)
+ *    and can repoint `name` onto anything, including a value that
+ *    collides with a sibling authored under a different definition-map
+ *    key (hence a different, non-colliding `key`). Scoped per-level
+ *    (root fields / one container's sub_fields / one layout's
+ *    sub_fields) — the same name at a DIFFERENT nesting level is not a
+ *    collision. Accordion pseudo-fields are exempt (canonical ACF shape
+ *    is `name: ''` for every accordion; several legitimately coexist at
+ *    one level). Guarded in {@see collectKeys()} via
+ *    {@see assertNameUnseenAtThisLevel()}.
+ * 5. **A field's own pinned `key` and pinned `name` are independent
+ *    pins, not required to agree with each other or with any naming
+ *    convention** — ACF itself allows a field's `key` and `name` to be
+ *    unrelated strings; this class never derives one from the other
+ *    (`deriveOrPinKey()` derives `key` from the definition's OWN name
+ *    chain, never from a possibly-overridden `name`). There is
+ *    therefore no "internal consistency" invariant to violate here by
+ *    construction — flagged explicitly so a future change that DID
+ *    start deriving one from the other doesn't silently assume they're
+ *    always in sync.
+ *
+ * What is deliberately NOT guarded, and why:
+ * - Duplicate keys in a hand-written YAML `fields:` / `layouts:` map
+ *   (e.g. two `title:` entries) are a YAML-parsing concern, not a
+ *   PHP-array concern — by the time `$definitionTree['fields']` reaches
+ *   this class, the YAML parser has already collapsed duplicates
+ *   (last-one-wins) with no diagnostic. That collapse happens upstream
+ *   of this class's input and is out of scope for a generator-level
+ *   guard; a YAML-authoring lint (duplicate-key detection) would need
+ *   to run before the parse step, not after it.
  */
 final class FieldsGenerator
 {
@@ -60,7 +123,127 @@ final class FieldsGenerator
             );
         }
 
-        return $this->rootBuilder->build($definitionTree, $orderedRawFields, $componentSlug, $modifiedAt);
+        $built = $this->rootBuilder->build($definitionTree, $orderedRawFields, $componentSlug, $modifiedAt);
+
+        // Finding 2 (round 3, HIGH) — the uniqueness scan MUST run over the
+        // final assembled `fields` list (built['fields']), not
+        // $orderedRawFields. RootFieldGroupBuilder::build() interleaves
+        // accordion pseudo-fields (from root `wp.accordions`) into that
+        // list — an accordion's own `key` (or a collision between two
+        // accordions, or an accordion and an ordinary field) would
+        // otherwise slip past this guard entirely, since accordions don't
+        // exist yet at the point $orderedRawFields is assembled.
+        /** @var list<array<string,mixed>> $builtFields */
+        $builtFields = $built['fields'];
+        $this->assertGloballyUniqueKeys($builtFields);
+
+        return $built;
+    }
+
+    /**
+     * Finding A (CRITICAL) — key derivation underscore-joins the name
+     * chain, so a flexible_content layout `a_b` + field `c` and a
+     * sibling layout `a` + field `b_c` both derive `field_<slug>_a_b_c`.
+     * Two ACF fields sharing one key alias the SAME WordPress postmeta
+     * row — silent, irreversible editor data loss the moment both are
+     * ever populated. No ambiguity is acceptable regardless of how it
+     * arose (ordinary nesting, repeater sub_fields, or flexible_content
+     * layouts) — walk the ENTIRE generated tree (fields, their
+     * sub_fields, and every flexible_content layout's own key plus its
+     * own sub_fields) and fail loudly the moment two nodes claim the
+     * same `key`.
+     *
+     * @param list<array<string,mixed>> $fields
+     */
+    private function assertGloballyUniqueKeys(array $fields): void
+    {
+        $seen = [];
+        $this->collectKeys($fields, $seen);
+    }
+
+    /**
+     * @param list<array<string,mixed>> $fields
+     * @param array<string,bool> $seen
+     */
+    private function collectKeys(array $fields, array &$seen): void
+    {
+        // Finding D (round 5) — `key` uniqueness (above) does not imply
+        // `name` uniqueness. ACF's postmeta key for a field's VALUE is the
+        // field's `name`, scoped to its immediate parent container — the
+        // schema's `wp:` overlay is a fully open object (see
+        // test_wp_overlay_wins_over_baseline_and_reconstruction) and can
+        // repoint `name` onto anything, including a value that collides
+        // with a sibling's. Two sibling fields sharing one `name` alias
+        // the same postmeta row even when their derived `key`s differ.
+        // Scoped to THIS level only (`$fields` is always one container's
+        // own direct children — root fields, one group/repeater's
+        // sub_fields, or one layout's sub_fields) — the same `name` at a
+        // DIFFERENT nesting level is not a collision.
+        $seenNamesThisLevel = [];
+        foreach ($fields as $field) {
+            $this->assertKeyUnseen((string) $field['key'], $seen);
+            // Accordion pseudo-fields always carry `name: ''` by canonical
+            // ACF shape (RootFieldGroupBuilder::accordionBaseline()) —
+            // several accordions legitimately coexist at the same level
+            // (each is its own key-guarded section marker), so an empty
+            // name is deliberately exempt from the sibling-uniqueness
+            // check rather than a false positive to chase away.
+            if ('' !== (string) $field['name']) {
+                $this->assertNameUnseenAtThisLevel((string) $field['name'], $seenNamesThisLevel);
+            }
+
+            if (!empty($field['sub_fields'])) {
+                /** @var list<array<string,mixed>> $subFields */
+                $subFields = (array) $field['sub_fields'];
+                $this->collectKeys($subFields, $seen);
+            }
+
+            if (!empty($field['layouts'])) {
+                /** @var list<array<string,mixed>> $layouts */
+                $layouts = (array) $field['layouts'];
+                foreach ($layouts as $layout) {
+                    $this->assertKeyUnseen((string) $layout['key'], $seen);
+                    /** @var list<array<string,mixed>> $layoutSubFields */
+                    $layoutSubFields = (array) ($layout['sub_fields'] ?? []);
+                    $this->collectKeys($layoutSubFields, $seen);
+                }
+            }
+        }
+    }
+
+    /**
+     * @param array<string,bool> $seenNamesThisLevel
+     */
+    private function assertNameUnseenAtThisLevel(string $name, array &$seenNamesThisLevel): void
+    {
+        if (isset($seenNamesThisLevel[$name])) {
+            throw new GenerationValidationException(sprintf(
+                "Generated field name '%s' is shared by two sibling fields under the same parent. "
+                . "ACF's postmeta key for a field's value is its `name`, scoped to its parent — two "
+                . "sibling fields sharing one `name` (whether from the definition's own field-map key "
+                . 'or a `wp: {name: …}` overlay) would alias the same WordPress postmeta row. Rename '
+                . 'one of the colliding fields, or remove the overlapping `wp.name` override.',
+                $name,
+            ));
+        }
+        $seenNamesThisLevel[$name] = true;
+    }
+
+    /**
+     * @param array<string,bool> $seen
+     */
+    private function assertKeyUnseen(string $key, array &$seen): void
+    {
+        if (isset($seen[$key])) {
+            throw new GenerationValidationException(sprintf(
+                "Generated key '%s' collides with another field/layout in the same component. "
+                . 'Two ACF elements sharing one key would alias the same WordPress postmeta row — '
+                . 'rename one of the colliding fields/layouts (or pin an explicit `key:` on one of '
+                . 'them) so the underscore-joined name chains no longer produce the same key.',
+                $key,
+            ));
+        }
+        $seen[$key] = true;
     }
 
     /**
@@ -131,9 +314,113 @@ final class FieldsGenerator
                 );
             }
             $field['sub_fields'] = $subFields;
+        } elseif ('flexible_content' === $acfType) {
+            $field['layouts'] = $this->buildLayouts(
+                (array) ($semanticField['layouts'] ?? []),
+                $componentSlug,
+                [...$nameChain],
+            );
         }
 
         return $this->orderAcfProps($field);
+    }
+
+    /**
+     * Builds a flexible_content field's raw `layouts` array from the
+     * abstract `layouts` map (name => layout definition) — the
+     * layout-shaped counterpart to the `sub_fields` loop above. Each
+     * layout's own sub_fields recurse through the SAME buildField() used
+     * for ordinary nesting, one chain segment deeper (`[...$nameChain,
+     * $layoutName]`), so keys/conditional-logic resolution derive
+     * identically to any other nested field.
+     *
+     * A layout's own children never carry `parent_repeater` — verified
+     * against both eprukaz corpus fixtures (split-content,
+     * box-price-reference): every sub-field nested inside a
+     * flexible_content layout carries no `parent_repeater` at all, unlike
+     * a repeater's direct children. Passing `null` below reproduces that.
+     *
+     * @param array<string,mixed> $layoutDefs layout name => layout definition
+     * @param list<string> $nameChain the flexible_content field's OWN full name chain
+     * @return list<array<string,mixed>>
+     */
+    private function buildLayouts(array $layoutDefs, string $componentSlug, array $nameChain): array
+    {
+        $layouts = [];
+        $seenAcfNames = [];
+        foreach ($layoutDefs as $layoutName => $layoutDef) {
+            // Finding 1 (round 4, CRITICAL) — the ACF `name` (what WordPress
+            // stores in `acf_fc_layout` postmeta) is pinned verbatim by
+            // AcfJsonReader::readLayouts() via the layout's own `name:` key,
+            // exactly like `key` already was per round 3. The YAML map key
+            // (`$layoutName`) is a cosmetic authoring label a maintainer can
+            // rename freely; trusting it as the ACF name would silently
+            // rewrite postmeta identity on every rename. Prefer the pinned
+            // `name:` when present; fall back to the map key only for
+            // hand-authored definitions that never went through migration
+            // (a brand-new layout authored directly in YAML, where the map
+            // key genuinely IS the only name that has ever existed).
+            $acfName = (string) ($layoutDef['name'] ?? $layoutName);
+
+            // Round 5 — `key` uniqueness (guarded elsewhere) does not imply
+            // `name` uniqueness. ACF matches a saved flex-content row's
+            // layout by `acf_fc_layout` == the layout's `name`, never its
+            // `key` — two layouts in the SAME flexible_content field can
+            // pin distinct keys yet still collide on `name`, making rows
+            // indistinguishable to WordPress at render/save time. This
+            // must be checked per-field (a repeated name across two
+            // DIFFERENT flexible_content fields is harmless — each field
+            // has its own `acf_fc_layout` namespace).
+            if (isset($seenAcfNames[$acfName])) {
+                throw new GenerationValidationException(sprintf(
+                    "Layout name '%s' is used by two layouts in the same flexible_content field '%s'. "
+                    . "ACF matches a saved row's layout by `acf_fc_layout` == name, not `key` — two "
+                    . 'layouts sharing one name would be indistinguishable to WordPress even though '
+                    . 'their keys differ. Rename one of the layouts (or pin a distinct `name:`).',
+                    $acfName,
+                    implode('.', $nameChain),
+                ));
+            }
+            $seenAcfNames[$acfName] = true;
+
+            $layoutChain = [...$nameChain, $acfName];
+            $layoutKey = (string) ($layoutDef['key'] ?? ('layout_' . $componentSlug . '_' . implode('_', $layoutChain)));
+
+            $childFields = (array) ($layoutDef['fields'] ?? []);
+            $childSiblingMap = $this->siblingKeyMap($childFields, $componentSlug, $layoutChain);
+
+            $subFields = [];
+            foreach ($childFields as $childName => $childField) {
+                $subFields[] = $this->buildField(
+                    $childField,
+                    $componentSlug,
+                    [...$layoutChain, $childName],
+                    $childSiblingMap,
+                    null,
+                );
+            }
+
+            $layoutWp = (array) ($layoutDef['wp'] ?? []);
+
+            $layout = [
+                'key' => $layoutKey,
+                'name' => $acfName,
+                'label' => (string) ($layoutDef['label'] ?? ''),
+                // Finding C — `display`/`location` are canonical ACF
+                // layout props (block|table|row for display) captured
+                // verbatim by AcfJsonReader::readLayouts() into the
+                // layout's `wp:` escape hatch whenever authored non-default;
+                // replay them here instead of hardcoding the default.
+                'display' => (string) ($layoutWp['display'] ?? 'block'),
+                'sub_fields' => $subFields,
+                'min' => $layoutDef['min'] ?? '',
+                'max' => $layoutDef['max'] ?? '',
+                'location' => $layoutWp['location'] ?? null,
+            ];
+
+            $layouts[] = $layout;
+        }
+        return $layouts;
     }
 
     /**

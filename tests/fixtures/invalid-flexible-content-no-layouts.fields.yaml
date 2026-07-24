@@ -1,0 +1,5 @@
+name: Demo Invalid Flexible Content
+fields:
+  items:
+    type: flexible_content   # missing required `layouts`
+    label: Položky

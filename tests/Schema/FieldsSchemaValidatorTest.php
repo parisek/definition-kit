@@ -146,6 +146,48 @@ final class FieldsSchemaValidatorTest extends TestCase
         );
     }
 
+    public function test_valid_flexible_content_document_passes(): void
+    {
+        $result = (new FieldsSchemaValidator())->validateFile($this->fixture('valid-flexible-content.fields.yaml'));
+        self::assertTrue($result->valid, print_r($result->errors, true));
+    }
+
+    public function test_flexible_content_without_layouts_fails_with_pointer_to_field(): void
+    {
+        $result = (new FieldsSchemaValidator())->validateFile($this->fixture('invalid-flexible-content-no-layouts.fields.yaml'));
+        self::assertFalse($result->valid);
+        $pointers = array_column($result->errors, 'pointer');
+        self::assertTrue(
+            (bool) array_filter($pointers, static fn (string $p): bool => str_contains($p, 'items')),
+            'items pointer expected: ' . implode(',', $pointers),
+        );
+    }
+
+    /**
+     * Finding D (HIGH) — this schema currently requires only `["fields"]`
+     * on a layout, so a layout without `label` passes here but the
+     * generator emits `"label": ""`, which fails
+     * parisek/acf-json-schema's field-flexible_content.schema.json
+     * (`required: ["key","name","label"]`, `label` `minLength: 1`).
+     * Bring the two schemas into parity.
+     */
+    public function test_flexible_content_layout_without_label_fails(): void
+    {
+        $result = (new FieldsSchemaValidator())->validateFile($this->fixture('invalid-flexible-content-layout-no-label.fields.yaml'));
+        self::assertFalse($result->valid);
+    }
+
+    /**
+     * Finding D (HIGH, second half) — layout map keys had no pattern
+     * constraint while downstream (parisek/acf-json-schema) requires
+     * `^[a-z][a-z0-9_]*$` for ACF `name` values.
+     */
+    public function test_flexible_content_layout_name_must_match_acf_name_pattern(): void
+    {
+        $result = (new FieldsSchemaValidator())->validateFile($this->fixture('invalid-flexible-content-bad-layout-name.fields.yaml'));
+        self::assertFalse($result->valid);
+    }
+
     public function test_key_not_matching_field_prefix_fails_with_pointer_to_field(): void
     {
         $result = (new FieldsSchemaValidator())->validateFile($this->fixture('invalid-bad-key-pattern.fields.yaml'));

@@ -20,7 +20,7 @@ final class AcfJsonReader
         'maxlength', 'min', 'max', 'step', 'accept', 'max_size',
         'min_width', 'max_width', 'min_height', 'max_height',
         'kind', 'shape', 'multiline', 'of', 'multiple', 'options',
-        'add_label', 'placeholder', 'visible_when', 'fields', 'role', 'key', 'wp',
+        'add_label', 'placeholder', 'visible_when', 'fields', 'layouts', 'role', 'key', 'wp',
     ];
 
     /** Structural boilerplate dropped unconditionally, never lifted, never in wp:. */
@@ -200,8 +200,16 @@ final class AcfJsonReader
         // field's kind (leaf: 1/2, container: 3) is lifted; an anomalous value
         // (e.g. a leaf carrying 3, a container carrying 2) is left verbatim in
         // wp: so it round-trips losslessly — see WpmlTranslatableMapper.
+        //
+        // flexible_content is deliberately EXCLUDED here regardless of value —
+        // see acf-defaults-baseline.yaml's flexible_content comment: real ACF
+        // exports are inconsistent (absent entirely, or a leaf-shaped 1/2,
+        // never observed as a container's 3), so this prop is never lifted to
+        // `translatable` for this type; whatever raw value is present (if
+        // any) survives verbatim in wp.wpml_cf_preferences via the leftover
+        // computation below instead.
         $wpml = $acfField['wpml_cf_preferences'] ?? null;
-        if (is_int($wpml) && $this->wpmlMapper->isCanonical($acfType, $wpml)) {
+        if ('flexible_content' !== $acfType && is_int($wpml) && $this->wpmlMapper->isCanonical($acfType, $wpml)) {
             if ($this->wpmlMapper->translatable($acfType, $wpml)) {
                 $out['translatable'] = true;
             }
@@ -225,11 +233,15 @@ final class AcfJsonReader
                 $consumed[] = $prop;
             }
         }
-        if ('repeater' === $acfType) {
-            // 0 is ACF's own "no limit" sentinel for repeater row bounds —
-            // omitted, matching ACF's UI semantics. Deliberate correction
-            // vs. the prototype (transform3.php), which dropped repeater
-            // min/max unconditionally — see Global Constraints.
+        if (in_array($acfType, ['repeater', 'flexible_content'], true)) {
+            // 0 is ACF's own "no limit" sentinel for repeater/flexible_content
+            // row bounds — omitted, matching ACF's UI semantics. Deliberate
+            // correction vs. the prototype (transform3.php), which dropped
+            // repeater min/max unconditionally — see Global Constraints.
+            // flexible_content shares the identical raw shape and sentinel
+            // convention (verified against the corpus: eprukaz's two fixtures
+            // author real 2/2 bounds; ettin/pm-a leave both as the '' sentinel;
+            // perfectaparasols authors min:1 with max left at the 0 sentinel).
             foreach (['min', 'max'] as $prop) {
                 $raw = $acfField[$prop] ?? '';
                 if ('' !== $raw && 0 !== $raw && '0' !== $raw) {
@@ -291,6 +303,21 @@ final class AcfJsonReader
             $consumed[] = 'sub_fields';
         }
 
+        if ('flexible_content' === $acfType) {
+            if (empty($acfField['layouts'])) {
+                throw new \RuntimeException(sprintf(
+                    "Field '%s' is a flexible_content with zero layouts after migration — "
+                    . 'the schema forbids an empty layouts map.',
+                    (string) $acfField['name'],
+                ));
+            }
+            $childChain = [...$nameChain, (string) $acfField['name']];
+            /** @var list<array<string,mixed>> $rawLayouts */
+            $rawLayouts = (array) $acfField['layouts'];
+            $out['layouts'] = $this->readLayouts($rawLayouts, $componentSlug, $childChain, $keyNameMap);
+            $consumed[] = 'layouts';
+        }
+
         $expectedKey = 'field_' . $componentSlug . '_' . implode('_', [...$nameChain, (string) $acfField['name']]);
         if ((string) $acfField['key'] !== $expectedKey) {
             $out['key'] = (string) $acfField['key'];
@@ -313,6 +340,149 @@ final class AcfJsonReader
     }
 
     /**
+     * Recurses into a flexible_content field's `layouts` array — each raw
+     * ACF layout becomes one entry in the abstract `layouts` map, keyed by
+     * its own `name` (mirroring how a group/repeater's `sub_fields` become
+     * a map keyed by field name — see this class's own doc header). The
+     * layout's own sub_fields recurse through the SAME readField() used
+     * for ordinary nesting, one chain segment deeper (`[...$nameChain,
+     * $layoutName]`), so field keys/`parent_repeater` derive identically
+     * to any other nested field — a layout is "just another nesting level"
+     * from the key-derivation and conditional-logic-resolution point of
+     * view, it only carries its own `label`/`key`/`min`/`max` on top.
+     *
+     * @param list<array<string,mixed>> $layouts raw ACF layouts, in source order
+     * @param list<string> $nameChain the flexible_content field's OWN full name chain
+     * @param array<string,string> $keyNameMap
+     * @return array<string,mixed> layout name => layout definition
+     */
+    private function readLayouts(array $layouts, string $componentSlug, array $nameChain, array $keyNameMap): array
+    {
+        $out = [];
+        foreach ($layouts as $layout) {
+            $layoutName = (string) $layout['name'];
+            $layoutChain = [...$nameChain, $layoutName];
+
+            // Finding B (CRITICAL) — `$out[$layoutName] = …` below would
+            // silently overwrite an earlier layout of the same name (and
+            // discard its key) with no diagnostic at all. Mirrors the
+            // adjacent empty-layouts / empty-sub-fields guards' style.
+            if (array_key_exists($layoutName, $out)) {
+                throw new \RuntimeException(sprintf(
+                    "Duplicate layout name '%s' in flexible_content field '%s' — "
+                    . 'two ACF layouts sharing one name would collapse into a single '
+                    . 'migrated layout, silently discarding the earlier one and its key.',
+                    $layoutName,
+                    implode('.', $nameChain),
+                ));
+            }
+
+            $children = [];
+            foreach ((array) ($layout['sub_fields'] ?? []) as $sub) {
+                if ('accordion' === ($sub['type'] ?? null)) {
+                    continue;
+                }
+                $children[(string) $sub['name']] = $this->readField($sub, $componentSlug, $layoutChain, $keyNameMap);
+            }
+            if ([] === $children) {
+                throw new \RuntimeException(sprintf(
+                    "Layout '%s' has zero non-accordion sub-fields after migration — "
+                    . 'the schema forbids an empty fields map.',
+                    $layoutName,
+                ));
+            }
+
+            $layoutOut = [];
+            if ('' !== (string) ($layout['label'] ?? '')) {
+                $layoutOut['label'] = (string) $layout['label'];
+            }
+            // min/max share the exact repeater/flexible_content field-level
+            // sentinel rule ('' and 0 both mean "no per-layout row limit
+            // authored") — see the field-level min/max handling above.
+            foreach (['min', 'max'] as $prop) {
+                $raw = $layout[$prop] ?? '';
+                if ('' !== $raw && 0 !== $raw && '0' !== $raw) {
+                    $layoutOut[$prop] = $raw + 0;
+                }
+            }
+            $layoutOut['fields'] = $children;
+
+            // Finding C (CRITICAL) — `display` (block|table|row) and
+            // `location` are canonical ACF layout props the generator
+            // side previously hardcoded to 'block' / null unconditionally,
+            // silently rewriting any layout authored with a non-default
+            // value. Capture them verbatim into the layout's own `wp:`
+            // escape hatch whenever they deviate from the ACF default, so
+            // FieldsGenerator can replay them instead of guessing.
+            //
+            // Deliberate canonicalisation, not presence-loss (round 3,
+            // finding 3): this is VALUE-level round-tripping, not
+            // presence-level. A layout's `display`/`location` keys are
+            // always present in real ACF Local JSON exports — every real
+            // corpus fixture with flexible_content confirms it (see
+            // `test_flexible_content_layout_non_default_display_and_location_round_trip_by_value`
+            // in GenerationRoundTripTest) — so "absent" never actually
+            // happens; the only thing this canonicalises is an EXPLICITLY
+            // authored default value (`display: "block"`, `location: null`)
+            // down to omitting the `wp:` entry, which regenerates the
+            // identical default value either way. A non-default value is
+            // never coerced — it always round-trips byte-for-byte via the
+            // `wp:` bag below.
+            $layoutWp = [];
+            $display = (string) ($layout['display'] ?? 'block');
+            if ('block' !== $display) {
+                $layoutWp['display'] = $display;
+            }
+            $location = $layout['location'] ?? null;
+            if (null !== $location) {
+                $layoutWp['location'] = $location;
+            }
+            if ([] !== $layoutWp) {
+                $layoutOut['wp'] = $layoutWp;
+            }
+
+            // Finding 1 (round 3, CRITICAL) — unlike an ordinary field's key
+            // (only pinned when it deviates from the derived convention —
+            // that omit-if-matching behaviour is deliberate, long-tested
+            // doctrine for FIELDS, see `test_field_key_omitted_when_matches_convention`-
+            // style assertions elsewhere in this class), a LAYOUT's key is
+            // ALWAYS pinned verbatim, unconditionally. The two cases aren't
+            // symmetric: a field's `name` is itself the ACF-authoritative
+            // identity (renaming the YAML map key IS renaming the field,
+            // same postmeta key either way), but a flexible_content layout's
+            // map key is a purely cosmetic authoring label — the *real*
+            // ACF/WordPress identity of a layout is its `key`
+            // (`acf_fc_layout` values stored in postmeta reference the
+            // layout's `name`, and the layout's OWN identity for Admin
+            // "Sync" routing is `key`). If the key is pinned only when it
+            // deviates from the derived convention, renaming a layout whose
+            // key happens to already match the convention re-derives a
+            // DIFFERENT key on next generation — silently orphaning every
+            // `acf_fc_layout` value already stored for that layout, with no
+            // diagnostic. Always emitting `key` here freezes that identity
+            // at migration time regardless of what the YAML map key is
+            // renamed to afterwards.
+            $layoutOut['key'] = (string) $layout['key'];
+
+            // Finding 1 (round 4, CRITICAL) — the round-3 fix pinned `key`
+            // but left `name` implicit (derived from the YAML map key by
+            // FieldsGenerator::buildLayouts()). That's the wrong half: ACF
+            // stores `acf_fc_layout` postmeta BY NAME, not by key, and a
+            // layout's map key is a purely cosmetic authoring label (see
+            // the `key` pinning rationale above — the same asymmetry
+            // applies identically to `name`). Renaming the map key must
+            // not change what's stored in postmeta, so `name` is pinned
+            // verbatim here exactly like `key`, unconditionally — not only
+            // when it deviates from the map key. FieldsGenerator now reads
+            // this pinned `name` instead of trusting the map key.
+            $layoutOut['name'] = $layoutName;
+
+            $out[$layoutName] = $layoutOut;
+        }
+        return $out;
+    }
+
+    /**
      * @param array<int,array<string,mixed>> $fields
      * @param array<string,string> $map
      */
@@ -326,6 +496,15 @@ final class AcfJsonReader
                 /** @var list<array<string,mixed>> $subFields */
                 $subFields = (array) $f['sub_fields'];
                 $this->buildKeyNameMap($subFields, $map);
+            }
+            if (!empty($f['layouts'])) {
+                /** @var list<array<string,mixed>> $layouts */
+                $layouts = (array) $f['layouts'];
+                foreach ($layouts as $layout) {
+                    /** @var list<array<string,mixed>> $layoutSubFields */
+                    $layoutSubFields = (array) ($layout['sub_fields'] ?? []);
+                    $this->buildKeyNameMap($layoutSubFields, $map);
+                }
             }
         }
     }

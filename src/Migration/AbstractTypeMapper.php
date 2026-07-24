@@ -80,6 +80,7 @@ final class AbstractTypeMapper
             'date_picker' => ['type' => 'date', 'extra' => [], 'consumed' => ['type']],
             'group' => ['type' => 'group', 'extra' => [], 'consumed' => ['type', 'sub_fields']],
             'repeater' => $this->repeater($acfField),
+            'flexible_content' => $this->flexibleContent($acfField),
             default => throw new \DomainException(sprintf(
                 "Unsupported ACF field type '%s' for field '%s' — add a case to AbstractTypeMapper::map().",
                 $type,
@@ -149,5 +150,23 @@ final class AbstractTypeMapper
             $extra['add_label'] = (string) $acfField['button_label'];
         }
         return ['type' => 'repeater', 'extra' => $extra, 'consumed' => ['type', 'sub_fields', 'button_label']];
+    }
+
+    /**
+     * `layouts` is consumed here as a single unit (like repeater's own
+     * `sub_fields`) — AcfJsonReader::readField() is what actually
+     * recurses into each layout's own sub_fields, exactly mirroring the
+     * repeater/group recursion one level down.
+     *
+     * @param array<string,mixed> $acfField
+     * @return array{type: string, extra: array<string,mixed>, consumed: list<string>}
+     */
+    private function flexibleContent(array $acfField): array
+    {
+        $extra = [];
+        if (!empty($acfField['button_label'])) {
+            $extra['add_label'] = (string) $acfField['button_label'];
+        }
+        return ['type' => 'flexible_content', 'extra' => $extra, 'consumed' => ['type', 'layouts', 'button_label']];
     }
 }

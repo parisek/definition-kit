@@ -159,6 +159,125 @@ final class GenerationRoundTripTest extends TestCase
     }
 
     /**
+     * flexible_content round-trip proof #1 (eprukaz `split-content`):
+     * 5 sibling layouts (title/image/cta/reference/contact) at a single
+     * nesting level, real (non-sentinel) field-level min/max (2/2), and
+     * NO wpml_cf_preferences on the flexible_content field itself — the
+     * exact shape that motivated this generator's flexible_content
+     * support (definition-kit issue #9).
+     *
+     * This fixture's own acf.json predates the `acfml_field_group_mode`
+     * era and uses the legacy `hide_on_screen: []` / `show_in_rest: false`
+     * shapes — the SAME already-documented, ACF-version-era root-level
+     * residual class RootFieldGroupBuilder's own docblock calls out
+     * (mirrors the zig-zag image-sentinel residual, just at the root
+     * instead of a field). Filtered out explicitly below so the
+     * assertion proves what it needs to: zero diffs anywhere touching
+     * flexible_content/layouts itself.
+     */
+    public function test_split_content_flexible_content_round_trips_structurally_exact(): void
+    {
+        $fixtureDir = __DIR__ . '/../fixtures/migration/corpus-sample/split-content';
+        $result = $this->roundTrip("{$fixtureDir}/acf.json", 'split-content');
+
+        $diffs = AcfJsonComparator::diff($result['original'], $result['regenerated']);
+        $residual = ['.hide_on_screen: expected [], got ""', '.show_in_rest: expected false, got 0', '.acfml_field_group_mode: unexpected in actual'];
+        $unexpected = array_values(array_diff($diffs, $residual));
+        self::assertSame([], $unexpected, implode("\n", $unexpected));
+
+        $items = $result['regenerated']['fields'][0];
+        self::assertSame('items', $items['name']);
+        self::assertSame('flexible_content', $items['type']);
+        self::assertArrayNotHasKey('wpml_cf_preferences', $items);
+        self::assertSame(
+            ['title', 'image', 'cta', 'reference', 'contact'],
+            array_column($items['layouts'], 'name'),
+        );
+    }
+
+    /**
+     * flexible_content round-trip proof #2 (eprukaz `box-price-reference`):
+     * a flexible_content field nested TWO levels deep — inside the
+     * `split_content` group — proving layout key/name derivation and the
+     * recursion chain work when the flexible_content field itself isn't
+     * top-level. Also exercises a top-level `group` containing nested
+     * `repeater`s (including a doubly-nested repeater, `items` ->
+     * `items`) alongside the flexible_content field, so this single
+     * fixture covers group + repeater + flexible_content interacting in
+     * one component.
+     *
+     * Same root-level legacy-export residual as split-content, PLUS two
+     * pre-existing, out-of-scope residual classes this fixture happens to
+     * expose that are unrelated to flexible_content and predate this PR:
+     *  - every group/repeater field in this ONE real component lacks
+     *    `wpml_cf_preferences` entirely (an older/no-WPML export) —
+     *    clashing with FieldReconstructor's own explicitly tested,
+     *    deliberate "container types always reconstruct wpml=3" contract
+     *    (see FieldReconstructorTest::test_container_type_always_reconstructs_wpml_three_even_if_translatable_set).
+     *    That contract predates this PR and isn't touched by it — fixing
+     *    it would mean containers no longer always default to 3, which is
+     *    a separate, deliberate design decision for a maintainer to make,
+     *    not something to silently change alongside flexible_content
+     *    support.
+     *  - one `select` field's raw `default_value` is boolean `false`
+     *    where the type baseline is `''` — the same ACF-version-era
+     *    default_value serialization drift already documented for
+     *    `true_false` fields in acf-defaults-baseline.yaml, just
+     *    surfacing on `select` here.
+     * None of these touch `layouts`/flexible_content — asserted below.
+     */
+    public function test_box_price_reference_nested_flexible_content_round_trips_structurally_exact(): void
+    {
+        $fixtureDir = __DIR__ . '/../fixtures/migration/corpus-sample/box-price-reference';
+        $result = $this->roundTrip("{$fixtureDir}/acf.json", 'box-price-reference');
+
+        $diffs = AcfJsonComparator::diff($result['original'], $result['regenerated']);
+        $unexpected = array_values(array_filter($diffs, static function (string $diff): bool {
+            if (str_contains($diff, 'layouts')) {
+                return true; // any layouts-path diff would be a real flexible_content regression
+            }
+            $residualPatterns = [
+                '/^\.hide_on_screen: expected \[\], got ""$/',
+                '/^\.show_in_rest: expected false, got 0$/',
+                '/^\.acfml_field_group_mode: unexpected in actual$/',
+                '/wpml_cf_preferences: unexpected in actual$/',
+                '/\.default_value: expected false, got ""$/',
+            ];
+            foreach ($residualPatterns as $pattern) {
+                if (1 === preg_match($pattern, $diff)) {
+                    return false;
+                }
+            }
+            return true;
+        }));
+        self::assertSame([], $unexpected, implode("\n", $unexpected));
+
+        $splitContent = $result['regenerated']['fields'][1];
+        self::assertSame('split_content', $splitContent['name']);
+        self::assertSame('group', $splitContent['type']);
+
+        $items = $splitContent['sub_fields'][0];
+        self::assertSame('items', $items['name']);
+        self::assertSame('flexible_content', $items['type']);
+        self::assertSame(['image', 'reference'], array_column($items['layouts'], 'name'));
+
+        // A flexible_content layout's own sub_fields carry NO parent_repeater
+        // — unlike an ordinary repeater's direct children (proven separately
+        // for the sibling `price_list` group's nested repeaters below).
+        foreach ($items['layouts'] as $layout) {
+            foreach ($layout['sub_fields'] as $subField) {
+                self::assertArrayNotHasKey('parent_repeater', $subField);
+            }
+        }
+
+        // Layout keys/names survive verbatim — the single most safety-
+        // critical property (consuming Twig branches on acf_fc_layout).
+        $imageLayout = $items['layouts'][0];
+        self::assertSame('layout_box-price-reference_split_content_items_image', $imageLayout['key']);
+        self::assertSame('image', $imageLayout['name']);
+    }
+
+    /**
      * `parent_repeater` container-gating proof (real corpus shape): the
      * REAL mairateam `reference-detail` component nests a repeater
      * directly inside another repeater (`items` -> `tags`, `items` ->
@@ -220,5 +339,137 @@ final class GenerationRoundTripTest extends TestCase
         foreach ($heading['sub_fields'] as $headingChild) {
             self::assertArrayNotHasKey('parent_repeater', $headingChild);
         }
+    }
+
+    /**
+     * Finding E(i) — a synthetic two-level fixture: a flexible_content
+     * field whose layout itself contains ANOTHER flexible_content field.
+     * An adversarial reviewer built this by hand and confirmed it works;
+     * this pins the behaviour as a regression test rather than leaving it
+     * as an unverified claim.
+     */
+    public function test_flexible_content_nested_inside_another_flexible_content_layout_round_trips(): void
+    {
+        $original = [
+            'key' => 'group_nested_fc',
+            'title' => 'Nested FC',
+            'fields' => [[
+                'key' => 'field_nested_outer', 'name' => 'outer', 'label' => 'Outer', 'type' => 'flexible_content',
+                'layouts' => [[
+                    'key' => 'layout_nested_outer_wrap', 'name' => 'wrap', 'label' => 'Wrap', 'display' => 'block',
+                    'min' => '', 'max' => '', 'location' => null,
+                    'sub_fields' => [[
+                        'key' => 'field_nested_outer_wrap_inner', 'name' => 'inner', 'label' => 'Inner', 'type' => 'flexible_content',
+                        'layouts' => [[
+                            'key' => 'layout_nested_outer_wrap_inner_leaf', 'name' => 'leaf', 'label' => 'Leaf', 'display' => 'block',
+                            'min' => '', 'max' => '', 'location' => null,
+                            'sub_fields' => [[
+                                'key' => 'field_nested_outer_wrap_inner_leaf_title', 'name' => 'title', 'label' => 'Title', 'type' => 'text',
+                            ]],
+                        ]],
+                    ]],
+                ]],
+            ]],
+        ];
+
+        $tree = (new AcfJsonReader())->read($original, 'nested');
+        $regenerated = (new FieldsGenerator())->generate($tree, 'nested', 1700000000);
+
+        // Not a full structural-exact diff (this hand-typed minimal
+        // fixture doesn't carry every real-ACF baseline prop) — the
+        // regression this test pins is specifically that a nested
+        // flexible_content-inside-a-flexible_content-layout round-trips
+        // its own layouts/keys/names correctly, which the assertions
+        // below verify directly against both original and regenerated.
+        $outer = $regenerated['fields'][0];
+        self::assertSame('outer', $outer['name']);
+        self::assertSame('flexible_content', $outer['type']);
+        self::assertSame('wrap', $outer['layouts'][0]['name']);
+
+        $innerFcField = $outer['layouts'][0]['sub_fields'][0];
+        self::assertSame('inner', $innerFcField['name']);
+        self::assertSame('flexible_content', $innerFcField['type']);
+        self::assertSame('leaf', $innerFcField['layouts'][0]['name']);
+        self::assertSame('title', $innerFcField['layouts'][0]['sub_fields'][0]['name']);
+        self::assertSame('field_nested_outer_wrap_inner_leaf_title', $innerFcField['layouts'][0]['sub_fields'][0]['key']);
+    }
+
+    /**
+     * Finding E(ii) — layout-level non-sentinel `min`/`max` round-trip
+     * through the FULL reader -> generator pipeline (each half is
+     * unit-tested separately in AcfJsonReaderTest /
+     * FieldsGeneratorTest already, but the combined pipeline wasn't
+     * pinned end-to-end until this test).
+     */
+    public function test_flexible_content_layout_non_sentinel_min_max_round_trips_end_to_end(): void
+    {
+        $original = [
+            'key' => 'group_layout_bounds',
+            'title' => 'Layout Bounds',
+            'fields' => [[
+                'key' => 'field_bounds_items', 'name' => 'items', 'label' => 'Items', 'type' => 'flexible_content',
+                'layouts' => [[
+                    'key' => 'layout_bounds_items_title', 'name' => 'title', 'label' => 'Title', 'display' => 'block',
+                    'min' => 1, 'max' => 3, 'location' => null,
+                    'sub_fields' => [[
+                        'key' => 'field_bounds_items_title_title', 'name' => 'title', 'label' => 'Title', 'type' => 'text',
+                    ]],
+                ]],
+            ]],
+        ];
+
+        $tree = (new AcfJsonReader())->read($original, 'bounds');
+        self::assertSame(1, $tree['fields']['items']['layouts']['title']['min']);
+        self::assertSame(3, $tree['fields']['items']['layouts']['title']['max']);
+
+        $regenerated = (new FieldsGenerator())->generate($tree, 'bounds', 1700000000);
+        $layout = $regenerated['fields'][0]['layouts'][0];
+        self::assertSame(1, $layout['min']);
+        self::assertSame(3, $layout['max']);
+    }
+
+    /**
+     * Finding 4 (round 3, MODERATE) — the value-level round-trip proof
+     * `AcfLintValidationTest` is missing. Schema validity (which that test
+     * checks) is not equivalence: `display: 'table'`/`display: 'row'` and
+     * a real non-null `location` are just as schema-valid as the
+     * hardcoded `display: 'block'` / `location: null` defaults would be —
+     * a regression that silently reverted Finding C (this generator
+     * hardcoding the default unconditionally again) would pass
+     * `acf-lint --strict` without a single failure. None of the two real
+     * corpus fixtures with flexible_content (`split-content`,
+     * `box-price-reference`) happen to author non-default display/
+     * location, so even `GenerationRoundTripTest`'s own full-diff
+     * assertions above don't exercise this path — they'd stay green
+     * through the same reversion.
+     *
+     * This fixture is therefore a definition-kit-authored synthetic
+     * corpus sample (not a real eprukaz/mairateam component) whose sole
+     * job is to carry non-default `display` (`table`/`row`) and a real,
+     * non-null `location` on two sibling layouts, then assert those exact
+     * VALUES survive read -> generate unchanged. Reverting either
+     * AcfJsonReader::readLayouts()'s capture or
+     * FieldsGenerator::buildLayouts()'s replay back to a hardcoded
+     * 'block'/null breaks this assertion immediately.
+     */
+    public function test_flexible_content_layout_non_default_display_and_location_round_trip_by_value(): void
+    {
+        $fixtureDir = __DIR__ . '/../fixtures/migration/non-default-layout-display';
+        $result = $this->roundTrip("{$fixtureDir}/acf.json", 'non-default-layout-display');
+
+        $originalLayouts = $result['original']['fields'][0]['layouts'];
+        $regeneratedLayouts = $result['regenerated']['fields'][0]['layouts'];
+
+        self::assertSame(['title', 'image'], array_column($regeneratedLayouts, 'name'));
+
+        self::assertSame('table', $originalLayouts[0]['display']);
+        self::assertSame($originalLayouts[0]['display'], $regeneratedLayouts[0]['display']);
+        self::assertSame($originalLayouts[0]['location'], $regeneratedLayouts[0]['location']);
+        self::assertNotNull($regeneratedLayouts[0]['location']);
+
+        self::assertSame('row', $originalLayouts[1]['display']);
+        self::assertSame($originalLayouts[1]['display'], $regeneratedLayouts[1]['display']);
+        self::assertSame($originalLayouts[1]['location'], $regeneratedLayouts[1]['location']);
+        self::assertNull($regeneratedLayouts[1]['location']);
     }
 }

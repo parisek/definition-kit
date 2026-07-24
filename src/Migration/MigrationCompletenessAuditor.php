@@ -159,7 +159,11 @@ final class MigrationCompletenessAuditor
             }
 
             $rawWpml = $acfField['wpml_cf_preferences'] ?? null;
-            if (is_int($rawWpml) && $this->wpmlMapper->isCanonical($type, $rawWpml)) {
+            // flexible_content is excluded — see FieldReconstructor::NO_AUTO_WPML_TYPES
+            // and AcfJsonReader's own wpml exclusion for the corpus rationale;
+            // whatever value is present survives via the generic "everything
+            // else" leftover/wp: check at the bottom of this method instead.
+            if ('flexible_content' !== $type && is_int($rawWpml) && $this->wpmlMapper->isCanonical($type, $rawWpml)) {
                 $accounted[] = 'wpml_cf_preferences';
                 if ($reconstructed['wpml_cf_preferences'] !== $rawWpml) {
                     $violations[] = sprintf(
@@ -188,7 +192,7 @@ final class MigrationCompletenessAuditor
                 }
             }
 
-            if ('repeater' === $type) {
+            if (in_array($type, ['repeater', 'flexible_content'], true)) {
                 foreach (self::REPEATER_BOUND_PROPS as $prop) {
                     $accounted[] = $prop;
                     $raw = $acfField[$prop] ?? '';
@@ -282,6 +286,48 @@ final class MigrationCompletenessAuditor
                     ...$this->auditFields($subFields, $childDefFields, $path, $keyNameMap),
                 ];
             }
+
+            if (!empty($acfField['layouts'])) {
+                $defLayouts = (array) ($defField['layouts'] ?? []);
+                /** @var list<array<string,mixed>> $layouts */
+                $layouts = (array) $acfField['layouts'];
+                // Finding B (auditor half) — the migrated definition
+                // collapses layouts into a name-keyed map, so iterating
+                // the raw ACF layout LIST and looking each one up in that
+                // already-collapsed map independently is blind to
+                // duplicates: if two raw layouts share a name AND happen
+                // to have an identical sub-field shape, every iteration
+                // "matches" the same single migrated layout and reports
+                // zero violations — even though one whole raw layout was
+                // silently discarded during migration. Track raw layout
+                // names seen in THIS list and flag the duplicate directly,
+                // independent of whatever the migrated definition looks
+                // like.
+                $seenLayoutNames = [];
+                foreach ($layouts as $layout) {
+                    $layoutName = (string) ($layout['name'] ?? '');
+                    $layoutPath = "{$path}.{$layoutName}";
+
+                    if (isset($seenLayoutNames[$layoutName])) {
+                        $violations[] = "{$layoutPath}: duplicate layout name in raw ACF source — "
+                            . 'one of these layouts was silently discarded during migration';
+                        continue;
+                    }
+                    $seenLayoutNames[$layoutName] = true;
+
+                    if (!array_key_exists($layoutName, $defLayouts)) {
+                        $violations[] = "{$layoutPath}: layout missing from migrated definition entirely";
+                        continue;
+                    }
+                    $defLayout = $defLayouts[$layoutName];
+                    /** @var list<array<string,mixed>> $layoutSubFields */
+                    $layoutSubFields = (array) ($layout['sub_fields'] ?? []);
+                    $violations = [
+                        ...$violations,
+                        ...$this->auditFields($layoutSubFields, (array) ($defLayout['fields'] ?? []), $layoutPath, $keyNameMap),
+                    ];
+                }
+            }
         }
 
         return $violations;
@@ -301,6 +347,15 @@ final class MigrationCompletenessAuditor
                 /** @var list<array<string,mixed>> $subFields */
                 $subFields = (array) $f['sub_fields'];
                 $this->buildKeyNameMap($subFields, $map);
+            }
+            if (!empty($f['layouts'])) {
+                /** @var list<array<string,mixed>> $layouts */
+                $layouts = (array) $f['layouts'];
+                foreach ($layouts as $layout) {
+                    /** @var list<array<string,mixed>> $layoutSubFields */
+                    $layoutSubFields = (array) ($layout['sub_fields'] ?? []);
+                    $this->buildKeyNameMap($layoutSubFields, $map);
+                }
             }
         }
     }

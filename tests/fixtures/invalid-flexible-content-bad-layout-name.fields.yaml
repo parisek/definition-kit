@@ -1,0 +1,10 @@
+name: Demo Invalid Flexible Content Layout Name
+fields:
+  items:
+    type: flexible_content
+    label: Položky
+    layouts:
+      Title-Layout: # uppercase + hyphen -- must match ^[a-z][a-z0-9_]*$
+        label: Nadpis
+        fields:
+          title: { type: text, label: Nadpis }
