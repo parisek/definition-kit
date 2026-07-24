@@ -500,38 +500,46 @@ final class FieldsGeneratorTest extends TestCase
     /**
      * Round 5 — `wp:` overlay deliberately wins over every derived prop
      * (see test_wp_overlay_wins_over_baseline_and_reconstruction), and
-     * that includes `name` — the schema's `wp` bag is a fully open
-     * object with no key exclusions. Two sibling fields at the same
-     * nesting level (different YAML map keys, hence different derived
-     * `key`s, so the key-uniqueness guard stays silent) can each pin
+     * that includes `name` — the schema's `wp` bag USED to be a fully open
+     * object with no key exclusions, which meant two sibling fields at the
+     * same nesting level (different YAML map keys, hence different derived
+     * `key`s, so the key-uniqueness guard stayed silent) could each pin
      * `wp: {name: "same"}` and collide on the ACTUAL ACF `name` — which
-     * is the WordPress postmeta key. Two fields sharing a `name` under
-     * the same parent alias the same postmeta row exactly like a `key`
-     * collision does; the generator must reject it with the same
-     * severity.
+     * is the WordPress postmeta key.
+     *
+     * Round 6 closes this structurally: `wp.name` is now rejected
+     * OUTRIGHT (assertNoIdentityPropsInWpOverlay(), called before any
+     * field is built), so the collision described above can no longer
+     * even be attempted — a field's name has exactly one source, its own
+     * YAML field-map key, and two sibling map keys can never be equal
+     * (they're PHP array keys). This test now asserts the deny-list
+     * rejection itself, naming the sanctioned alternative.
      */
-    public function test_sibling_fields_cannot_collide_on_name_via_wp_overlay(): void
+    public function test_wp_name_override_is_rejected_naming_the_alternative(): void
     {
         $this->expectException(\Parisek\DefinitionKit\Generator\GenerationValidationException::class);
-        $this->expectExceptionMessageMatches('/clash/');
+        $this->expectExceptionMessageMatches('/wp\.name/');
+        $this->expectExceptionMessageMatches('/field-map key/');
 
         $this->generator->generate($this->tree([
             'field_one' => ['type' => 'text', 'label' => 'One', 'wp' => ['name' => 'clash']],
-            'field_two' => ['type' => 'text', 'label' => 'Two', 'wp' => ['name' => 'clash']],
+            'field_two' => ['type' => 'text', 'label' => 'Two'],
         ]), 'demo', 1700000000);
     }
 
     /**
-     * Sanity control — the same overridden name at DIFFERENT nesting
+     * Sanity control — the SAME field-map key used at DIFFERENT nesting
      * levels (root vs inside a group) is not a collision; ACF namespaces
-     * a field's postmeta identity per parent container, not globally.
+     * a field's postmeta identity per parent container, not globally. No
+     * `wp:` overlay involved — this exercises the ordinary, sanctioned
+     * naming path (ordinary field-map key), which is now the ONLY path.
      */
-    public function test_same_overridden_name_at_different_nesting_levels_does_not_collide(): void
+    public function test_same_field_map_key_at_different_nesting_levels_does_not_collide(): void
     {
         $group = $this->generator->generate($this->tree([
-            'field_one' => ['type' => 'text', 'label' => 'One', 'wp' => ['name' => 'clash']],
+            'field_one' => ['type' => 'text', 'label' => 'One'],
             'wrapper' => ['type' => 'group', 'label' => 'Wrapper', 'fields' => [
-                'field_two' => ['type' => 'text', 'label' => 'Two', 'wp' => ['name' => 'clash']],
+                'field_one' => ['type' => 'text', 'label' => 'One (nested)'],
             ]],
         ]), 'demo', 1700000000);
 
@@ -588,10 +596,10 @@ final class FieldsGeneratorTest extends TestCase
      * hardcoded expected string, which would keep passing even if both the
      * override and the sibling map silently agreed on the WRONG key.
      */
-    public function test_conditional_logic_references_survive_a_wp_key_override(): void
+    public function test_conditional_logic_references_survive_a_pinned_key(): void
     {
         $group = $this->generator->generate($this->tree([
-            'toggle' => ['type' => 'boolean', 'label' => 'Toggle', 'wp' => ['key' => 'field_test_custom_toggle_key']],
+            'toggle' => ['type' => 'boolean', 'label' => 'Toggle', 'key' => 'field_test_custom_toggle_key'],
             'conditional_field' => [
                 'type' => 'text',
                 'label' => 'Conditional',
@@ -672,11 +680,11 @@ final class FieldsGeneratorTest extends TestCase
      * `buildField()`'s container branch builds `$childSiblingMap` via the
      * same un-fixed `siblingKeyMap()` for every nesting level.
      */
-    public function test_conditional_logic_references_survive_a_wp_key_override_inside_a_group(): void
+    public function test_conditional_logic_references_survive_a_pinned_key_inside_a_group(): void
     {
         $group = $this->generator->generate($this->tree([
             'wrapper' => ['type' => 'group', 'label' => 'Wrapper', 'fields' => [
-                'toggle' => ['type' => 'boolean', 'label' => 'Toggle', 'wp' => ['key' => 'field_test_custom_nested_key']],
+                'toggle' => ['type' => 'boolean', 'label' => 'Toggle', 'key' => 'field_test_custom_nested_key'],
                 'conditional_field' => [
                     'type' => 'text',
                     'label' => 'Conditional',
@@ -696,24 +704,52 @@ final class FieldsGeneratorTest extends TestCase
     }
 
     /**
-     * Defect 2 (MEDIUM) — `collectKeys()` exempts a field from the
-     * sibling-name-uniqueness guard whenever its final `name` is `''`,
-     * assuming only accordion pseudo-fields ever have an empty name. But
-     * `wp:` is a fully open escape-hatch object (see
-     * test_wp_overlay_wins_over_baseline_and_reconstruction /
-     * test_sibling_fields_cannot_collide_on_name_via_wp_overlay) — an
-     * ORDINARY field can set `wp: {name: ''}` and silently escape the
-     * guard by value rather than by shape. The exemption must key off the
-     * field being an actual accordion (`type === 'accordion'`), not off
-     * name happening to be empty.
+     * Defect 2 (MEDIUM, round 5) — `collectKeys()` used to exempt a field
+     * from the sibling-name-uniqueness guard whenever its final `name` was
+     * `''`, assuming only accordion pseudo-fields ever have an empty name.
+     * `wp.name` is now rejected outright (round 6), so this specific value
+     * ('' via `wp: {name: ''}`) can no longer even be authored — asserting
+     * the deny-list rejection here instead of the old collision message.
      */
-    public function test_two_ordinary_fields_with_empty_wp_name_still_collide(): void
+    public function test_wp_name_override_with_empty_string_is_still_rejected_by_the_deny_list(): void
     {
         $this->expectException(\Parisek\DefinitionKit\Generator\GenerationValidationException::class);
+        $this->expectExceptionMessageMatches('/wp\.name/');
 
         $this->generator->generate($this->tree([
             'field_one' => ['type' => 'text', 'label' => 'One', 'wp' => ['name' => '']],
-            'field_two' => ['type' => 'text', 'label' => 'Two', 'wp' => ['name' => '']],
+            'field_two' => ['type' => 'text', 'label' => 'Two'],
+        ]), 'demo', 1700000000);
+    }
+
+    /**
+     * Round 6, Defect 3 — round 5's fix re-keyed the sibling-name-
+     * uniqueness exemption from "name === ''" to "type === 'accordion'"
+     * (see `collectKeys()`), on the assumption that `type` is a safe,
+     * un-overridable discriminator. It wasn't: `wp:` was (before this
+     * round) a fully open escape-hatch object with NO key exclusions, so
+     * an ORDINARY field could set `wp: {type: 'accordion', name: 'clash'}`
+     * and silently re-escape the very guard round 5 just tightened — two
+     * such fields alias the same ('clash') postmeta name with zero
+     * diagnostic. Round 6 closes the whole class structurally: `wp.type`
+     * (and `wp.name`) are rejected outright, so this bypass can no longer
+     * be constructed at all — this regression test asserts the REJECTION
+     * itself (the two fields never reach the name-collision check, they
+     * never even reach field-building).
+     */
+    public function test_wp_type_accordion_impersonation_is_rejected_before_it_can_escape_the_name_guard(): void
+    {
+        $this->expectException(\Parisek\DefinitionKit\Generator\GenerationValidationException::class);
+        // The field carries BOTH a forbidden `wp.type` and a forbidden
+        // `wp.name` — either is independently sufficient to reject it, and
+        // this test only cares that rejection happens BEFORE the two
+        // fields could ever reach the name-collision check, not which of
+        // the two forbidden props the deny-list happens to report first.
+        $this->expectExceptionMessageMatches('/wp\.(type|name)/');
+
+        $this->generator->generate($this->tree([
+            'field_one' => ['type' => 'text', 'label' => 'One', 'wp' => ['type' => 'accordion', 'name' => 'clash']],
+            'field_two' => ['type' => 'text', 'label' => 'Two', 'wp' => ['type' => 'accordion', 'name' => 'clash']],
         ]), 'demo', 1700000000);
     }
 
@@ -722,7 +758,10 @@ final class FieldsGeneratorTest extends TestCase
      * (identified by `type === 'accordion'`, which always carry canonical
      * `name: ''`) must still be exempt and coexist freely at the same
      * level; the fix must narrow the exemption's DISCRIMINATOR, not remove
-     * the exemption.
+     * the exemption. Genuine accordions are built exclusively by
+     * `RootFieldGroupBuilder` from root `wp.accordions` — an entirely
+     * separate mechanism from an ordinary field's own `wp:` overlay, so
+     * this path is untouched by the round-6 deny-list.
      */
     public function test_two_genuine_accordions_still_coexist_without_collision(): void
     {
@@ -737,5 +776,112 @@ final class FieldsGeneratorTest extends TestCase
         ]), 'demo', 1700000000);
 
         self::assertSame(['accordion', 'text', 'accordion'], array_column($group['fields'], 'type'));
+    }
+
+    /**
+     * Round 6 — Defect 4: `wp.key` pointed at a bogus value (violating
+     * ACF's `^field_` convention) or `null` used to pass end-to-end,
+     * shipping a broken key into generated acf.json with no diagnostic.
+     * The deny-list rejects `wp.key` regardless of its VALUE — the prop
+     * itself is forbidden, not just malformed values of it — so this is
+     * closed for free by the same mechanism as the identity-desync
+     * defect. Message must name the sanctioned alternative (top-level
+     * `key:`).
+     */
+    public function test_wp_key_override_is_rejected_naming_the_alternative(): void
+    {
+        $this->expectException(\Parisek\DefinitionKit\Generator\GenerationValidationException::class);
+        $this->expectExceptionMessageMatches('/wp\.key/');
+        $this->expectExceptionMessageMatches('/top-level `key:`/');
+
+        $this->generator->generate($this->tree([
+            'title' => ['type' => 'text', 'label' => 'Nadpis', 'wp' => ['key' => 'bogus']],
+        ]), 'demo', 1700000000);
+    }
+
+    /** Same as above, with `wp.key` pointed at `null` rather than a malformed string. */
+    public function test_wp_key_override_with_null_value_is_still_rejected(): void
+    {
+        $this->expectException(\Parisek\DefinitionKit\Generator\GenerationValidationException::class);
+        $this->expectExceptionMessageMatches('/wp\.key/');
+
+        $this->generator->generate($this->tree([
+            'title' => ['type' => 'text', 'label' => 'Nadpis', 'wp' => ['key' => null]],
+        ]), 'demo', 1700000000);
+    }
+
+    /**
+     * Round 6 — `wp.type` deny-list, exercised directly (not via the
+     * accordion-impersonation regression above) — an ordinary field
+     * cannot repoint its own ACF type through the `wp:` overlay at all,
+     * message names the sanctioned alternative (top-level `type:`).
+     */
+    public function test_wp_type_override_is_rejected_naming_the_alternative(): void
+    {
+        $this->expectException(\Parisek\DefinitionKit\Generator\GenerationValidationException::class);
+        $this->expectExceptionMessageMatches('/wp\.type/');
+        $this->expectExceptionMessageMatches('/top-level `type:`/');
+
+        $this->generator->generate($this->tree([
+            'title' => ['type' => 'text', 'label' => 'Nadpis', 'wp' => ['type' => 'textarea']],
+        ]), 'demo', 1700000000);
+    }
+
+    /**
+     * Round 6 — the same three-prop deny-list applies to a flexible_content
+     * LAYOUT's own `wp:` bag, not just an ordinary field's. A layout has
+     * its own top-level `key:`/`name:` props (see
+     * test_flexible_content_layout_display_is_reconstructed_when_non_default
+     * for the sanctioned `wp.display`/`wp.location` use of layout `wp:`),
+     * so the same two-independent-paths hazard applies symmetrically.
+     */
+    public function test_wp_key_override_on_a_layout_is_rejected(): void
+    {
+        $this->expectException(\Parisek\DefinitionKit\Generator\GenerationValidationException::class);
+        $this->expectExceptionMessageMatches('/wp\.key/');
+        $this->expectExceptionMessageMatches('/layout/i');
+
+        $this->generator->generate($this->tree([
+            'items' => ['type' => 'flexible_content', 'label' => 'Items', 'layouts' => [
+                'title' => ['label' => 'Title', 'wp' => ['key' => 'layout_bogus'], 'fields' => [
+                    'c' => ['type' => 'text', 'label' => 'C'],
+                ]],
+            ]],
+        ]), 'demo', 1700000000);
+    }
+
+    /** Same as above, for `wp.name` on a layout — the layout's own `name:` prop is the sanctioned path. */
+    public function test_wp_name_override_on_a_layout_is_rejected(): void
+    {
+        $this->expectException(\Parisek\DefinitionKit\Generator\GenerationValidationException::class);
+        $this->expectExceptionMessageMatches('/wp\.name/');
+
+        $this->generator->generate($this->tree([
+            'items' => ['type' => 'flexible_content', 'label' => 'Items', 'layouts' => [
+                'title' => ['label' => 'Title', 'wp' => ['name' => 'clash'], 'fields' => [
+                    'c' => ['type' => 'text', 'label' => 'C'],
+                ]],
+            ]],
+        ]), 'demo', 1700000000);
+    }
+
+    /**
+     * Sanity control — genuine, sanctioned uses of a layout's `wp:` bag
+     * (`display`/`location`, see test_flexible_content_layout_display_is_reconstructed_when_non_default
+     * and test_flexible_content_layout_location_round_trips_when_non_default,
+     * if present) must keep working unchanged — the deny-list only blocks
+     * `key`/`name`/`type`, nothing else.
+     */
+    public function test_layout_wp_overlay_still_works_for_non_identity_props(): void
+    {
+        $group = $this->generator->generate($this->tree([
+            'items' => ['type' => 'flexible_content', 'label' => 'Items', 'layouts' => [
+                'title' => ['label' => 'Title', 'wp' => ['display' => 'table'], 'fields' => [
+                    'c' => ['type' => 'text', 'label' => 'C'],
+                ]],
+            ]],
+        ]), 'demo', 1700000000);
+
+        self::assertSame('table', $group['fields'][0]['layouts'][0]['display']);
     }
 }

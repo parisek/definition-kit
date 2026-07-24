@@ -70,6 +70,119 @@ final class FieldsSchemaValidatorTest extends TestCase
         self::assertFalse($result->valid);
     }
 
+    /**
+     * Round 6 — `wp:` is an escape-hatch object merged with HIGHEST
+     * precedence at generation time; letting it also carry `key`/`name`/
+     * `type` gives a field's identity two independent, silently-diverging
+     * paths (six review rounds each found a new bug of this shape). The
+     * schema's `wpOverlay` $def denies all three at the field level —
+     * this is the schema-validation-layer half of the fix, complementing
+     * FieldsGenerator's own belt-and-braces check for in-process callers
+     * that skip schema validation entirely.
+     */
+    public function test_wp_key_on_a_field_is_rejected_by_schema(): void
+    {
+        $tree = Yaml::parse(<<<YAML
+        name: X
+        fields:
+          title:
+            type: text
+            label: L
+            wp: { key: bogus }
+        YAML, Yaml::PARSE_OBJECT_FOR_MAP);
+
+        $result = (new FieldsSchemaValidator())->validateData($tree);
+        self::assertFalse($result->valid);
+    }
+
+    public function test_wp_name_on_a_field_is_rejected_by_schema(): void
+    {
+        $tree = Yaml::parse(<<<YAML
+        name: X
+        fields:
+          title:
+            type: text
+            label: L
+            wp: { name: clash }
+        YAML, Yaml::PARSE_OBJECT_FOR_MAP);
+
+        $result = (new FieldsSchemaValidator())->validateData($tree);
+        self::assertFalse($result->valid);
+    }
+
+    public function test_wp_type_on_a_field_is_rejected_by_schema(): void
+    {
+        $tree = Yaml::parse(<<<YAML
+        name: X
+        fields:
+          title:
+            type: text
+            label: L
+            wp: { type: accordion }
+        YAML, Yaml::PARSE_OBJECT_FOR_MAP);
+
+        $result = (new FieldsSchemaValidator())->validateData($tree);
+        self::assertFalse($result->valid);
+    }
+
+    /** Sanity control — every OTHER prop inside `wp:` stays fully open. */
+    public function test_wp_non_identity_props_on_a_field_still_validate(): void
+    {
+        $tree = Yaml::parse(<<<YAML
+        name: X
+        fields:
+          title:
+            type: richtext
+            label: L
+            wp: { toolbar: full, acf_type: email }
+        YAML, Yaml::PARSE_OBJECT_FOR_MAP);
+
+        $result = (new FieldsSchemaValidator())->validateData($tree);
+        self::assertTrue($result->valid, print_r($result->errors, true));
+    }
+
+    /** Same deny-list, exercised on a flexible_content layout's own `wp:` bag. */
+    public function test_wp_key_on_a_layout_is_rejected_by_schema(): void
+    {
+        $tree = Yaml::parse(<<<YAML
+        name: X
+        fields:
+          items:
+            type: flexible_content
+            label: L
+            layouts:
+              intro:
+                label: Intro
+                wp: { key: bogus }
+                fields:
+                  headline: { type: text, label: H }
+        YAML, Yaml::PARSE_OBJECT_FOR_MAP);
+
+        $result = (new FieldsSchemaValidator())->validateData($tree);
+        self::assertFalse($result->valid);
+    }
+
+    /** Sanity control — the layout's sanctioned `wp.display`/`wp.location` escape hatch still validates. */
+    public function test_wp_display_and_location_on_a_layout_still_validate(): void
+    {
+        $tree = Yaml::parse(<<<YAML
+        name: X
+        fields:
+          items:
+            type: flexible_content
+            label: L
+            layouts:
+              intro:
+                label: Intro
+                wp: { display: table, location: null }
+                fields:
+                  headline: { type: text, label: H }
+        YAML, Yaml::PARSE_OBJECT_FOR_MAP);
+
+        $result = (new FieldsSchemaValidator())->validateData($tree);
+        self::assertTrue($result->valid, print_r($result->errors, true));
+    }
+
     public function test_document_with_two_broken_fields_reports_both_errors(): void
     {
         // Proves finding 1: the validator no longer stops at the first error.

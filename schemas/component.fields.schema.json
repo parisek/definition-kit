@@ -36,6 +36,13 @@
         "fields": { "$ref": "#/$defs/fieldMap" }
     },
     "$defs": {
+        "wpOverlay": {
+            "type": "object",
+            "propertyNames": {
+                "not": { "enum": ["key", "name", "type"] }
+            },
+            "description": "`wp:` is a fully open escape-hatch object merged with HIGHEST precedence over every derived/reconstructed prop — but `key`/`name`/`type` are a field's WHOLE identity (ACF postmeta key, postmeta name, and field-shape discriminator). Letting `wp:` override any of the three gives identity two independent, silently-diverging paths (six review rounds each found a new bug of this exact shape). Use the sanctioned top-level prop instead: `key:` (pattern ^field_/^layout_/^group_) to pin a key, the YAML field-map key (or a layout's own `name:`) to control the name, and the top-level `type:` enum to pick the field shape."
+        },
         "fieldMap": {
             "type": "object",
             "minProperties": 1,
@@ -105,7 +112,7 @@
                 "resolved_from": { "type": "array", "items": { "type": "string" } },
                 "source": { "type": "string" },
                 "demo": {},
-                "wp": { "type": "object" },
+                "wp": { "$ref": "#/$defs/wpOverlay" },
                 "fields": { "$ref": "#/$defs/fieldMap" },
                 "layouts": { "$ref": "#/$defs/layoutMap" }
             },
@@ -140,7 +147,7 @@
                 "name": { "type": "string", "minLength": 1 },
                 "min": { "type": "integer", "minimum": 0 },
                 "max": { "type": "integer", "minimum": 0 },
-                "wp": { "type": "object" },
+                "wp": { "$ref": "#/$defs/wpOverlay" },
                 "fields": { "$ref": "#/$defs/fieldMap" }
             }
         }

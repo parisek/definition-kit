@@ -157,6 +157,19 @@ final class FieldsGenerator
     public function generate(array $definitionTree, string $componentSlug, int $modifiedAt): array
     {
         $fields = (array) ($definitionTree['fields'] ?? []);
+
+        // Round 6 defensive check — belt-and-braces alongside the JSON
+        // Schema deny-list (component.fields.schema.json `wpOverlay`
+        // $def). Callers that build a definition tree in memory and hand
+        // it to FieldsGenerator directly (every test in this class, plus
+        // any future in-process caller) never go through
+        // FieldsSchemaValidator, so the schema-level guard alone would
+        // leave this class's own public contract unguarded. Must run
+        // BEFORE siblingKeyMap() below — that call (via deriveOrPinKey())
+        // is the FIRST thing that would have read a forbidden `wp.key`
+        // had this check not already rejected it.
+        $this->assertNoIdentityPropsInWpOverlay($fields, []);
+
         $siblingNameKeyMap = $this->siblingKeyMap($fields, $componentSlug, []);
 
         $orderedRawFields = [];
@@ -199,6 +212,105 @@ final class FieldsGenerator
      * own sub_fields) and fail loudly the moment two nodes claim the
      * same `key`.
      *
+     * Round 6 — `key`/`name`/`type` are a field's WHOLE identity: `key` is
+     * the ACF postmeta key, `name` is the ACF postmeta name, `type` is the
+     * field-shape discriminator every downstream consumer (baseline
+     * lookup, sentinel lookup, container-vs-leaf branching, the accordion
+     * exemption in {@see collectKeys()}) reads. `wp:` is a fully open
+     * escape-hatch object merged with HIGHEST precedence in `buildField()`
+     * — so `wp.key`/`wp.name`/`wp.type` are each an independent, silently
+     * diverging SECOND path onto the same value the top-level `key:` /
+     * the definition-map key / the top-level `type:` prop already own.
+     * Every round-6 defect (dangling `conditional_logic` reference via
+     * `wp.key`, a sibling-name collision escaping the uniqueness guard via
+     * `wp.name`, that SAME guard's accordion exemption re-escaped via
+     * `wp: {type: 'accordion'}`, a bogus/null key shipped via `wp.key`)
+     * is the same root cause wearing a different prop name. Rather than
+     * add a fourth ad hoc guard for whichever prop is discovered next,
+     * this closes the whole class structurally: identity has EXACTLY ONE
+     * path, full stop. Mirrors the schema-level deny-list
+     * (component.fields.schema.json `wpOverlay` $def) — this is the
+     * generator's own belt-and-braces copy, since callers that build a
+     * tree in memory never go through FieldsSchemaValidator (see
+     * `generate()`'s docblock note above the call site).
+     *
+     * Walks the RAW (pre-generation) definition tree — `fields:` maps and
+     * flexible_content `layouts:` maps — recursively, so the check runs
+     * before ANY key derivation happens (deriveOrPinKey() included).
+     * Layout `wp:` is checked too even though `buildLayouts()` never reads
+     * `layout.wp.type` (layouts have no `type` prop to begin with) — the
+     * schema forbids the same three props there for a symmetric reason:
+     * `buildLayouts()` DOES read `layoutDef['wp']['location']` /
+     * `['display']` today, and a future prop added to that read list
+     * would inherit the same divergence hazard `wp.key` had for fields.
+     *
+     * @param array<string,mixed> $fields name => field definition, one level
+     * @param list<string> $pathChain dot-joined breadcrumb for error messages
+     */
+    private function assertNoIdentityPropsInWpOverlay(array $fields, array $pathChain): void
+    {
+        foreach ($fields as $name => $field) {
+            $chain = [...$pathChain, (string) $name];
+            $wp = (array) ($field['wp'] ?? []);
+            foreach (['key', 'name', 'type'] as $forbidden) {
+                if (array_key_exists($forbidden, $wp)) {
+                    throw new GenerationValidationException(sprintf(
+                        "Field '%s' sets `wp.%s`, which is forbidden — `%s` is part of a field's "
+                        . 'identity and must have exactly one source. %s',
+                        implode('.', $chain),
+                        $forbidden,
+                        $forbidden,
+                        $this->wpIdentityPropAlternative($forbidden, false),
+                    ));
+                }
+            }
+
+            if (!empty($field['fields']) && is_array($field['fields'])) {
+                $this->assertNoIdentityPropsInWpOverlay($field['fields'], $chain);
+            }
+
+            if (!empty($field['layouts']) && is_array($field['layouts'])) {
+                foreach ($field['layouts'] as $layoutName => $layoutDef) {
+                    $layoutChain = [...$chain, (string) $layoutName];
+                    $layoutWp = (array) (((array) $layoutDef)['wp'] ?? []);
+                    foreach (['key', 'name', 'type'] as $forbidden) {
+                        if (array_key_exists($forbidden, $layoutWp)) {
+                            throw new GenerationValidationException(sprintf(
+                                "Layout '%s' sets `wp.%s`, which is forbidden — `%s` is part of a "
+                                . 'layout\'s identity and must have exactly one source. %s',
+                                implode('.', $layoutChain),
+                                $forbidden,
+                                $forbidden,
+                                $this->wpIdentityPropAlternative($forbidden, true),
+                            ));
+                        }
+                    }
+
+                    $layoutFields = (array) (((array) $layoutDef)['fields'] ?? []);
+                    if ([] !== $layoutFields) {
+                        $this->assertNoIdentityPropsInWpOverlay($layoutFields, $layoutChain);
+                    }
+                }
+            }
+        }
+    }
+
+    /** Names the sanctioned alternative for a forbidden `wp.<prop>` override, for the exception message. */
+    private function wpIdentityPropAlternative(string $forbidden, bool $isLayout): string
+    {
+        return match ($forbidden) {
+            'key' => $isLayout
+                ? "Pin the layout's key with the top-level `key:` prop (pattern ^layout_) instead."
+                : "Pin the field's key with the top-level `key:` prop (pattern ^field_) instead.",
+            'name' => $isLayout
+                ? "Set the layout's ACF name with its own top-level `name:` prop instead."
+                : 'The field name is derived from its own YAML field-map key — rename that map key instead.',
+            'type' => 'Use the top-level `type:` prop (the semantic type enum) instead.',
+            default => '',
+        };
+    }
+
+    /**
      * @param list<array<string,mixed>> $fields
      */
     private function assertGloballyUniqueKeys(array $fields): void
@@ -500,27 +612,15 @@ final class FieldsGenerator
      */
     private function deriveOrPinKey(array $field, string $componentSlug, array $nameChain): string
     {
-        // Defect 1 (HIGH, confirmed) — a field's ACF `key` can be pinned
-        // through TWO independent paths: the top-level `key:` prop (what
-        // AcfJsonReader::readFields() always writes for a migrated field
-        // whose real key deviates from the derived convention), or the
-        // open `wp:` escape hatch (`wp.key`, e.g. a hand-authored
-        // definition, or any future migration path that stashes it
-        // there). `buildField()`'s final merge already gives `wp.key`
-        // priority over the derived/top-level `key` (the `wp` overlay is
-        // merged in LAST). This method must resolve a field's key with
-        // that exact same precedence — it is the SAME lookup
-        // `siblingKeyMap()` uses to build the name=>key map that
-        // VisibleWhenMapper::toConditionalLogic() resolves `visible_when`
-        // against. Reading only the top-level `key` here (as before)
-        // let a `wp.key`-pinned field's `conditional_logic` reference
-        // the wrong (derived) key — a dangling reference to a field that
-        // was never emitted under that key.
-        $wpKey = $field['wp']['key'] ?? null;
-        if (null !== $wpKey) {
-            return (string) $wpKey;
-        }
-
+        // Round 6 — `wp.key` used to be read here too (a field's ACF key
+        // had two independent pinning paths: the top-level `key:` prop, or
+        // the `wp:` escape hatch). That second path is now rejected
+        // upstream by assertNoIdentityPropsInWpOverlay(), called at the
+        // very top of generate() before siblingKeyMap() (which calls this
+        // method) ever runs — so `$field['wp']['key']` is guaranteed absent
+        // by the time this method executes. Identity now has exactly ONE
+        // path: the top-level `key:` prop, falling back to the derived
+        // convention.
         return (string) ($field['key'] ?? ('field_' . $componentSlug . '_' . implode('_', $nameChain)));
     }
 
