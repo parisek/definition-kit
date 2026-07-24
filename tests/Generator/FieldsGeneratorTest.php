@@ -448,6 +448,97 @@ final class FieldsGeneratorTest extends TestCase
     }
 
     /**
+     * Round 5 — two layouts in the SAME flexible_content field pin
+     * different `key`s (so the existing key-uniqueness guard is silent)
+     * but the SAME `name:`. ACF matches a rendered flex-content row's
+     * layout by `acf_fc_layout` == the layout's `name`, not its `key` —
+     * two layouts sharing one name are indistinguishable to WordPress at
+     * render/save time even though their field-group keys never collide.
+     * This is a distinct hazard from the key-collision guard above and
+     * must be caught independently of it.
+     */
+    public function test_two_layouts_in_the_same_flexible_content_field_cannot_share_a_pinned_name(): void
+    {
+        $this->expectException(\Parisek\DefinitionKit\Generator\GenerationValidationException::class);
+        $this->expectExceptionMessageMatches('/title/');
+
+        $this->generator->generate($this->tree([
+            'items' => ['type' => 'flexible_content', 'label' => 'Items', 'layouts' => [
+                'layout_one' => ['label' => 'Layout One', 'key' => 'layout_demo_items_one', 'name' => 'title', 'fields' => [
+                    'c' => ['type' => 'text', 'label' => 'C'],
+                ]],
+                'layout_two' => ['label' => 'Layout Two', 'key' => 'layout_demo_items_two', 'name' => 'title', 'fields' => [
+                    'd' => ['type' => 'text', 'label' => 'D'],
+                ]],
+            ]],
+        ]), 'demo', 1700000000);
+    }
+
+    /**
+     * Sanity control — the SAME layout `name` in two DIFFERENT
+     * flexible_content fields must keep working; `acf_fc_layout` is only
+     * ambiguous within a single flex-content field's own rows.
+     */
+    public function test_same_layout_name_in_different_flexible_content_fields_does_not_collide(): void
+    {
+        $group = $this->generator->generate($this->tree([
+            'items' => ['type' => 'flexible_content', 'label' => 'Items', 'layouts' => [
+                'title' => ['label' => 'Title', 'fields' => [
+                    'c' => ['type' => 'text', 'label' => 'C'],
+                ]],
+            ]],
+            'other' => ['type' => 'flexible_content', 'label' => 'Other', 'layouts' => [
+                'title' => ['label' => 'Title', 'fields' => [
+                    'd' => ['type' => 'text', 'label' => 'D'],
+                ]],
+            ]],
+        ]), 'demo', 1700000000);
+
+        self::assertCount(2, $group['fields']);
+    }
+
+    /**
+     * Round 5 — `wp:` overlay deliberately wins over every derived prop
+     * (see test_wp_overlay_wins_over_baseline_and_reconstruction), and
+     * that includes `name` — the schema's `wp` bag is a fully open
+     * object with no key exclusions. Two sibling fields at the same
+     * nesting level (different YAML map keys, hence different derived
+     * `key`s, so the key-uniqueness guard stays silent) can each pin
+     * `wp: {name: "same"}` and collide on the ACTUAL ACF `name` — which
+     * is the WordPress postmeta key. Two fields sharing a `name` under
+     * the same parent alias the same postmeta row exactly like a `key`
+     * collision does; the generator must reject it with the same
+     * severity.
+     */
+    public function test_sibling_fields_cannot_collide_on_name_via_wp_overlay(): void
+    {
+        $this->expectException(\Parisek\DefinitionKit\Generator\GenerationValidationException::class);
+        $this->expectExceptionMessageMatches('/clash/');
+
+        $this->generator->generate($this->tree([
+            'field_one' => ['type' => 'text', 'label' => 'One', 'wp' => ['name' => 'clash']],
+            'field_two' => ['type' => 'text', 'label' => 'Two', 'wp' => ['name' => 'clash']],
+        ]), 'demo', 1700000000);
+    }
+
+    /**
+     * Sanity control — the same overridden name at DIFFERENT nesting
+     * levels (root vs inside a group) is not a collision; ACF namespaces
+     * a field's postmeta identity per parent container, not globally.
+     */
+    public function test_same_overridden_name_at_different_nesting_levels_does_not_collide(): void
+    {
+        $group = $this->generator->generate($this->tree([
+            'field_one' => ['type' => 'text', 'label' => 'One', 'wp' => ['name' => 'clash']],
+            'wrapper' => ['type' => 'group', 'label' => 'Wrapper', 'fields' => [
+                'field_two' => ['type' => 'text', 'label' => 'Two', 'wp' => ['name' => 'clash']],
+            ]],
+        ]), 'demo', 1700000000);
+
+        self::assertCount(2, $group['fields']);
+    }
+
+    /**
      * Finding C (CRITICAL) — layout `display` and `location` must be
      * captured verbatim when authored non-default, not hardcoded to
      * `block` / `null`.
