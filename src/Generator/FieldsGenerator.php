@@ -13,15 +13,17 @@ use Parisek\DefinitionKit\Baseline\TypeDefaults;
  * priority, always wins) — recursively, then handed to
  * RootFieldGroupBuilder for root assembly + accordion re-insertion.
  *
- * ## WordPress data-identity invariants (round 5)
+ * ## WordPress data-identity invariants (round 6)
  *
  * Every prior round's fix guarded ONE hole this YAML→ACF mapping could
  * produce, one at a time (R1 `key` collisions, R2 the scan missing
  * accordions, R3 a layout rename changing its `key`, R4 pinning the
- * `key` not also pinning the `name`). Rather than wait for a sixth
- * report, here is the complete set of identity invariants this class
- * enforces — anything a future change adds to the mapping should be
- * checked against this list, not discovered the hard way in production:
+ * `key` not also pinning the `name`, R5 a `wp.key` override desyncing
+ * `conditional_logic` resolution + an accordion exemption keyed on an
+ * empty `name` value instead of the field's `accordion` type). This is
+ * the set of identity invariants guarded AS OF round 6 — see the note
+ * at the end of this list for why it is deliberately not claimed to be
+ * the complete set:
  *
  * 1. **Field `key` is globally unique** across the entire assembled
  *    tree — every ordinary field, every container's sub_fields, every
@@ -55,16 +57,38 @@ use Parisek\DefinitionKit\Baseline\TypeDefaults;
  *    is `name: ''` for every accordion; several legitimately coexist at
  *    one level). Guarded in {@see collectKeys()} via
  *    {@see assertNameUnseenAtThisLevel()}.
- * 5. **A field's own pinned `key` and pinned `name` are independent
- *    pins, not required to agree with each other or with any naming
- *    convention** — ACF itself allows a field's `key` and `name` to be
- *    unrelated strings; this class never derives one from the other
- *    (`deriveOrPinKey()` derives `key` from the definition's OWN name
- *    chain, never from a possibly-overridden `name`). There is
- *    therefore no "internal consistency" invariant to violate here by
- *    construction — flagged explicitly so a future change that DID
- *    start deriving one from the other doesn't silently assume they're
- *    always in sync.
+ * 5. **Every `key` referenced by any emitted `conditional_logic` entry
+ *    must exist somewhere in the emitted tree.** `visible_when` is
+ *    resolved to `conditional_logic` (via VisibleWhenMapper::toConditionalLogic())
+ *    against a name=>key map built from the RAW semantic fields, one
+ *    level before that same level's fields are actually reconstructed
+ *    with their FINAL keys. `deriveOrPinKey()` — the single function
+ *    both `siblingKeyMap()` (map-building) and `buildField()`
+ *    (field-building) delegate to — is therefore the one place that
+ *    must resolve a key with EXACTLY the same precedence buildField()'s
+ *    own final merge order uses, or the two computations silently
+ *    diverge and a `conditional_logic` entry ends up pointing at a key
+ *    nothing was ever emitted under (round 6 / Defect 1: found because
+ *    a field pinned its key through `wp.key` rather than the top-level
+ *    `key:` prop `deriveOrPinKey()` used to look at exclusively — the
+ *    `wp:` overlay is merged in LAST in buildField(), so `wp.key` must
+ *    win the SAME way there). Guarded structurally by keeping
+ *    `deriveOrPinKey()` the single source of truth for key precedence;
+ *    regression-proven in FieldsGeneratorTest by walking the whole
+ *    generated tree and asserting every `conditional_logic` reference
+ *    resolves, rather than asserting one hardcoded expected key (a
+ *    hardcoded expectation would keep passing even if both sides of the
+ *    computation drifted onto the same wrong value together).
+ *
+ *    A field's own pinned `key` and pinned `name` remain independent
+ *    pins that need not agree with each other — ACF allows a field's
+ *    `key` and `name` to be unrelated strings, and this class never
+ *    derives one from the other. But — as (5) above demonstrates — `key`
+ *    pinning is NOT a single code path: the top-level `key:` prop and
+ *    the open `wp.key` escape hatch are two independent ways to set the
+ *    same final value, and any code that reads a field's key must go
+ *    through `deriveOrPinKey()` rather than reaching into `$field['key']`
+ *    directly, or it will only ever see one of the two paths.
  *
  * What is deliberately NOT guarded, and why:
  * - Duplicate keys in a hand-written YAML `fields:` / `layouts:` map
@@ -75,6 +99,28 @@ use Parisek\DefinitionKit\Baseline\TypeDefaults;
  *   of this class's input and is out of scope for a generator-level
  *   guard; a YAML-authoring lint (duplicate-key detection) would need
  *   to run before the parse step, not after it.
+ *
+ * ## This list is not, and has never been, complete
+ *
+ * Five rounds of review have each found ONE more hole in this same
+ * class, one at a time, and every round's docblock update claimed (or
+ * implied) the enumeration was now exhaustive. It wasn't, twice over
+ * (round 5's own invariant (5) turned out to be flatly wrong — see
+ * above). Do not read this list as "the complete set of invariants";
+ * read it as "the invariants guarded as of the round that last touched
+ * this file." The structural reason new ones keep appearing: the
+ * schema's `wp:` bag is a fully open object that can override ANY
+ * property this class emits, at every nesting level, and several of
+ * those properties are independently consumed by a SECOND component
+ * downstream (VisibleWhenMapper reading a key derived here;
+ * RootFieldGroupBuilder reading a field's `type`/`name` shape;
+ * AcfJsonReader's own inverse mapping on the migration side). Every
+ * property with a second consumer is a candidate for the same class of
+ * bug: whoever added the override path didn't also update every place
+ * that pre-computes or assumes that property's value ahead of the
+ * override being applied. Treat a new report the same way — as a real
+ * gap to close and document, not as proof the previous "complete" list
+ * was written carelessly.
  */
 final class FieldsGenerator
 {
@@ -185,10 +231,21 @@ final class FieldsGenerator
             // Accordion pseudo-fields always carry `name: ''` by canonical
             // ACF shape (RootFieldGroupBuilder::accordionBaseline()) —
             // several accordions legitimately coexist at the same level
-            // (each is its own key-guarded section marker), so an empty
-            // name is deliberately exempt from the sibling-uniqueness
-            // check rather than a false positive to chase away.
-            if ('' !== (string) $field['name']) {
+            // (each is its own key-guarded section marker), so they are
+            // deliberately exempt from the sibling-uniqueness check.
+            //
+            // Defect 2 (MEDIUM, confirmed) — the exemption used to be
+            // keyed on the VALUE ('' === name) rather than the SHAPE
+            // (type === 'accordion'). `wp:` is a fully open escape-hatch
+            // object (see test_sibling_fields_cannot_collide_on_name_via_wp_overlay),
+            // so an ORDINARY field can set `wp: {name: ''}` and silently
+            // escape the guard the same way an accordion legitimately
+            // does — two such fields alias the same ('' ) postmeta name
+            // with no diagnostic. Discriminate by the field's own `type`
+            // (accordionBaseline() always emits `type: 'accordion'`)
+            // instead, so the exemption can only ever match a genuine
+            // accordion pseudo-field.
+            if ('accordion' !== ($field['type'] ?? null)) {
                 $this->assertNameUnseenAtThisLevel((string) $field['name'], $seenNamesThisLevel);
             }
 
@@ -443,6 +500,27 @@ final class FieldsGenerator
      */
     private function deriveOrPinKey(array $field, string $componentSlug, array $nameChain): string
     {
+        // Defect 1 (HIGH, confirmed) — a field's ACF `key` can be pinned
+        // through TWO independent paths: the top-level `key:` prop (what
+        // AcfJsonReader::readFields() always writes for a migrated field
+        // whose real key deviates from the derived convention), or the
+        // open `wp:` escape hatch (`wp.key`, e.g. a hand-authored
+        // definition, or any future migration path that stashes it
+        // there). `buildField()`'s final merge already gives `wp.key`
+        // priority over the derived/top-level `key` (the `wp` overlay is
+        // merged in LAST). This method must resolve a field's key with
+        // that exact same precedence — it is the SAME lookup
+        // `siblingKeyMap()` uses to build the name=>key map that
+        // VisibleWhenMapper::toConditionalLogic() resolves `visible_when`
+        // against. Reading only the top-level `key` here (as before)
+        // let a `wp.key`-pinned field's `conditional_logic` reference
+        // the wrong (derived) key — a dangling reference to a field that
+        // was never emitted under that key.
+        $wpKey = $field['wp']['key'] ?? null;
+        if (null !== $wpKey) {
+            return (string) $wpKey;
+        }
+
         return (string) ($field['key'] ?? ('field_' . $componentSlug . '_' . implode('_', $nameChain)));
     }
 

@@ -568,4 +568,174 @@ final class FieldsGeneratorTest extends TestCase
 
         self::assertSame('block', $group['fields'][0]['layouts'][0]['display']);
     }
+
+    /**
+     * Defect 1 (HIGH) — `generate()` builds the sibling name=>key map used
+     * to resolve `visible_when` from the RAW semantic fields, before a
+     * field's own `wp: {key: …}` overlay is applied. `siblingKeyMap()` (via
+     * `deriveOrPinKey()`) only ever reads a field's top-level `key:` prop —
+     * it never sees `wp.key` — so a field pinning its ACF key through the
+     * `wp:` escape hatch (as opposed to the top-level `key:` prop the
+     * migration path itself always uses) gets a `conditional_logic` entry
+     * pointing at the DERIVED key while the field ships under the
+     * OVERRIDDEN key. The referenced key then exists nowhere in the
+     * generated tree — ACF's conditional-logic UI would show a dangling
+     * reference to a field that was never created.
+     *
+     * The assertion walks the ENTIRE generated tree and checks that every
+     * key any `conditional_logic` entry references actually exists
+     * somewhere in the emitted fields/layouts — not that it equals one
+     * hardcoded expected string, which would keep passing even if both the
+     * override and the sibling map silently agreed on the WRONG key.
+     */
+    public function test_conditional_logic_references_survive_a_wp_key_override(): void
+    {
+        $group = $this->generator->generate($this->tree([
+            'toggle' => ['type' => 'boolean', 'label' => 'Toggle', 'wp' => ['key' => 'field_test_custom_toggle_key']],
+            'conditional_field' => [
+                'type' => 'text',
+                'label' => 'Conditional',
+                'visible_when' => ['field' => 'toggle', 'equals' => true],
+            ],
+        ], ['name' => 'Test']), 'test', 1700000000);
+
+        $allKeys = [];
+        $referencedKeys = [];
+        $this->collectAllKeysAndConditionalLogicRefs($group['fields'], $allKeys, $referencedKeys);
+
+        foreach ($referencedKeys as $referencedKey) {
+            self::assertContains(
+                $referencedKey,
+                $allKeys,
+                sprintf(
+                    "conditional_logic references key '%s', which does not exist anywhere in the "
+                    . 'generated tree — a wp.key override desynced the sibling name=>key map used to '
+                    . 'resolve visible_when.',
+                    $referencedKey,
+                ),
+            );
+        }
+
+        // Sanity: the pinned key really did win (otherwise the assertion
+        // above would trivially pass by both sides using the wrong,
+        // but mutually-consistent, derived key).
+        self::assertContains('field_test_custom_toggle_key', $allKeys);
+        self::assertNotContains('field_test_toggle', $allKeys);
+    }
+
+    /**
+     * Walks a generated `fields` (or `layouts`/`sub_fields`) list
+     * recursively, collecting (a) every `key` that exists anywhere in the
+     * tree and (b) every field `key` referenced by any `conditional_logic`
+     * entry anywhere in the tree.
+     *
+     * @param list<array<string,mixed>> $fields
+     * @param list<string> $allKeys
+     * @param list<string> $referencedKeys
+     */
+    private function collectAllKeysAndConditionalLogicRefs(array $fields, array &$allKeys, array &$referencedKeys): void
+    {
+        foreach ($fields as $field) {
+            $allKeys[] = (string) $field['key'];
+
+            $conditionalLogic = $field['conditional_logic'] ?? false;
+            if (is_array($conditionalLogic)) {
+                foreach ($conditionalLogic as $orGroup) {
+                    foreach ((array) $orGroup as $cond) {
+                        $referencedKeys[] = (string) $cond['field'];
+                    }
+                }
+            }
+
+            if (!empty($field['sub_fields'])) {
+                /** @var list<array<string,mixed>> $subFields */
+                $subFields = (array) $field['sub_fields'];
+                $this->collectAllKeysAndConditionalLogicRefs($subFields, $allKeys, $referencedKeys);
+            }
+
+            if (!empty($field['layouts'])) {
+                /** @var list<array<string,mixed>> $layouts */
+                $layouts = (array) $field['layouts'];
+                foreach ($layouts as $layout) {
+                    $allKeys[] = (string) $layout['key'];
+                    /** @var list<array<string,mixed>> $layoutSubFields */
+                    $layoutSubFields = (array) ($layout['sub_fields'] ?? []);
+                    $this->collectAllKeysAndConditionalLogicRefs($layoutSubFields, $allKeys, $referencedKeys);
+                }
+            }
+        }
+    }
+
+    /**
+     * Defect 1, nested case — the same `wp.key` desync reproduces one
+     * level deeper, inside a group's `sub_fields`, since
+     * `buildField()`'s container branch builds `$childSiblingMap` via the
+     * same un-fixed `siblingKeyMap()` for every nesting level.
+     */
+    public function test_conditional_logic_references_survive_a_wp_key_override_inside_a_group(): void
+    {
+        $group = $this->generator->generate($this->tree([
+            'wrapper' => ['type' => 'group', 'label' => 'Wrapper', 'fields' => [
+                'toggle' => ['type' => 'boolean', 'label' => 'Toggle', 'wp' => ['key' => 'field_test_custom_nested_key']],
+                'conditional_field' => [
+                    'type' => 'text',
+                    'label' => 'Conditional',
+                    'visible_when' => ['field' => 'toggle', 'equals' => true],
+                ],
+            ]],
+        ], ['name' => 'Test']), 'test', 1700000000);
+
+        $allKeys = [];
+        $referencedKeys = [];
+        $this->collectAllKeysAndConditionalLogicRefs($group['fields'], $allKeys, $referencedKeys);
+
+        foreach ($referencedKeys as $referencedKey) {
+            self::assertContains($referencedKey, $allKeys);
+        }
+        self::assertContains('field_test_custom_nested_key', $allKeys);
+    }
+
+    /**
+     * Defect 2 (MEDIUM) — `collectKeys()` exempts a field from the
+     * sibling-name-uniqueness guard whenever its final `name` is `''`,
+     * assuming only accordion pseudo-fields ever have an empty name. But
+     * `wp:` is a fully open escape-hatch object (see
+     * test_wp_overlay_wins_over_baseline_and_reconstruction /
+     * test_sibling_fields_cannot_collide_on_name_via_wp_overlay) — an
+     * ORDINARY field can set `wp: {name: ''}` and silently escape the
+     * guard by value rather than by shape. The exemption must key off the
+     * field being an actual accordion (`type === 'accordion'`), not off
+     * name happening to be empty.
+     */
+    public function test_two_ordinary_fields_with_empty_wp_name_still_collide(): void
+    {
+        $this->expectException(\Parisek\DefinitionKit\Generator\GenerationValidationException::class);
+
+        $this->generator->generate($this->tree([
+            'field_one' => ['type' => 'text', 'label' => 'One', 'wp' => ['name' => '']],
+            'field_two' => ['type' => 'text', 'label' => 'Two', 'wp' => ['name' => '']],
+        ]), 'demo', 1700000000);
+    }
+
+    /**
+     * Control case for the fix above — genuine accordion pseudo-fields
+     * (identified by `type === 'accordion'`, which always carry canonical
+     * `name: ''`) must still be exempt and coexist freely at the same
+     * level; the fix must narrow the exemption's DISCRIMINATOR, not remove
+     * the exemption.
+     */
+    public function test_two_genuine_accordions_still_coexist_without_collision(): void
+    {
+        $group = $this->generator->generate($this->tree([
+            'title' => ['type' => 'text', 'label' => 'Nadpis'],
+        ], [
+            'name' => 'Demo',
+            'wp' => ['accordions' => [
+                ['key' => 'field_demo_accordion_a', 'label' => 'A', 'open' => 0, 'before' => 'title'],
+                ['key' => 'field_demo_accordion_b', 'label' => 'B', 'open' => 0],
+            ]],
+        ]), 'demo', 1700000000);
+
+        self::assertSame(['accordion', 'text', 'accordion'], array_column($group['fields'], 'type'));
+    }
 }
