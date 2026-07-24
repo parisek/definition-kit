@@ -884,4 +884,293 @@ final class FieldsGeneratorTest extends TestCase
 
         self::assertSame('table', $group['fields'][0]['layouts'][0]['display']);
     }
+
+    /**
+     * Round 7, Finding [1] — ROOT `wp:` was never walked by
+     * assertNoIdentityPropsInWpOverlay() (only `$definitionTree['fields']`
+     * was), and RootFieldGroupBuilder::build() merges the root `wp:` bag
+     * with HIGHEST precedence over the explicit `key` it just assigned —
+     * so `wp: {key: 'bogus'}` at the ROOT silently repointed the whole
+     * field group's key. Must now be rejected before generation.
+     */
+    public function test_root_wp_key_override_is_rejected(): void
+    {
+        $this->expectException(\Parisek\DefinitionKit\Generator\GenerationValidationException::class);
+        $this->expectExceptionMessageMatches('/wp\.key/');
+
+        $this->generator->generate($this->tree([
+            'title' => ['type' => 'text', 'label' => 'Nadpis'],
+        ], [
+            'name' => 'Demo',
+            'wp' => ['key' => 'bogus'],
+        ]), 'demo', 1700000000);
+    }
+
+    /**
+     * Round 7, Finding [2] (most severe) — same root-`wp:` gap as above,
+     * but with `fields` instead of `key`: `wp: {fields: []}` at the ROOT
+     * silently overwrote the assembled `fields` list with an empty array
+     * — a definition with real fields generated an acf.json with ZERO
+     * fields (a broken, empty block in the editor, no error anywhere).
+     */
+    public function test_root_wp_fields_override_is_rejected(): void
+    {
+        $this->expectException(\Parisek\DefinitionKit\Generator\GenerationValidationException::class);
+        $this->expectExceptionMessageMatches('/wp\.fields/');
+
+        $this->generator->generate($this->tree([
+            'title' => ['type' => 'text', 'label' => 'Nadpis'],
+            'subtitle' => ['type' => 'text', 'label' => 'Podnadpis'],
+        ], [
+            'name' => 'Demo',
+            'wp' => ['fields' => []],
+        ]), 'demo', 1700000000);
+    }
+
+    /**
+     * Round 7, Finding [3] — `wp.sub_fields` on an ordinary LEAF field
+     * (not a container type) survives all the way to generated output.
+     * `buildField()` merges `wpOverrides` onto `$field` BEFORE the
+     * container branch would overwrite `sub_fields` — but that overwrite
+     * only happens for `$isContainerField` (group/repeater). A leaf field
+     * (e.g. `text`) never re-derives `sub_fields`, so a smuggled
+     * `wp.sub_fields` array (carrying its own bogus key/name/type triple)
+     * ends up verbatim in the generated field — a phantom sub-field ACF
+     * never asked for.
+     */
+    public function test_wp_sub_fields_smuggled_into_a_leaf_field_is_rejected(): void
+    {
+        $this->expectException(\Parisek\DefinitionKit\Generator\GenerationValidationException::class);
+        $this->expectExceptionMessageMatches('/wp\.sub_fields/');
+
+        $this->generator->generate($this->tree([
+            'title' => [
+                'type' => 'text',
+                'label' => 'Nadpis',
+                'wp' => ['sub_fields' => [
+                    ['key' => 'field_bogus_child', 'name' => 'bogus_child', 'type' => 'text', 'label' => 'Bogus'],
+                ]],
+            ],
+        ]), 'demo', 1700000000);
+    }
+
+    /** Same smuggling hazard, but via `wp.layouts` on an ordinary (non-flexible_content) field. */
+    public function test_wp_layouts_smuggled_into_a_leaf_field_is_rejected(): void
+    {
+        $this->expectException(\Parisek\DefinitionKit\Generator\GenerationValidationException::class);
+        $this->expectExceptionMessageMatches('/wp\.layouts/');
+
+        $this->generator->generate($this->tree([
+            'title' => [
+                'type' => 'text',
+                'label' => 'Nadpis',
+                'wp' => ['layouts' => [
+                    ['key' => 'layout_bogus', 'name' => 'bogus', 'label' => 'Bogus', 'sub_fields' => []],
+                ]],
+            ],
+        ]), 'demo', 1700000000);
+    }
+
+    /**
+     * Round 7, Finding [4] — `wp.parent_repeater` on a repeater's CHILD
+     * field is merged (via `wpOverrides`) AFTER `buildField()` derives and
+     * assigns the real `parent_repeater` from nesting, silently
+     * overwriting the correct, ACF-computed value with an arbitrary one.
+     * `parent_repeater` has no legitimate authoring path — it is always
+     * re-derived from nesting — so it is reserved outright.
+     */
+    public function test_wp_parent_repeater_override_is_rejected(): void
+    {
+        $this->expectException(\Parisek\DefinitionKit\Generator\GenerationValidationException::class);
+        $this->expectExceptionMessageMatches('/wp\.parent_repeater/');
+
+        $this->generator->generate($this->tree([
+            'items' => ['type' => 'repeater', 'label' => 'Items', 'fields' => [
+                'title' => [
+                    'type' => 'text',
+                    'label' => 'Title',
+                    'wp' => ['parent_repeater' => 'field_bogus'],
+                ],
+            ]],
+        ]), 'demo', 1700000000);
+    }
+
+    /** The same reserved set must be rejected at a nested sub_field two levels deep (group inside group). */
+    public function test_reserved_wp_props_are_rejected_at_nested_depth_two(): void
+    {
+        $this->expectException(\Parisek\DefinitionKit\Generator\GenerationValidationException::class);
+        $this->expectExceptionMessageMatches('/wp\.key/');
+
+        $this->generator->generate($this->tree([
+            'outer' => ['type' => 'group', 'label' => 'Outer', 'fields' => [
+                'inner' => ['type' => 'group', 'label' => 'Inner', 'fields' => [
+                    'leaf' => ['type' => 'text', 'label' => 'Leaf', 'wp' => ['key' => 'bogus']],
+                ]],
+            ]],
+        ]), 'demo', 1700000000);
+    }
+
+    /** Same reserved-set enforcement, for the newly reserved structural/cross-reference props on a layout's own `wp:` bag. */
+    public function test_reserved_structural_props_are_rejected_on_a_layout(): void
+    {
+        foreach (['fields', 'sub_fields', 'layouts', 'parent_repeater'] as $prop) {
+            try {
+                $this->generator->generate($this->tree([
+                    'items' => ['type' => 'flexible_content', 'label' => 'Items', 'layouts' => [
+                        'title' => ['label' => 'Title', 'wp' => [$prop => []], 'fields' => [
+                            'c' => ['type' => 'text', 'label' => 'C'],
+                        ]],
+                    ]],
+                ]), 'demo', 1700000000);
+                self::fail("wp.{$prop} on a layout was expected to be rejected but generation succeeded.");
+            } catch (\Parisek\DefinitionKit\Generator\GenerationValidationException $e) {
+                self::assertStringContainsString("wp.{$prop}", $e->getMessage());
+            }
+        }
+    }
+
+    /**
+     * Strengthened control (round 7) — the previous control test only
+     * exercised benign PRESENTATION props (`toolbar`, `acf_type`), which
+     * is exactly why the structural/cross-reference bypasses ([1]-[4])
+     * went unnoticed for a whole round. Asserts BOTH directions on the
+     * SAME field shape: genuine installed-base props still pass, and every
+     * newly reserved prop is independently rejected.
+     */
+    public function test_legitimate_props_pass_while_every_newly_reserved_prop_is_rejected(): void
+    {
+        $group = $this->generator->generate($this->tree([
+            'body' => [
+                'type' => 'richtext',
+                'label' => 'Text',
+                'wp' => ['toolbar' => 'full', 'new_lines' => 'wpautop', 'collapsed' => '', 'ui' => 1],
+            ],
+        ]), 'demo', 1700000000);
+        self::assertSame('full', $group['fields'][0]['toolbar']);
+        self::assertSame('wpautop', $group['fields'][0]['new_lines']);
+
+        foreach (['fields', 'sub_fields', 'layouts', 'parent_repeater'] as $prop) {
+            try {
+                $this->generator->generate($this->tree([
+                    'body' => ['type' => 'richtext', 'label' => 'Text', 'wp' => [$prop => []]],
+                ]), 'demo', 1700000000);
+                self::fail("wp.{$prop} on a field was expected to be rejected but generation succeeded.");
+            } catch (\Parisek\DefinitionKit\Generator\GenerationValidationException $e) {
+                self::assertStringContainsString("wp.{$prop}", $e->getMessage());
+            }
+        }
+    }
+
+    /**
+     * Round 7 — RootFieldGroupBuilder::buildAccordionPseudoField() overlaid
+     * the captured accordion residual excluding ONLY key/label/open/before
+     * — an accordion element carrying `type`/`name`/`fields`/`sub_fields`/
+     * `layouts`/`parent_repeater` (via a hand-authored or corrupted
+     * `wp.accordions` entry) could impersonate an arbitrary pseudo-field,
+     * bypassing the accordion baseline's fixed `type: 'accordion'` /
+     * `name: ''`. Must now be constrained to the same reserved set.
+     */
+    public function test_accordion_residual_cannot_inject_a_bogus_type_or_name(): void
+    {
+        $group = $this->generator->generate($this->tree([
+            'title' => ['type' => 'text', 'label' => 'Nadpis'],
+        ], [
+            'name' => 'Demo',
+            'wp' => ['accordions' => [
+                [
+                    'key' => 'field_demo_accordion_a',
+                    'label' => 'A',
+                    'open' => 0,
+                    'before' => 'title',
+                    'type' => 'text',
+                    'name' => 'bogus_child',
+                ],
+            ]],
+        ]), 'demo', 1700000000);
+
+        $accordion = $group['fields'][0];
+        self::assertSame('accordion', $accordion['type'], 'accordion residual let `wp.accordions[].type` impersonate a different field shape');
+        self::assertSame('', $accordion['name'], 'accordion residual let `wp.accordions[].name` smuggle a bogus field name');
+    }
+
+    /**
+     * Genuine accordions must keep working end to end after the residual
+     * exclusion is widened — the fix narrows what CAN be overlaid, it must
+     * not break the legitimate `before`/`open`/non-default `instructions`
+     * residual path itself. `wp.accordions` appears 38 times in the
+     * committed installed base — this is the "still works" half of the
+     * regression pair above.
+     */
+    public function test_accordion_with_legitimate_residual_props_still_works(): void
+    {
+        $group = $this->generator->generate($this->tree([
+            'title' => ['type' => 'text', 'label' => 'Nadpis'],
+        ], [
+            'name' => 'Demo',
+            'wp' => ['accordions' => [
+                [
+                    'key' => 'field_demo_accordion_a',
+                    'label' => 'A',
+                    'open' => 1,
+                    'before' => 'title',
+                    'instructions' => 'Some instructions',
+                    'multi_expand' => 1,
+                ],
+            ]],
+        ]), 'demo', 1700000000);
+
+        $accordion = $group['fields'][0];
+        self::assertSame('accordion', $accordion['type']);
+        self::assertSame(1, $accordion['open']);
+        self::assertSame('Some instructions', $accordion['instructions']);
+        self::assertSame(1, $accordion['multi_expand']);
+        self::assertSame('text', $group['fields'][1]['type']);
+    }
+
+    /**
+     * `wp.conditional_logic` is a REAL fallback Migration\AcfJsonReader
+     * emits (see VisibleWhenMapper::map()) whenever raw ACF
+     * conditional_logic is too complex to reduce to the abstract
+     * `visible_when` vocabulary (2+ AND conditions, 2+ OR groups, or an
+     * unmapped operator) — it is not forbidden like the structural/
+     * identity props above. Instead its references must RESOLVE: a
+     * `conditional_logic` entry pointing at a key that exists nowhere in
+     * the generated tree is a dangling reference ACF's editor would show
+     * as broken with no diagnostic from this tool. This is the positive
+     * (still works) half of that contract.
+     */
+    public function test_wp_conditional_logic_fallback_with_resolvable_reference_still_works(): void
+    {
+        $group = $this->generator->generate($this->tree([
+            'toggle' => ['type' => 'boolean', 'label' => 'Toggle', 'key' => 'field_test_toggle_key'],
+            'conditional_field' => [
+                'type' => 'text',
+                'label' => 'Conditional',
+                'wp' => ['conditional_logic' => [[
+                    ['field' => 'field_test_toggle_key', 'operator' => '==', 'value' => '1'],
+                    ['field' => 'field_test_toggle_key', 'operator' => '!=', 'value' => '2'],
+                ]]],
+            ],
+        ], ['name' => 'Test']), 'test', 1700000000);
+
+        self::assertIsArray($group['fields'][1]['conditional_logic']);
+    }
+
+    /** Negative half — a `wp.conditional_logic` fallback referencing a key that doesn't exist anywhere must be rejected loudly. */
+    public function test_wp_conditional_logic_fallback_with_dangling_reference_is_rejected(): void
+    {
+        $this->expectException(\Parisek\DefinitionKit\Generator\GenerationValidationException::class);
+        $this->expectExceptionMessageMatches('/conditional_logic/');
+        $this->expectExceptionMessageMatches('/field_does_not_exist/');
+
+        $this->generator->generate($this->tree([
+            'conditional_field' => [
+                'type' => 'text',
+                'label' => 'Conditional',
+                'wp' => ['conditional_logic' => [[
+                    ['field' => 'field_does_not_exist', 'operator' => '==', 'value' => '1'],
+                ]]],
+            ],
+        ], ['name' => 'Test']), 'test', 1700000000);
+    }
 }

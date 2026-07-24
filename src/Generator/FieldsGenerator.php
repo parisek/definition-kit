@@ -142,6 +142,37 @@ final class FieldsGenerator
      */
     private const INTERNAL_WP_MARKERS = ['acf_type', 'accordions'];
 
+    /**
+     * Round 7 — the deny-list widens beyond the round-6 scalar identity
+     * triple (`key`/`name`/`type`) to also cover STRUCTURAL containers
+     * (`fields`/`sub_fields`/`layouts`) and a CROSS-REFERENCE
+     * (`parent_repeater`). Round 7 found four bypasses the round-6 set
+     * missed, all the same root cause wearing a different prop name:
+     *
+     * - `wp.key` / `wp.fields` at the ROOT (assertNoIdentityPropsInWpOverlay()
+     *   never walked the definition tree's own `wp`, only `fields`) —
+     *   RootFieldGroupBuilder::build() merges root `wp:` with HIGHEST
+     *   precedence over the `key`/`fields` it just assembled, so an
+     *   overlay silently repointed the group's key or (most severely)
+     *   zeroed out the entire generated `fields` list.
+     * - `wp.sub_fields` / `wp.layouts` on an ORDINARY (non-container,
+     *   non-flexible_content) field — buildField() merges `wpOverrides`
+     *   onto `$field` BEFORE the container/flexible_content branch would
+     *   overwrite `sub_fields`/`layouts` from real derived children; a
+     *   leaf field never re-derives either key, so a smuggled array
+     *   (carrying its own bogus key/name/type triple) survives verbatim.
+     * - `wp.parent_repeater` on a repeater's child — merged AFTER the
+     *   real, ACF-computed `parent_repeater` is assigned from nesting,
+     *   silently overwriting it. `parent_repeater` has no legitimate
+     *   authoring path at all (always re-derived), so it is reserved
+     *   outright rather than gaining an "alternative" sanctioned prop.
+     *
+     * `conditional_logic` is deliberately NOT in this list — see
+     * {@see assertConditionalLogicReferencesResolve()}'s docblock for why
+     * it gets a validation gate instead of an outright ban.
+     */
+    private const RESERVED_WP_PROPS = ['key', 'name', 'type', 'fields', 'sub_fields', 'layouts', 'parent_repeater'];
+
     public function __construct(
         private readonly TypeDefaults $typeDefaults = new TypeDefaults(),
         private readonly ConstraintSentinels $constraintSentinels = new ConstraintSentinels(),
@@ -168,6 +199,16 @@ final class FieldsGenerator
         // BEFORE siblingKeyMap() below — that call (via deriveOrPinKey())
         // is the FIRST thing that would have read a forbidden `wp.key`
         // had this check not already rejected it.
+        //
+        // Round 7 — the ROOT node's own `wp:` bag is checked FIRST and
+        // separately: it is not a member of `$fields` (it lives directly
+        // on `$definitionTree`), so the recursive walk below never saw it.
+        // RootFieldGroupBuilder::build() merges root `wp:` with HIGHEST
+        // precedence over the `key`/`fields` it just assembled — an
+        // unguarded root `wp.key` silently repoints the group's key, and
+        // an unguarded root `wp.fields` silently zeroes the entire
+        // generated `fields` list (the most severe finding of round 7).
+        $this->assertNoReservedWpProps((array) ($definitionTree['wp'] ?? []), [], false);
         $this->assertNoIdentityPropsInWpOverlay($fields, []);
 
         $siblingNameKeyMap = $this->siblingKeyMap($fields, $componentSlug, []);
@@ -195,8 +236,89 @@ final class FieldsGenerator
         /** @var list<array<string,mixed>> $builtFields */
         $builtFields = $built['fields'];
         $this->assertGloballyUniqueKeys($builtFields);
+        $this->assertConditionalLogicReferencesResolve($builtFields);
 
         return $built;
+    }
+
+    /**
+     * `wp.conditional_logic` is deliberately NOT in {@see RESERVED_WP_PROPS}
+     * — unlike the identity/structural props, it is a REAL fallback
+     * Migration\AcfJsonReader emits whenever raw ACF conditional_logic is
+     * too complex to reduce to the abstract `visible_when` vocabulary
+     * (2+ AND conditions, 2+ OR groups, or an unmapped operator — see
+     * VisibleWhenMapper::map()). Forbidding it outright would break that
+     * round-trip for any component whose ACF source ever used such
+     * conditional logic, with no sanctioned replacement to fall back to.
+     *
+     * What round 7 DOES require: the fallback's references must resolve.
+     * A `conditional_logic` entry pointing at a key that exists nowhere
+     * in the generated tree is a dangling reference — ACF's editor would
+     * show it as broken with zero diagnostic from this tool. This walks
+     * the FINAL assembled tree (same shape/order as
+     * {@see assertGloballyUniqueKeys()}) collecting every key that
+     * exists, then re-walks checking every `conditional_logic` entry's
+     * `field` reference against that set.
+     *
+     * @param list<array<string,mixed>> $builtFields
+     */
+    private function assertConditionalLogicReferencesResolve(array $builtFields): void
+    {
+        $allKeys = [];
+        $referencedKeys = [];
+        $this->collectKeysAndConditionalLogicRefs($builtFields, $allKeys, $referencedKeys);
+
+        foreach ($referencedKeys as $referencedKey) {
+            if (!in_array($referencedKey, $allKeys, true)) {
+                throw new GenerationValidationException(sprintf(
+                    "A `wp.conditional_logic` fallback references key '%s', which does not exist "
+                    . 'anywhere in the generated tree — this is a dangling reference ACF\'s editor '
+                    . 'would show as broken. Fix the referenced key, or express the condition through '
+                    . '`visible_when:` if it fits the single-condition vocabulary.',
+                    $referencedKey,
+                ));
+            }
+        }
+    }
+
+    /**
+     * @param list<array<string,mixed>> $fields
+     * @param list<string> $allKeys
+     * @param list<string> $referencedKeys
+     */
+    private function collectKeysAndConditionalLogicRefs(array $fields, array &$allKeys, array &$referencedKeys): void
+    {
+        foreach ($fields as $field) {
+            $allKeys[] = (string) $field['key'];
+
+            $conditionalLogic = $field['conditional_logic'] ?? false;
+            if (is_array($conditionalLogic)) {
+                foreach ($conditionalLogic as $orGroup) {
+                    foreach ((array) $orGroup as $cond) {
+                        if (isset($cond['field'])) {
+                            $referencedKeys[] = (string) $cond['field'];
+                        }
+                    }
+                }
+            }
+
+            if (!empty($field['sub_fields'])) {
+                /** @var list<array<string,mixed>> $subFields */
+                $subFields = (array) $field['sub_fields'];
+                $this->collectKeysAndConditionalLogicRefs($subFields, $allKeys, $referencedKeys);
+            }
+
+            if (!empty($field['layouts'])) {
+                /** @var list<array<string,mixed>> $layouts */
+                $layouts = (array) $field['layouts'];
+                foreach ($layouts as $layout) {
+                    $allKeys[] = (string) $layout['key'];
+                    /** @var list<array<string,mixed>> $layoutSubFields */
+                    $layoutSubFields = (array) ($layout['sub_fields'] ?? []);
+                    $this->collectKeysAndConditionalLogicRefs($layoutSubFields, $allKeys, $referencedKeys);
+                }
+            }
+        }
     }
 
     /**
@@ -251,19 +373,7 @@ final class FieldsGenerator
     {
         foreach ($fields as $name => $field) {
             $chain = [...$pathChain, (string) $name];
-            $wp = (array) ($field['wp'] ?? []);
-            foreach (['key', 'name', 'type'] as $forbidden) {
-                if (array_key_exists($forbidden, $wp)) {
-                    throw new GenerationValidationException(sprintf(
-                        "Field '%s' sets `wp.%s`, which is forbidden — `%s` is part of a field's "
-                        . 'identity and must have exactly one source. %s',
-                        implode('.', $chain),
-                        $forbidden,
-                        $forbidden,
-                        $this->wpIdentityPropAlternative($forbidden, false),
-                    ));
-                }
-            }
+            $this->assertNoReservedWpProps((array) ($field['wp'] ?? []), $chain, false);
 
             if (!empty($field['fields']) && is_array($field['fields'])) {
                 $this->assertNoIdentityPropsInWpOverlay($field['fields'], $chain);
@@ -272,19 +382,11 @@ final class FieldsGenerator
             if (!empty($field['layouts']) && is_array($field['layouts'])) {
                 foreach ($field['layouts'] as $layoutName => $layoutDef) {
                     $layoutChain = [...$chain, (string) $layoutName];
-                    $layoutWp = (array) (((array) $layoutDef)['wp'] ?? []);
-                    foreach (['key', 'name', 'type'] as $forbidden) {
-                        if (array_key_exists($forbidden, $layoutWp)) {
-                            throw new GenerationValidationException(sprintf(
-                                "Layout '%s' sets `wp.%s`, which is forbidden — `%s` is part of a "
-                                . 'layout\'s identity and must have exactly one source. %s',
-                                implode('.', $layoutChain),
-                                $forbidden,
-                                $forbidden,
-                                $this->wpIdentityPropAlternative($forbidden, true),
-                            ));
-                        }
-                    }
+                    $this->assertNoReservedWpProps(
+                        (array) (((array) $layoutDef)['wp'] ?? []),
+                        $layoutChain,
+                        true,
+                    );
 
                     $layoutFields = (array) (((array) $layoutDef)['fields'] ?? []);
                     if ([] !== $layoutFields) {
@@ -295,9 +397,48 @@ final class FieldsGenerator
         }
     }
 
-    /** Names the sanctioned alternative for a forbidden `wp.<prop>` override, for the exception message. */
-    private function wpIdentityPropAlternative(string $forbidden, bool $isLayout): string
+    /**
+     * Shared reserved-prop check used for the ROOT node's own `wp:` bag,
+     * every field's `wp:` bag, and every flexible_content layout's `wp:`
+     * bag — one deny-list ({@see RESERVED_WP_PROPS}), one place that
+     * throws, so root/field/layout can never silently drift apart on
+     * which props are reserved (round 7's root cause: the schema and the
+     * generator's own check independently forgot to cover the root node).
+     *
+     * @param array<string,mixed> $wp
+     * @param list<string> $chain dot-joined breadcrumb for the error message; empty means "root"
+     */
+    private function assertNoReservedWpProps(array $wp, array $chain, bool $isLayout): void
     {
+        $subject = [] === $chain ? 'The root field group' : ($isLayout ? "Layout '" . implode('.', $chain) . "'" : "Field '" . implode('.', $chain) . "'");
+
+        foreach (self::RESERVED_WP_PROPS as $forbidden) {
+            if (array_key_exists($forbidden, $wp)) {
+                throw new GenerationValidationException(sprintf(
+                    "%s sets `wp.%s`, which is forbidden — `%s` is part of a %s identity (or, for "
+                    . '`fields`/`sub_fields`/`layouts`/`parent_repeater`, structural/derived metadata '
+                    . 'with the same single-source requirement) and must have exactly one source. %s',
+                    $subject,
+                    $forbidden,
+                    $forbidden,
+                    [] === $chain ? "field group's" : ($isLayout ? "layout's" : "field's"),
+                    $this->wpIdentityPropAlternative($forbidden, $isLayout, [] === $chain),
+                ));
+            }
+        }
+    }
+
+    /** Names the sanctioned alternative for a forbidden `wp.<prop>` override, for the exception message. */
+    private function wpIdentityPropAlternative(string $forbidden, bool $isLayout, bool $isRoot = false): string
+    {
+        if ($isRoot) {
+            return match ($forbidden) {
+                'key' => "Pin the field group's key with the top-level `key:` prop (pattern ^group_) instead.",
+                'fields' => 'Author the component\'s `fields:` map at the top level instead — that is the ONLY source the generated `fields` list is assembled from.',
+                default => 'There is no sanctioned root-level use of this prop; remove it from `wp:`.',
+            };
+        }
+
         return match ($forbidden) {
             'key' => $isLayout
                 ? "Pin the layout's key with the top-level `key:` prop (pattern ^layout_) instead."
@@ -306,6 +447,9 @@ final class FieldsGenerator
                 ? "Set the layout's ACF name with its own top-level `name:` prop instead."
                 : 'The field name is derived from its own YAML field-map key — rename that map key instead.',
             'type' => 'Use the top-level `type:` prop (the semantic type enum) instead.',
+            'fields', 'sub_fields' => "Author this container's children with its own top-level `fields:` map instead.",
+            'layouts' => "Author this flexible_content field's variants with its own top-level `layouts:` map instead.",
+            'parent_repeater' => "`parent_repeater` is always re-derived from nesting; there is no sanctioned way to author it directly — remove it from `wp:`.",
             default => '',
         };
     }

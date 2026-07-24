@@ -125,7 +125,19 @@ final class FieldsSchemaValidatorTest extends TestCase
         self::assertFalse($result->valid);
     }
 
-    /** Sanity control — every OTHER prop inside `wp:` stays fully open. */
+    /**
+     * Sanity control — every OTHER prop inside `wp:` stays fully open.
+     *
+     * Round 7 — this control test used to exercise ONLY benign
+     * presentation props (`toolbar`, `acf_type`), which is exactly why
+     * the structural/cross-reference bypasses (findings [1]-[4]) went
+     * unnoticed for a whole review round: nothing here proved the deny-
+     * list actually covered anything beyond the original three scalars.
+     * Strengthened to assert BOTH directions — legitimate installed-base
+     * props (`toolbar`, `new_lines`, `collapsed`, `ui`) still validate,
+     * AND every newly reserved structural/cross-reference prop is
+     * independently rejected — on the same field shape.
+     */
     public function test_wp_non_identity_props_on_a_field_still_validate(): void
     {
         $tree = Yaml::parse(<<<YAML
@@ -134,11 +146,25 @@ final class FieldsSchemaValidatorTest extends TestCase
           title:
             type: richtext
             label: L
-            wp: { toolbar: full, acf_type: email }
+            wp: { toolbar: full, acf_type: email, new_lines: wpautop, collapsed: '', ui: 1 }
         YAML, Yaml::PARSE_OBJECT_FOR_MAP);
 
         $result = (new FieldsSchemaValidator())->validateData($tree);
         self::assertTrue($result->valid, print_r($result->errors, true));
+
+        foreach (['key', 'name', 'type', 'fields', 'sub_fields', 'layouts', 'parent_repeater'] as $prop) {
+            $rejectedTree = Yaml::parse(<<<YAML
+            name: X
+            fields:
+              title:
+                type: richtext
+                label: L
+                wp: { {$prop}: [] }
+            YAML, Yaml::PARSE_OBJECT_FOR_MAP);
+
+            $rejectedResult = (new FieldsSchemaValidator())->validateData($rejectedTree);
+            self::assertFalse($rejectedResult->valid, "wp.{$prop} on a field was expected to fail schema validation.");
+        }
     }
 
     /** Same deny-list, exercised on a flexible_content layout's own `wp:` bag. */
@@ -396,6 +422,124 @@ final class FieldsSchemaValidatorTest extends TestCase
     {
         $result = (new FieldsSchemaValidator())->validateFile($this->fixture('invalid-usage-empty-list.fields.yaml'));
         self::assertFalse($result->valid);
+    }
+
+    /**
+     * Round 7 — the reserved deny-list widened beyond `key`/`name`/`type`
+     * to cover structural containers (`fields`/`sub_fields`/`layouts`,
+     * which carry the identity of NESTED nodes) and a cross-reference
+     * (`parent_repeater`, ACF-computed structural metadata with no
+     * legitimate authoring path). Exercised on a field's own `wp:` bag.
+     */
+    public function test_wp_reserved_structural_props_on_a_field_are_rejected_by_schema(): void
+    {
+        foreach (['fields', 'sub_fields', 'layouts', 'parent_repeater'] as $prop) {
+            $tree = Yaml::parse(<<<YAML
+            name: X
+            fields:
+              title:
+                type: text
+                label: L
+                wp: { {$prop}: [] }
+            YAML, Yaml::PARSE_OBJECT_FOR_MAP);
+
+            $result = (new FieldsSchemaValidator())->validateData($tree);
+            self::assertFalse($result->valid, "wp.{$prop} on a field was expected to fail schema validation.");
+        }
+    }
+
+    /** Same reserved set, exercised on a flexible_content layout's own `wp:` bag. */
+    public function test_wp_reserved_structural_props_on_a_layout_are_rejected_by_schema(): void
+    {
+        foreach (['fields', 'sub_fields', 'layouts', 'parent_repeater'] as $prop) {
+            $tree = Yaml::parse(<<<YAML
+            name: X
+            fields:
+              items:
+                type: flexible_content
+                label: L
+                layouts:
+                  intro:
+                    label: Intro
+                    wp: { {$prop}: [] }
+                    fields:
+                      headline: { type: text, label: H }
+            YAML, Yaml::PARSE_OBJECT_FOR_MAP);
+
+            $result = (new FieldsSchemaValidator())->validateData($tree);
+            self::assertFalse($result->valid, "wp.{$prop} on a layout was expected to fail schema validation.");
+        }
+    }
+
+    /**
+     * Round 7, Finding [1]/[2] — the ROOT-level `wp:` bag used to be a
+     * bare `{"type":"object"}`, with no deny-list at all, while field-
+     * and layout-level `wp:` already `$ref`'d `wpOverlay`. `wp.key`
+     * (repointing the whole field group's key) and `wp.fields` (silently
+     * zeroing the assembled `fields` list — the most severe finding of
+     * the whole series) both validated successfully. Root `wp:` must now
+     * `$ref` the SAME `wpOverlay` def.
+     */
+    public function test_wp_reserved_props_on_root_are_rejected_by_schema(): void
+    {
+        foreach (['key', 'name', 'type', 'fields', 'sub_fields', 'layouts', 'parent_repeater'] as $prop) {
+            $tree = Yaml::parse(<<<YAML
+            name: X
+            wp: { {$prop}: [] }
+            fields:
+              title:
+                type: text
+                label: L
+            YAML, Yaml::PARSE_OBJECT_FOR_MAP);
+
+            $result = (new FieldsSchemaValidator())->validateData($tree);
+            self::assertFalse($result->valid, "wp.{$prop} on root was expected to fail schema validation.");
+        }
+    }
+
+    /**
+     * Sanity control — root's own sanctioned `wp:` uses (e.g.
+     * `wp.accordions`, appears 38 times in the installed base) must keep
+     * validating once root `wp:` gains the `wpOverlay` `$ref`.
+     */
+    public function test_wp_accordions_on_root_still_validates(): void
+    {
+        $tree = Yaml::parse(<<<YAML
+        name: X
+        wp:
+          accordions:
+            - { key: field_x_accordion_a, label: A, open: 0 }
+        fields:
+          title:
+            type: text
+            label: L
+        YAML, Yaml::PARSE_OBJECT_FOR_MAP);
+
+        $result = (new FieldsSchemaValidator())->validateData($tree);
+        self::assertTrue($result->valid, print_r($result->errors, true));
+    }
+
+    /**
+     * `wp.conditional_logic` is deliberately NOT part of the schema-level
+     * deny-list — Migration\AcfJsonReader emits it as a real fallback for
+     * ACF conditional logic too complex to reduce to `visible_when` (see
+     * VisibleWhenMapper). Its correctness is enforced at the GENERATOR
+     * level (dangling-reference resolution against the assembled tree),
+     * not the schema level, since the schema cannot see across fields.
+     */
+    public function test_wp_conditional_logic_is_not_rejected_by_schema(): void
+    {
+        $tree = Yaml::parse(<<<YAML
+        name: X
+        fields:
+          title:
+            type: text
+            label: L
+            wp: { conditional_logic: [[{ field: field_x_other, operator: '==', value: '1' }]] }
+        YAML, Yaml::PARSE_OBJECT_FOR_MAP);
+
+        $result = (new FieldsSchemaValidator())->validateData($tree);
+        self::assertTrue($result->valid, print_r($result->errors, true));
     }
 
     public function test_existing_dávka_1_fixtures_still_validate(): void
