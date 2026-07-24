@@ -156,6 +156,21 @@ final class AbstractTypeMapperTest extends TestCase
         self::assertSame(['type', 'sub_fields', 'button_label'], $result['consumed']);
     }
 
+    public function test_flexible_content_lifts_button_label_to_add_label(): void
+    {
+        $result = $this->mapper->map(['type' => 'flexible_content', 'name' => 'f', 'button_label' => 'Add Položky']);
+        self::assertSame('flexible_content', $result['type']);
+        self::assertSame(['add_label' => 'Add Položky'], $result['extra']);
+        self::assertSame(['type', 'layouts', 'button_label'], $result['consumed']);
+    }
+
+    public function test_flexible_content_omits_add_label_when_button_label_empty(): void
+    {
+        $result = $this->mapper->map(['type' => 'flexible_content', 'name' => 'f', 'button_label' => '']);
+        self::assertSame([], $result['extra']);
+        self::assertSame(['type', 'layouts', 'button_label'], $result['consumed']);
+    }
+
     public function test_unsupported_type_throws_domain_exception(): void
     {
         $this->expectException(\DomainException::class);

@@ -216,6 +216,71 @@ final class FieldsGeneratorTest extends TestCase
         self::assertSame('field_demo_items_tags', $tagsField['sub_fields'][0]['parent_repeater']);
     }
 
+    public function test_flexible_content_builds_layouts_keyed_by_layout_name(): void
+    {
+        $group = $this->generator->generate($this->tree([
+            'items' => ['type' => 'flexible_content', 'label' => 'Položky', 'add_label' => 'Add Položky', 'min' => 2, 'max' => 2, 'layouts' => [
+                'title' => ['label' => 'Nadpis', 'fields' => [
+                    'title' => ['type' => 'text', 'label' => 'Nadpis'],
+                ]],
+                'image' => ['label' => 'Obrázek', 'fields' => [
+                    'image' => ['type' => 'media', 'kind' => 'image', 'label' => 'Obrázek'],
+                ]],
+            ]],
+        ]), 'demo', 1700000000);
+
+        $itemsField = $group['fields'][0];
+        self::assertSame('flexible_content', $itemsField['type']);
+        self::assertSame('field_demo_items', $itemsField['key']);
+        self::assertSame('Add Položky', $itemsField['button_label']);
+        self::assertSame(2, $itemsField['min']);
+        self::assertSame(2, $itemsField['max']);
+        self::assertArrayNotHasKey('wpml_cf_preferences', $itemsField);
+
+        self::assertCount(2, $itemsField['layouts']);
+        [$titleLayout, $imageLayout] = $itemsField['layouts'];
+
+        self::assertSame('layout_demo_items_title', $titleLayout['key']);
+        self::assertSame('title', $titleLayout['name']);
+        self::assertSame('Nadpis', $titleLayout['label']);
+        self::assertSame('block', $titleLayout['display']);
+        self::assertSame('', $titleLayout['min']);
+        self::assertSame('', $titleLayout['max']);
+        self::assertNull($titleLayout['location']);
+        self::assertSame('field_demo_items_title_title', $titleLayout['sub_fields'][0]['key']);
+        self::assertArrayNotHasKey('parent_repeater', $titleLayout['sub_fields'][0]);
+
+        self::assertSame('layout_demo_items_image', $imageLayout['key']);
+        self::assertSame('field_demo_items_image_image', $imageLayout['sub_fields'][0]['key']);
+    }
+
+    public function test_flexible_content_layout_key_can_be_pinned(): void
+    {
+        $group = $this->generator->generate($this->tree([
+            'items' => ['type' => 'flexible_content', 'label' => 'Položky', 'layouts' => [
+                'title' => ['label' => 'Nadpis', 'key' => 'layout_legacy_hash_abc123', 'fields' => [
+                    'title' => ['type' => 'text', 'label' => 'Nadpis'],
+                ]],
+            ]],
+        ]), 'demo', 1700000000);
+
+        self::assertSame('layout_legacy_hash_abc123', $group['fields'][0]['layouts'][0]['key']);
+    }
+
+    public function test_flexible_content_layout_min_max_are_reconstructed_when_authored(): void
+    {
+        $group = $this->generator->generate($this->tree([
+            'items' => ['type' => 'flexible_content', 'label' => 'Položky', 'layouts' => [
+                'title' => ['label' => 'Nadpis', 'min' => 1, 'max' => 3, 'fields' => [
+                    'title' => ['type' => 'text', 'label' => 'Nadpis'],
+                ]],
+            ]],
+        ]), 'demo', 1700000000);
+
+        self::assertSame(1, $group['fields'][0]['layouts'][0]['min']);
+        self::assertSame(3, $group['fields'][0]['layouts'][0]['max']);
+    }
+
     public function test_visible_when_resolves_against_sibling_fields_only(): void
     {
         $group = $this->generator->generate($this->tree([

@@ -1,0 +1,29 @@
+name: Demo Flexible Content
+fields:
+  items:
+    type: flexible_content
+    label: Položky
+    add_label: "Add Položky"
+    min: 2
+    max: 2
+    layouts:
+      title:
+        label: Nadpis
+        fields:
+          title: { type: text, label: Nadpis }
+      image:
+        label: Obrázek
+        fields:
+          image: { type: media, kind: image, label: Obrázek }
+      cta:
+        label: CTA
+        fields:
+          title: { type: text, label: Nadpis }
+          perex: { type: richtext, label: Popisek }
+          button: { type: link, shape: link, label: Tlačítko }
+          button_style:
+            type: select
+            label: Styl tlačítka
+            options:
+              primary: Primární
+              secondary: Sekundární

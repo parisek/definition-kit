@@ -146,6 +146,23 @@ final class FieldsSchemaValidatorTest extends TestCase
         );
     }
 
+    public function test_valid_flexible_content_document_passes(): void
+    {
+        $result = (new FieldsSchemaValidator())->validateFile($this->fixture('valid-flexible-content.fields.yaml'));
+        self::assertTrue($result->valid, print_r($result->errors, true));
+    }
+
+    public function test_flexible_content_without_layouts_fails_with_pointer_to_field(): void
+    {
+        $result = (new FieldsSchemaValidator())->validateFile($this->fixture('invalid-flexible-content-no-layouts.fields.yaml'));
+        self::assertFalse($result->valid);
+        $pointers = array_column($result->errors, 'pointer');
+        self::assertTrue(
+            (bool) array_filter($pointers, static fn (string $p): bool => str_contains($p, 'items')),
+            'items pointer expected: ' . implode(',', $pointers),
+        );
+    }
+
     public function test_key_not_matching_field_prefix_fails_with_pointer_to_field(): void
     {
         $result = (new FieldsSchemaValidator())->validateFile($this->fixture('invalid-bad-key-pattern.fields.yaml'));

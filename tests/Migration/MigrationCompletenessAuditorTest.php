@@ -121,4 +121,72 @@ final class MigrationCompletenessAuditorTest extends TestCase
         ]]];
         self::assertNotEmpty($this->auditor->audit($acf, $defLossy));
     }
+
+    public function test_recurses_into_flexible_content_layouts(): void
+    {
+        $acf = [[
+            'key' => 'field_demo_items', 'name' => 'items', 'label' => 'Items', 'type' => 'flexible_content',
+            'layouts' => [[
+                'key' => 'layout_demo_items_body', 'name' => 'body', 'label' => 'Body', 'display' => 'block',
+                'sub_fields' => [[
+                    'key' => 'field_demo_items_body_text', 'name' => 'text', 'label' => 'Text', 'type' => 'wysiwyg',
+                    'toolbar' => 'full',
+                ]],
+                'min' => '', 'max' => '',
+            ]],
+        ]];
+        $defOk = ['items' => ['type' => 'flexible_content', 'label' => 'Items', 'layouts' => [
+            'body' => ['label' => 'Body', 'fields' => [
+                'text' => ['type' => 'richtext', 'label' => 'Text', 'wp' => ['toolbar' => 'full']],
+            ]],
+        ]]];
+        self::assertSame([], $this->auditor->audit($acf, $defOk));
+
+        $defLossy = ['items' => ['type' => 'flexible_content', 'label' => 'Items', 'layouts' => [
+            'body' => ['label' => 'Body', 'fields' => [
+                'text' => ['type' => 'richtext', 'label' => 'Text'], // toolbar lost!
+            ]],
+        ]]];
+        self::assertNotEmpty($this->auditor->audit($acf, $defLossy));
+    }
+
+    public function test_fails_when_a_layout_is_missing_from_the_migrated_definition(): void
+    {
+        $acf = [[
+            'key' => 'field_demo_items', 'name' => 'items', 'label' => 'Items', 'type' => 'flexible_content',
+            'layouts' => [[
+                'key' => 'layout_demo_items_body', 'name' => 'body', 'label' => 'Body', 'display' => 'block',
+                'sub_fields' => [[
+                    'key' => 'field_demo_items_body_text', 'name' => 'text', 'label' => 'Text', 'type' => 'text',
+                ]],
+            ]],
+        ]];
+        $def = ['items' => ['type' => 'flexible_content', 'label' => 'Items', 'layouts' => []]];
+        $violations = $this->auditor->audit($acf, $def);
+        self::assertNotEmpty($violations);
+        self::assertStringContainsString('layout missing', $violations[0]);
+    }
+
+    public function test_flexible_content_wpml_cf_preferences_is_never_flagged_as_unaccounted(): void
+    {
+        // Real value 1/2 on the FC field itself should not trip the
+        // generic "neither baseline default, lifted key, nor in wp:"
+        // check — it's left entirely to the generic wp: fallback.
+        $acf = [[
+            'key' => 'field_demo_items', 'name' => 'items', 'label' => 'Items', 'type' => 'flexible_content',
+            'wpml_cf_preferences' => 1,
+            'layouts' => [[
+                'key' => 'layout_demo_items_body', 'name' => 'body', 'label' => 'Body', 'display' => 'block',
+                'sub_fields' => [[
+                    'key' => 'field_demo_items_body_text', 'name' => 'text', 'label' => 'Text', 'type' => 'text',
+                ]],
+            ]],
+        ]];
+        $def = ['items' => ['type' => 'flexible_content', 'label' => 'Items', 'wp' => ['wpml_cf_preferences' => 1], 'layouts' => [
+            'body' => ['label' => 'Body', 'fields' => [
+                'text' => ['type' => 'text', 'label' => 'Text'],
+            ]],
+        ]]];
+        self::assertSame([], $this->auditor->audit($acf, $def));
+    }
 }

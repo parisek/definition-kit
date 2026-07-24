@@ -131,9 +131,71 @@ final class FieldsGenerator
                 );
             }
             $field['sub_fields'] = $subFields;
+        } elseif ('flexible_content' === $acfType) {
+            $field['layouts'] = $this->buildLayouts(
+                (array) ($semanticField['layouts'] ?? []),
+                $componentSlug,
+                [...$nameChain],
+            );
         }
 
         return $this->orderAcfProps($field);
+    }
+
+    /**
+     * Builds a flexible_content field's raw `layouts` array from the
+     * abstract `layouts` map (name => layout definition) — the
+     * layout-shaped counterpart to the `sub_fields` loop above. Each
+     * layout's own sub_fields recurse through the SAME buildField() used
+     * for ordinary nesting, one chain segment deeper (`[...$nameChain,
+     * $layoutName]`), so keys/conditional-logic resolution derive
+     * identically to any other nested field.
+     *
+     * A layout's own children never carry `parent_repeater` — verified
+     * against both eprukaz corpus fixtures (split-content,
+     * box-price-reference): every sub-field nested inside a
+     * flexible_content layout carries no `parent_repeater` at all, unlike
+     * a repeater's direct children. Passing `null` below reproduces that.
+     *
+     * @param array<string,mixed> $layoutDefs layout name => layout definition
+     * @param list<string> $nameChain the flexible_content field's OWN full name chain
+     * @return list<array<string,mixed>>
+     */
+    private function buildLayouts(array $layoutDefs, string $componentSlug, array $nameChain): array
+    {
+        $layouts = [];
+        foreach ($layoutDefs as $layoutName => $layoutDef) {
+            $layoutChain = [...$nameChain, (string) $layoutName];
+            $layoutKey = (string) ($layoutDef['key'] ?? ('layout_' . $componentSlug . '_' . implode('_', $layoutChain)));
+
+            $childFields = (array) ($layoutDef['fields'] ?? []);
+            $childSiblingMap = $this->siblingKeyMap($childFields, $componentSlug, $layoutChain);
+
+            $subFields = [];
+            foreach ($childFields as $childName => $childField) {
+                $subFields[] = $this->buildField(
+                    $childField,
+                    $componentSlug,
+                    [...$layoutChain, $childName],
+                    $childSiblingMap,
+                    null,
+                );
+            }
+
+            $layout = [
+                'key' => $layoutKey,
+                'name' => (string) $layoutName,
+                'label' => (string) ($layoutDef['label'] ?? ''),
+                'display' => 'block',
+                'sub_fields' => $subFields,
+                'min' => $layoutDef['min'] ?? '',
+                'max' => $layoutDef['max'] ?? '',
+                'location' => null,
+            ];
+
+            $layouts[] = $layout;
+        }
+        return $layouts;
     }
 
     /**

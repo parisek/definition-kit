@@ -412,4 +412,142 @@ final class AcfJsonReaderTest extends TestCase
             'sub_fields' => [['key' => 'field_demo_g_acc', 'name' => '', 'type' => 'accordion', 'label' => 'S']],
         ]]), 'demo');
     }
+
+    // --- flexible_content ---------------------------------------------
+
+    public function test_flexible_content_lifts_layouts_keyed_by_name(): void
+    {
+        $tree = $this->reader->read($this->group([[
+            'key' => 'field_demo_items', 'name' => 'items', 'label' => 'Položky', 'type' => 'flexible_content',
+            'button_label' => 'Add Položky', 'min' => 2, 'max' => 2,
+            'layouts' => [
+                [
+                    'key' => 'layout_demo_items_title', 'name' => 'title', 'label' => 'Nadpis', 'display' => 'block',
+                    'sub_fields' => [
+                        ['key' => 'field_demo_items_title_title', 'name' => 'title', 'label' => 'Nadpis', 'type' => 'text'],
+                    ],
+                    'min' => '', 'max' => '', 'location' => null,
+                ],
+                [
+                    'key' => 'layout_demo_items_image', 'name' => 'image', 'label' => 'Obrázek', 'display' => 'block',
+                    'sub_fields' => [
+                        ['key' => 'field_demo_items_image_image', 'name' => 'image', 'label' => 'Obrázek', 'type' => 'image'],
+                    ],
+                    'min' => '', 'max' => '', 'location' => null,
+                ],
+            ],
+        ]]), 'demo');
+
+        $items = $tree['fields']['items'];
+        self::assertSame('flexible_content', $items['type']);
+        self::assertSame('Add Položky', $items['add_label']);
+        self::assertSame(2, $items['min']);
+        self::assertSame(2, $items['max']);
+        self::assertSame(['title', 'image'], array_keys($items['layouts']));
+        self::assertSame('Nadpis', $items['layouts']['title']['label']);
+        self::assertArrayNotHasKey('key', $items['layouts']['title']); // matches convention, not pinned
+        self::assertSame('text', $items['layouts']['title']['fields']['title']['type']);
+        self::assertSame('media', $items['layouts']['image']['fields']['image']['type']);
+        self::assertSame('image', $items['layouts']['image']['fields']['image']['kind']);
+    }
+
+    public function test_flexible_content_layout_key_deviating_from_convention_is_pinned(): void
+    {
+        $tree = $this->reader->read($this->group([[
+            'key' => 'field_demo_items', 'name' => 'items', 'label' => 'Položky', 'type' => 'flexible_content',
+            'layouts' => [[
+                'key' => 'layout_demo_legacy_hash_abc123', 'name' => 'title', 'label' => 'Nadpis', 'display' => 'block',
+                'sub_fields' => [
+                    ['key' => 'field_demo_items_title_title', 'name' => 'title', 'label' => 'Nadpis', 'type' => 'text'],
+                ],
+            ]],
+        ]]), 'demo');
+
+        self::assertSame('layout_demo_legacy_hash_abc123', $tree['fields']['items']['layouts']['title']['key']);
+    }
+
+    public function test_flexible_content_min_max_zero_is_omitted_as_acf_no_limit_sentinel(): void
+    {
+        $tree = $this->reader->read($this->group([[
+            'key' => 'field_demo_items', 'name' => 'items', 'label' => 'Položky', 'type' => 'flexible_content',
+            'min' => 0, 'max' => 0,
+            'layouts' => [[
+                'key' => 'layout_demo_items_title', 'name' => 'title', 'label' => 'Nadpis', 'display' => 'block',
+                'sub_fields' => [
+                    ['key' => 'field_demo_items_title_title', 'name' => 'title', 'label' => 'Nadpis', 'type' => 'text'],
+                ],
+            ]],
+        ]]), 'demo');
+        self::assertArrayNotHasKey('min', $tree['fields']['items']);
+        self::assertArrayNotHasKey('max', $tree['fields']['items']);
+    }
+
+    public function test_flexible_content_wpml_cf_preferences_is_never_lifted_to_translatable(): void
+    {
+        // Real corpus shows 1/2 on some projects, absent on others, never 3
+        // — never lift to `translatable`, whatever value is present.
+        $tree = $this->reader->read($this->group([[
+            'key' => 'field_demo_items', 'name' => 'items', 'label' => 'Položky', 'type' => 'flexible_content',
+            'wpml_cf_preferences' => 2,
+            'layouts' => [[
+                'key' => 'layout_demo_items_title', 'name' => 'title', 'label' => 'Nadpis', 'display' => 'block',
+                'sub_fields' => [
+                    ['key' => 'field_demo_items_title_title', 'name' => 'title', 'label' => 'Nadpis', 'type' => 'text'],
+                ],
+            ]],
+        ]]), 'demo');
+        self::assertArrayNotHasKey('translatable', $tree['fields']['items']);
+        self::assertSame(2, $tree['fields']['items']['wp']['wpml_cf_preferences']);
+    }
+
+    public function test_flexible_content_absent_wpml_cf_preferences_leaves_no_wp_trace(): void
+    {
+        $tree = $this->reader->read($this->group([[
+            'key' => 'field_demo_items', 'name' => 'items', 'label' => 'Položky', 'type' => 'flexible_content',
+            'layouts' => [[
+                'key' => 'layout_demo_items_title', 'name' => 'title', 'label' => 'Nadpis', 'display' => 'block',
+                'sub_fields' => [
+                    ['key' => 'field_demo_items_title_title', 'name' => 'title', 'label' => 'Nadpis', 'type' => 'text'],
+                ],
+            ]],
+        ]]), 'demo');
+        self::assertArrayNotHasKey('wpml_cf_preferences', $tree['fields']['items']['wp'] ?? []);
+    }
+
+    public function test_flexible_content_layout_sub_field_carries_no_parent_repeater_key_expectation(): void
+    {
+        // Nested key derivation treats the layout name as just another
+        // nesting segment — field_<slug>_<fcName>_<layoutName>_<subName>.
+        $tree = $this->reader->read($this->group([[
+            'key' => 'field_demo_items', 'name' => 'items', 'label' => 'Položky', 'type' => 'flexible_content',
+            'layouts' => [[
+                'key' => 'layout_demo_items_cta', 'name' => 'cta', 'label' => 'CTA', 'display' => 'block',
+                'sub_fields' => [
+                    ['key' => 'field_demo_items_cta_title', 'name' => 'title', 'label' => 'Nadpis', 'type' => 'text'],
+                ],
+            ]],
+        ]]), 'demo');
+        self::assertArrayNotHasKey('key', $tree['fields']['items']['layouts']['cta']['fields']['title']);
+    }
+
+    public function test_flexible_content_with_zero_layouts_throws(): void
+    {
+        $this->expectException(\RuntimeException::class);
+        $this->reader->read($this->group([[
+            'key' => 'field_demo_items', 'name' => 'items', 'label' => 'Položky', 'type' => 'flexible_content',
+            'layouts' => [],
+        ]]), 'demo');
+    }
+
+    public function test_flexible_content_layout_with_zero_non_accordion_sub_fields_throws(): void
+    {
+        $this->expectException(\RuntimeException::class);
+        $this->reader->read($this->group([[
+            'key' => 'field_demo_items', 'name' => 'items', 'label' => 'Položky', 'type' => 'flexible_content',
+            'layouts' => [[
+                'key' => 'layout_demo_items_empty', 'name' => 'empty', 'label' => 'Empty', 'display' => 'block',
+                'sub_fields' => [['key' => 'field_demo_items_empty_acc', 'name' => '', 'type' => 'accordion', 'label' => 'S']],
+            ]],
+        ]]), 'demo');
+    }
 }

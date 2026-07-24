@@ -73,7 +73,7 @@
             "additionalProperties": false,
             "properties": {
                 "type": {
-                    "enum": ["text", "richtext", "number", "boolean", "select", "media", "link", "reference", "group", "repeater", "date"]
+                    "enum": ["text", "richtext", "number", "boolean", "select", "media", "link", "reference", "group", "repeater", "flexible_content", "date"]
                 },
                 "role": { "enum": ["field", "query", "computed", "global"] },
                 "label": { "type": "string", "minLength": 1 },
@@ -106,7 +106,8 @@
                 "source": { "type": "string" },
                 "demo": {},
                 "wp": { "type": "object" },
-                "fields": { "$ref": "#/$defs/fieldMap" }
+                "fields": { "$ref": "#/$defs/fieldMap" },
+                "layouts": { "$ref": "#/$defs/layoutMap" }
             },
             "allOf": [
                 {
@@ -116,8 +117,29 @@
                 {
                     "if": { "properties": { "type": { "enum": ["group", "repeater"] } }, "required": ["type"] },
                     "then": { "required": ["fields"] }
+                },
+                {
+                    "if": { "properties": { "type": { "const": "flexible_content" } }, "required": ["type"] },
+                    "then": { "required": ["layouts"] }
                 }
             ]
+        },
+        "layoutMap": {
+            "type": "object",
+            "minProperties": 1,
+            "additionalProperties": { "$ref": "#/$defs/layout" }
+        },
+        "layout": {
+            "type": "object",
+            "required": ["fields"],
+            "additionalProperties": false,
+            "properties": {
+                "label": { "type": "string", "minLength": 1 },
+                "key": { "type": "string", "pattern": "^layout_" },
+                "min": { "type": "integer", "minimum": 0 },
+                "max": { "type": "integer", "minimum": 0 },
+                "fields": { "$ref": "#/$defs/fieldMap" }
+            }
         }
     }
 }
