@@ -282,6 +282,66 @@ final class FieldsGenerator
     }
 
     /**
+     * Round 8 — shape validation. Before this, {@see collectKeysAndConditionalLogicRefs()}
+     * only inspected `conditional_logic` when it happened to already be
+     * `is_array()`: a scalar fallback (`wp.conditional_logic: 'bogus'`) or an
+     * AND-rule missing its `field` key entirely (as opposed to carrying an
+     * empty one, which round 7 already caught) skipped every check silently
+     * and would reach `acf.json` verbatim — ACF's editor either ignores it
+     * or errors opaquely, with zero diagnostic from this tool.
+     *
+     * Canonical ACF shape: an array of OR-groups, each an array of AND-rules,
+     * each rule a map carrying a non-empty string `field` key (`operator` /
+     * `value` and any other keys are ACF's concern, not validated here — this
+     * gate only guards the ONE thing this tool itself later reads: the
+     * `field` reference {@see assertConditionalLogicReferencesResolve()}
+     * resolves). Throws the same `GenerationValidationException` and matches
+     * the dangling-reference message's voice: state the problem, name the
+     * consequence, offer the sanctioned alternative.
+     */
+    private function assertConditionalLogicShapeIsValid(mixed $conditionalLogic, string $fieldPath): void
+    {
+        if (!is_array($conditionalLogic)) {
+            throw new GenerationValidationException(sprintf(
+                "Field '%s' carries a `wp.conditional_logic` fallback that is not an array — got %s. "
+                . 'ACF conditional_logic must be an array of OR-groups, each an array of AND-rules, each '
+                . 'rule a map with a `field` key — a malformed shape ACF\'s editor would show as broken. '
+                . 'Fix the shape, or express the condition through `visible_when:` if it fits the '
+                . 'single-condition vocabulary.',
+                $fieldPath,
+                get_debug_type($conditionalLogic),
+            ));
+        }
+
+        foreach ($conditionalLogic as $orGroup) {
+            if (!is_array($orGroup)) {
+                throw new GenerationValidationException(sprintf(
+                    "Field '%s' carries a `wp.conditional_logic` OR-group that is not an array — got %s. "
+                    . 'ACF conditional_logic must be an array of OR-groups, each an array of AND-rules, each '
+                    . 'rule a map with a `field` key — a malformed shape ACF\'s editor would show as broken. '
+                    . 'Fix the shape, or express the condition through `visible_when:` if it fits the '
+                    . 'single-condition vocabulary.',
+                    $fieldPath,
+                    get_debug_type($orGroup),
+                ));
+            }
+
+            foreach ($orGroup as $rule) {
+                if (!is_array($rule) || !isset($rule['field']) || !is_string($rule['field']) || '' === $rule['field']) {
+                    throw new GenerationValidationException(sprintf(
+                        "Field '%s' carries a `wp.conditional_logic` rule with no non-empty string `field` "
+                        . 'key — ACF conditional_logic requires every AND-rule to be a map naming the field '
+                        . 'it depends on, or ACF\'s editor would show it as broken. Fix the rule\'s `field` '
+                        . 'key, or express the condition through `visible_when:` if it fits the '
+                        . 'single-condition vocabulary.',
+                        $fieldPath,
+                    ));
+                }
+            }
+        }
+    }
+
+    /**
      * @param list<array<string,mixed>> $fields
      * @param list<string> $allKeys
      * @param list<string> $referencedKeys
@@ -292,7 +352,15 @@ final class FieldsGenerator
             $allKeys[] = (string) $field['key'];
 
             $conditionalLogic = $field['conditional_logic'] ?? false;
-            if (is_array($conditionalLogic)) {
+            // A falsy `conditional_logic` (`false` — FieldReconstructor's default
+            // for a field with no `visible_when:`; `0` — RootFieldGroupBuilder's
+            // ACF-canonical "off" marker on accordion pseudo-fields) means "no
+            // conditional logic", not a malformed shape — leave it unvalidated.
+            // Anything ELSE that isn't a well-formed array (a truthy scalar, a
+            // malformed nested shape) IS a validation target.
+            if (false !== $conditionalLogic && 0 !== $conditionalLogic) {
+                $this->assertConditionalLogicShapeIsValid($conditionalLogic, (string) $field['key']);
+
                 foreach ($conditionalLogic as $orGroup) {
                     foreach ((array) $orGroup as $cond) {
                         if (isset($cond['field'])) {

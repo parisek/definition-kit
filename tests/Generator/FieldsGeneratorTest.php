@@ -1173,4 +1173,90 @@ final class FieldsGeneratorTest extends TestCase
             ],
         ], ['name' => 'Test']), 'test', 1700000000);
     }
+
+    /**
+     * Shape validation, round 8 — before round 8, `assertConditionalLogicReferencesResolve()`
+     * only inspected `conditional_logic` when it happened to already be
+     * `is_array()`; a scalar fallback (a typo, or a hand-authored YAML
+     * mistake) skipped every check silently and would reach `acf.json`
+     * verbatim, where ACF's editor either ignores it or errors opaquely.
+     * The canonical ACF shape is: array of OR-groups, each an array of
+     * AND-rules, each rule a map with at least a non-empty string `field`
+     * key. This is the malformed-shape half of that contract — a scalar.
+     */
+    public function test_wp_conditional_logic_scalar_shape_is_rejected(): void
+    {
+        $this->expectException(\Parisek\DefinitionKit\Generator\GenerationValidationException::class);
+        $this->expectExceptionMessageMatches('/conditional_logic/');
+
+        $this->generator->generate($this->tree([
+            'toggle' => ['type' => 'boolean', 'label' => 'Toggle'],
+            'conditional_field' => [
+                'type' => 'text',
+                'label' => 'Conditional',
+                'wp' => ['conditional_logic' => 'bogus'],
+            ],
+        ], ['name' => 'Test']), 'test', 1700000000);
+    }
+
+    /** Same contract, a rule missing the required `field` key entirely (not merely empty). */
+    public function test_wp_conditional_logic_rule_missing_field_key_is_rejected(): void
+    {
+        $this->expectException(\Parisek\DefinitionKit\Generator\GenerationValidationException::class);
+        $this->expectExceptionMessageMatches('/conditional_logic/');
+
+        $this->generator->generate($this->tree([
+            'toggle' => ['type' => 'boolean', 'label' => 'Toggle'],
+            'conditional_field' => [
+                'type' => 'text',
+                'label' => 'Conditional',
+                'wp' => ['conditional_logic' => [[
+                    ['operator' => '==', 'value' => 1],
+                ]]],
+            ],
+        ], ['name' => 'Test']), 'test', 1700000000);
+    }
+
+    /**
+     * The already-correct rejection (empty string `field`) must keep
+     * working after the shape-validation pass is added — round 8 must
+     * not regress round 7's dangling-reference guard.
+     */
+    public function test_wp_conditional_logic_rule_with_empty_field_string_is_still_rejected(): void
+    {
+        $this->expectException(\Parisek\DefinitionKit\Generator\GenerationValidationException::class);
+        $this->expectExceptionMessageMatches('/conditional_logic/');
+
+        $this->generator->generate($this->tree([
+            'toggle' => ['type' => 'boolean', 'label' => 'Toggle'],
+            'conditional_field' => [
+                'type' => 'text',
+                'label' => 'Conditional',
+                'wp' => ['conditional_logic' => [[
+                    ['field' => '', 'operator' => '==', 'value' => 1],
+                ]]],
+            ],
+        ], ['name' => 'Test']), 'test', 1700000000);
+    }
+
+    /** A well-formed, resolvable shape (a single OR-group, two AND-rules) must still pass — shape validation must not be over-eager. */
+    public function test_wp_conditional_logic_well_formed_multi_rule_shape_still_works(): void
+    {
+        $group = $this->generator->generate($this->tree([
+            'toggle' => ['type' => 'boolean', 'label' => 'Toggle', 'key' => 'field_test_toggle_key'],
+            'other' => ['type' => 'boolean', 'label' => 'Other', 'key' => 'field_test_other_key'],
+            'conditional_field' => [
+                'type' => 'text',
+                'label' => 'Conditional',
+                'wp' => ['conditional_logic' => [
+                    [
+                        ['field' => 'field_test_toggle_key', 'operator' => '==', 'value' => '1'],
+                        ['field' => 'field_test_other_key', 'operator' => '==', 'value' => '1'],
+                    ],
+                ]],
+            ],
+        ], ['name' => 'Test']), 'test', 1700000000);
+
+        self::assertIsArray($group['fields'][2]['conditional_logic']);
+    }
 }
