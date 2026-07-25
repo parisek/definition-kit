@@ -16,6 +16,28 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   nesting machinery as an ordinary `group`/`repeater`, including
   `flexible_content` nested inside another `flexible_content`'s layout.
 
+### Changed
+
+- **Breaking.** The `wp:` escape hatch no longer accepts properties that carry
+  a node's identity or its cross-references. `key`, `name`, `type`, `fields`,
+  `sub_fields`, `layouts` and `parent_repeater` are rejected inside any `wp:`
+  block — at the root group, on a field at any nesting depth, and on a
+  flexible_content layout. Enforced identically by the JSON Schema
+  (`wpOverlay` `$def`) and by the generator (`RESERVED_WP_PROPS`), since
+  `fields-lint` and `fields-generate` take different code paths.
+
+  `wp:` is merged last with highest precedence, so any property it could
+  override became a way to desynchronise the generated tree from what the
+  generator derived. Identity now has exactly one path. The sanctioned
+  alternatives are unchanged and validated: top-level `key:` (`^field_` /
+  `^layout_` / `^group_`), `name` derived from the YAML map key, the semantic
+  `type:` enum, and `wp.acf_type` as the ACF-type disambiguator.
+
+  No migration needed: verified against every committed definition in the
+  downstream fleet (174 across five projects) — none authors any reserved
+  property inside `wp:`. `wp.accordions` is deliberately untouched (38 uses in
+  that fleet); its residual overlay now excludes the same reserved set.
+
 ### Fixed
 
 - Generator now enforces GLOBAL key uniqueness across an entire generated
@@ -44,6 +66,26 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   against the ecosystem's canonical ACF-shape validator — closing the gap
   that let the `display`/`location` and schema-parity regressions above ship
   unnoticed.
+- `wp.key` no longer desynchronises `conditional_logic`. The sibling
+  name-to-key map was built from pre-overlay keys, so a field pinning its key
+  through `wp:` emitted a `conditional_logic` reference to a key present
+  nowhere in the output — silent, shipped, and simply never fired in the
+  editor.
+- A root `wp: {fields: []}` no longer silently discards the entire generated
+  field tree, emitting an empty block with no error.
+- `wp: {sub_fields: [...]}` / `wp: {layouts: [...]}` can no longer smuggle
+  unvalidated nodes one level deeper, and `wp: {parent_repeater: ...}` can no
+  longer overwrite a derived cross-reference.
+- Sibling `name` collisions are caught by field shape rather than by an empty
+  name, so an ordinary field can no longer take the accordion carve-out.
+- `wp.conditional_logic` — the migration reader's documented fallback for ACF
+  conditional logic too complex to express as `visible_when` — is now
+  validated rather than trusted: the canonical OR-of-AND-rules shape is
+  enforced, and every referenced key must resolve in the generated tree. A
+  dangling reference throws instead of shipping a broken editor condition.
+- `fields-validate` and `fields-generate` no longer disagree. The
+  conditional-logic checks lived only in the generator's semantic pass, so a
+  definition could validate clean and then fail to generate.
 
 ## [0.2.1] - 2026-07-23
 
