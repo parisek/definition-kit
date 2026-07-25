@@ -6,6 +6,43 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **`flexible_content` now reconstructs `wpml_cf_preferences: 3`**, exactly
+  like `group`/`repeater` already did. Regenerating an existing project's
+  `acf.json` (`fields-generate`) will add this key to every
+  `flexible_content` field that lacked it or carried a different value —
+  unless the field's own `wp.wpml_cf_preferences` overlay is set, which
+  still wins (the escape hatch is applied last and is unchanged).
+
+  The value is not a doctrine guess: ACFML's
+  `field_should_be_set_to_copy_once()`
+  (`acfml/classes/class-wpml-acf-field-settings.php`) forces copy-once
+  identically for `repeater` and `flexible_content` at runtime, and `3` is
+  WPML's own `WPML_COPY_ONCE_CUSTOM_FIELD` constant
+  (`sitepress-multilingual-cms/inc/constants.php`). The generated JSON now
+  states what ACFML actually does, instead of omitting the key because
+  real-world hand-maintained exports were inconsistent about it (see issue
+  [#11](https://github.com/parisek/definition-kit/issues/11) for the
+  corpus census). `NO_AUTO_WPML_TYPES` is removed; `flexible_content`
+  joins `FieldReconstructor::CONTAINER_ACF_TYPES` and
+  `WpmlTranslatableMapper::CONTAINER_TYPES`.
+
+  Migration direction (`fields-migrate`, `AcfJsonReader`,
+  `MigrationCompletenessAuditor`) is unaffected — a source `acf.json`'s
+  `flexible_content.wpml_cf_preferences`, however inconsistent, still
+  round-trips verbatim into `wp.wpml_cf_preferences` on that side; only
+  generation (`yaml` -> `acf.json`) changed.
+
+- `fields-validate` now WARNs when `translatable:` is declared on a
+  `group`/`repeater`/`flexible_content` field. The property has always
+  been silently ignored for these container types (their
+  `wpml_cf_preferences` is always the container value, not derived from
+  `translatable`) — it was previously dropped without comment. The new
+  `TranslatableInertLinter` surfaces it instead of staying silent, without
+  failing validation (`translatable:` there doesn't produce an incorrect
+  `acf.json`, it just does nothing).
+
 ## [0.3.0] - 2026-07-25
 
 ### Added

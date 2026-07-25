@@ -164,4 +164,86 @@ final class FieldsValidateCliTest extends TestCase
         self::assertSame(0, $exitCode);
         self::assertStringContainsString('OK   ', $output);
     }
+
+    /**
+     * Issue #11 secondary concern — `translatable:` on a `flexible_content`
+     * field is inert (ACFML always forces copy-once). Must WARN, not fail,
+     * and must not be silently dropped.
+     */
+    public function test_translatable_on_flexible_content_warns_but_still_exits_zero(): void
+    {
+        $path = $this->writeYaml('demo', <<<YAML
+        name: Demo
+        kind: element
+        fields:
+          items:
+            type: flexible_content
+            label: Items
+            translatable: true
+            layouts:
+              title:
+                label: Title layout
+                fields:
+                  title:
+                    type: text
+                    label: Title
+        YAML);
+
+        [$output, $exitCode] = $this->runCli($path);
+
+        self::assertSame(0, $exitCode);
+        self::assertStringContainsString('OK   ', $output);
+        self::assertStringContainsString('[warning]', $output);
+        self::assertStringContainsString('translatable', $output);
+        self::assertStringContainsString('items', $output);
+    }
+
+    /** Same inert-translatable warning fires identically for repeater/group — not special-cased to flexible_content. */
+    public function test_translatable_on_repeater_warns_same_as_flexible_content(): void
+    {
+        $path = $this->writeYaml('demo', <<<YAML
+        name: Demo
+        kind: element
+        fields:
+          items:
+            type: repeater
+            label: Items
+            translatable: true
+            fields:
+              title:
+                type: text
+                label: Title
+        YAML);
+
+        [$output, $exitCode] = $this->runCli($path);
+
+        self::assertSame(0, $exitCode);
+        self::assertStringContainsString('[warning]', $output);
+        self::assertStringContainsString('repeater', $output);
+    }
+
+    /** No `translatable:` declared at all — no inert-property warning. */
+    public function test_flexible_content_without_translatable_has_no_inert_warning(): void
+    {
+        $path = $this->writeYaml('demo', <<<YAML
+        name: Demo
+        kind: element
+        fields:
+          items:
+            type: flexible_content
+            label: Items
+            layouts:
+              title:
+                label: Title layout
+                fields:
+                  title:
+                    type: text
+                    label: Title
+        YAML);
+
+        [$output, $exitCode] = $this->runCli($path);
+
+        self::assertSame(0, $exitCode);
+        self::assertStringNotContainsString('translatable', $output);
+    }
 }

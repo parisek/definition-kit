@@ -159,10 +159,16 @@ final class MigrationCompletenessAuditor
             }
 
             $rawWpml = $acfField['wpml_cf_preferences'] ?? null;
-            // flexible_content is excluded — see FieldReconstructor::NO_AUTO_WPML_TYPES
-            // and AcfJsonReader's own wpml exclusion for the corpus rationale;
-            // whatever value is present survives via the generic "everything
-            // else" leftover/wp: check at the bottom of this method instead.
+            // flexible_content is excluded from THIS reconstruction check —
+            // see AcfJsonReader's own wpml exclusion for the corpus
+            // rationale (real-world exports are inconsistent, unlike what
+            // ACFML actually enforces at runtime); whatever value is
+            // present survives via the generic "everything else"
+            // leftover/wp: check at the bottom of this method instead. This
+            // is independent of Generator\FieldReconstructor, which (as of
+            // the ACFML-authority fix) DOES now auto-reconstruct
+            // flexible_content's wpml_cf_preferences to 3 on the
+            // yaml -> acf.json generation path.
             if ('flexible_content' !== $type && is_int($rawWpml) && $this->wpmlMapper->isCanonical($type, $rawWpml)) {
                 $accounted[] = 'wpml_cf_preferences';
                 if ($reconstructed['wpml_cf_preferences'] !== $rawWpml) {
