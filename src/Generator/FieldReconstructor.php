@@ -22,22 +22,26 @@ use Parisek\DefinitionKit\Migration\WpmlTranslatableMapper;
  */
 final class FieldReconstructor
 {
-    private const CONTAINER_ACF_TYPES = ['group', 'repeater'];
-
     /**
-     * flexible_content's own `wpml_cf_preferences` is deliberately NEVER
-     * auto-reconstructed here — unlike group/repeater (always the
-     * container value `3`) or every leaf type (always 1/2), real ACF
-     * exports are genuinely inconsistent for this one field type (absent
-     * entirely on some components, a leaf-shaped 1/2 on others, never `3`
-     * — see acf-defaults-baseline.yaml's flexible_content comment for the
-     * corpus census). Whatever value (or absence) the source had is
-     * captured verbatim in the field's own `wp.wpml_cf_preferences` by
-     * Migration\AcfJsonReader and re-applied by
-     * Generator\FieldsGenerator's `wp:` overlay — this class simply never
-     * emits a default that would be wrong for roughly half the corpus.
+     * Field types whose `wpml_cf_preferences` always reconstructs to the
+     * container value `3`, regardless of `translatable`. ACFML forces
+     * copy-once for exactly these types at runtime —
+     * `field_should_be_set_to_copy_once()` in
+     * acfml/classes/class-wpml-acf-field-settings.php treats
+     * `['repeater', 'flexible_content']` identically (mirroring
+     * `Helper\Fields::WRAPPER_FIELDS`), and `WPML_COPY_ONCE_CUSTOM_FIELD`
+     * is `3`. `group` isn't in ACFML's list but WPML/ACF treat it the same
+     * way in practice, so it stays here too. Emitting `3` makes the
+     * generated JSON state what actually happens at runtime, even though
+     * real-world ACF exports for `flexible_content` are inconsistent (see
+     * acf-defaults-baseline.yaml's flexible_content comment for the
+     * corpus census) — that inconsistency is drift to normalise, not a
+     * reason to withhold a default. A field's own `wp.wpml_cf_preferences`
+     * (captured verbatim by Migration\AcfJsonReader) still overrides this
+     * via Generator\FieldsGenerator's `wp:` overlay, which is applied
+     * last.
      */
-    private const NO_AUTO_WPML_TYPES = ['flexible_content'];
+    private const CONTAINER_ACF_TYPES = ['group', 'repeater', 'flexible_content'];
 
     public function __construct(
         private readonly AbstractTypeReverseMapper $typeMapper = new AbstractTypeReverseMapper(),
@@ -63,12 +67,10 @@ final class FieldReconstructor
         $out['instructions'] = (string) ($semanticField['description'] ?? '');
 
         $isContainer = in_array($acfType, self::CONTAINER_ACF_TYPES, true);
-        if (!in_array($acfType, self::NO_AUTO_WPML_TYPES, true)) {
-            $out['wpml_cf_preferences'] = $this->wpmlMapper->toWpmlPreference(
-                $acfType,
-                !$isContainer && true === ($semanticField['translatable'] ?? false),
-            );
-        }
+        $out['wpml_cf_preferences'] = $this->wpmlMapper->toWpmlPreference(
+            $acfType,
+            !$isContainer && true === ($semanticField['translatable'] ?? false),
+        );
 
         if (isset($semanticField['maxlength'])) {
             $out['maxlength'] = (int) $semanticField['maxlength'];

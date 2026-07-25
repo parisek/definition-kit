@@ -14,7 +14,8 @@ namespace Parisek\DefinitionKit\Migration;
  *
  * The canonical shape per field kind:
  *   - leaf field:      `2` <-> translatable:true ; `1` <-> translatable absent/false
- *   - container (group/repeater): `3`, implied by type — no `translatable` emitted
+ *   - container (group/repeater/flexible_content): `3`, implied by type —
+ *                        no `translatable` emitted
  *   - accordion:        `0`, dropped (accordions never reach this mapper — the
  *                        pseudo-field is filtered out before readField()/audit())
  *
@@ -22,10 +23,23 @@ namespace Parisek\DefinitionKit\Migration;
  * or `0`, or a container carrying `2`) is ANOMALOUS — it must NOT be
  * consumed/lifted; it stays verbatim under `wp.wpml_cf_preferences` so it
  * round-trips losslessly instead of being silently coerced or dropped.
+ *
+ * `flexible_content` is included in CONTAINER_TYPES because ACFML forces
+ * it to copy-once (`3`) identically to `repeater` at runtime — see
+ * Generator\FieldReconstructor::CONTAINER_ACF_TYPES for the plugin-source
+ * citation. Migration\AcfJsonReader and
+ * Migration\MigrationCompletenessAuditor both guard their call sites with
+ * an explicit `'flexible_content' !== $type` check BEFORE calling into
+ * this mapper, so this addition does not change migration-direction
+ * (acf.json -> yaml) behaviour: a real-world `flexible_content` field's
+ * `wpml_cf_preferences`, however inconsistent, still always round-trips
+ * verbatim into `wp.wpml_cf_preferences` on that side. Only the generator
+ * direction (yaml -> acf.json, which has no such guard) is affected —
+ * which is the intended behaviour change.
  */
 final class WpmlTranslatableMapper
 {
-    private const CONTAINER_TYPES = ['group', 'repeater'];
+    private const CONTAINER_TYPES = ['group', 'repeater', 'flexible_content'];
 
     public function isCanonical(string $acfType, int $wpml): bool
     {

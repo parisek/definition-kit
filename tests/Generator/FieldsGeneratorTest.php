@@ -235,7 +235,7 @@ final class FieldsGeneratorTest extends TestCase
         self::assertSame('Add Položky', $itemsField['button_label']);
         self::assertSame(2, $itemsField['min']);
         self::assertSame(2, $itemsField['max']);
-        self::assertArrayNotHasKey('wpml_cf_preferences', $itemsField);
+        self::assertSame(3, $itemsField['wpml_cf_preferences']);
 
         self::assertCount(2, $itemsField['layouts']);
         [$titleLayout, $imageLayout] = $itemsField['layouts'];

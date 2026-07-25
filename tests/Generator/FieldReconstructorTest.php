@@ -54,16 +54,29 @@ final class FieldReconstructorTest extends TestCase
         self::assertSame(3, $out['wpml_cf_preferences']);
     }
 
-    public function test_flexible_content_never_reconstructs_wpml_cf_preferences(): void
+    public function test_flexible_content_reconstructs_wpml_cf_preferences_to_three(): void
     {
-        // Unlike group/repeater (always 3), flexible_content's own wpml
-        // is genuinely inconsistent across real corpus exports — never
-        // auto-emitted, whatever `translatable` says.
+        // ACFML forces flexible_content to copy-once (3) at runtime
+        // regardless of what the source declared — see
+        // acfml/classes/class-wpml-acf-field-settings.php
+        // field_should_be_set_to_copy_once(), which treats
+        // ['repeater', 'flexible_content'] identically. The generated
+        // JSON should state what actually happens, like it already does
+        // for group/repeater.
         $out = $this->reconstructor->reconstruct(
             ['type' => 'flexible_content', 'label' => 'T', 'translatable' => true, 'layouts' => []],
             [],
         );
-        self::assertArrayNotHasKey('wpml_cf_preferences', $out);
+        self::assertSame(3, $out['wpml_cf_preferences']);
+    }
+
+    public function test_flexible_content_reconstructs_wpml_cf_preferences_to_three_regardless_of_translatable(): void
+    {
+        $out = $this->reconstructor->reconstruct(
+            ['type' => 'flexible_content', 'label' => 'T', 'layouts' => []],
+            [],
+        );
+        self::assertSame(3, $out['wpml_cf_preferences']);
     }
 
     public function test_flexible_content_min_max_present_only_when_authored(): void

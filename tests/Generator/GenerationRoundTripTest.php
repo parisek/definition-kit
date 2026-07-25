@@ -181,14 +181,23 @@ final class GenerationRoundTripTest extends TestCase
         $result = $this->roundTrip("{$fixtureDir}/acf.json", 'split-content');
 
         $diffs = AcfJsonComparator::diff($result['original'], $result['regenerated']);
-        $residual = ['.hide_on_screen: expected [], got ""', '.show_in_rest: expected false, got 0', '.acfml_field_group_mode: unexpected in actual'];
+        $residual = [
+            '.hide_on_screen: expected [], got ""',
+            '.show_in_rest: expected false, got 0',
+            '.acfml_field_group_mode: unexpected in actual',
+            // Legacy export predates the ACFML-authority fix (issue #11):
+            // flexible_content now always reconstructs wpml_cf_preferences
+            // to 3 (matching ACFML's runtime copy-once enforcement), even
+            // though this real fixture's original export has none.
+            '.fields[0].wpml_cf_preferences: unexpected in actual',
+        ];
         $unexpected = array_values(array_diff($diffs, $residual));
         self::assertSame([], $unexpected, implode("\n", $unexpected));
 
         $items = $result['regenerated']['fields'][0];
         self::assertSame('items', $items['name']);
         self::assertSame('flexible_content', $items['type']);
-        self::assertArrayNotHasKey('wpml_cf_preferences', $items);
+        self::assertSame(3, $items['wpml_cf_preferences']);
         self::assertSame(
             ['title', 'image', 'cta', 'reference', 'contact'],
             array_column($items['layouts'], 'name'),
