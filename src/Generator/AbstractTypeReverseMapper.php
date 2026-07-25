@@ -36,6 +36,7 @@ final class AbstractTypeReverseMapper
             'date' => ['acfType' => 'date_picker', 'extra' => []],
             'group' => ['acfType' => 'group', 'extra' => []],
             'repeater' => $this->repeater($semanticField),
+            'flexible_content' => $this->flexibleContent($semanticField),
             default => throw new \DomainException(sprintf(
                 "Unsupported abstract type '%s' — add a case to AbstractTypeReverseMapper::reverse().",
                 $type,
@@ -150,5 +151,21 @@ final class AbstractTypeReverseMapper
             $extra['button_label'] = (string) $field['add_label'];
         }
         return ['acfType' => 'repeater', 'extra' => $extra];
+    }
+
+    /**
+     * Mirrors repeater() — flexible_content shares the identical
+     * add_label <-> button_label bijection.
+     *
+     * @param array<string,mixed> $field
+     * @return array{acfType: string, extra: array<string,mixed>}
+     */
+    private function flexibleContent(array $field): array
+    {
+        $extra = [];
+        if (!empty($field['add_label'])) {
+            $extra['button_label'] = (string) $field['add_label'];
+        }
+        return ['acfType' => 'flexible_content', 'extra' => $extra];
     }
 }

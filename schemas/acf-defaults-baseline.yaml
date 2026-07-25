@@ -152,6 +152,18 @@ group:
 repeater:
   rows_per_page: 20
 
+# flexible_content deliberately has NO baseline entry for
+# `wpml_cf_preferences` (unlike group/repeater, which always carry the
+# container value `3`) — a 4-project cross-corpus check
+# (split-content/box-price-reference vs. ettin/pm-a/perfectaparasols)
+# shows real ACF exports are genuinely inconsistent for this one field
+# type: absent entirely on two components, present as a leaf-shaped `1`
+# or `2` on three others, never observed as `3`. Generator\FieldReconstructor
+# and Migration\AcfJsonReader special-case flexible_content to leave this
+# prop alone entirely rather than force a default that would be wrong for
+# roughly half the observed corpus — see both classes' own docblocks.
+flexible_content: {}
+
 accordion:
   # entire pseudo-field type is dropped, not merged — kept here only for
   # documentation. multi_expand/endpoint/open are ACF UI accordion knobs with

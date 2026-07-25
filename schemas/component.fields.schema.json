@@ -32,10 +32,17 @@
         "description": { "type": "string" },
         "weight": { "type": "integer" },
         "responsive": { "type": "boolean" },
-        "wp": { "type": "object" },
+        "wp": { "$ref": "#/$defs/wpOverlay" },
         "fields": { "$ref": "#/$defs/fieldMap" }
     },
     "$defs": {
+        "wpOverlay": {
+            "type": "object",
+            "propertyNames": {
+                "not": { "enum": ["key", "name", "type", "fields", "sub_fields", "layouts", "parent_repeater"] }
+            },
+            "description": "`wp:` is a fully open escape-hatch object merged with HIGHEST precedence over every derived/reconstructed prop. Two classes of prop are reserved: scalar identity (`key`/`name`/`type` — a field's WHOLE identity: ACF postmeta key, postmeta name, field-shape discriminator) and structural containers (`fields`/`sub_fields`/`layouts` — which carry the identity of NESTED nodes one level down, so letting `wp:` overwrite them is the exact same hazard one level removed) plus `parent_repeater` (ACF-computed structural metadata re-derived from nesting on every generation; it has no legitimate authoring path at all). Letting `wp:` override any of these gives identity two independent, silently-diverging paths (seven review rounds each found a new bug of this exact shape — round 7 found the ROOT-level `wp:` bag wasn't covered at all, plus the field/layout-level bypasses via the structural props). Use the sanctioned top-level prop instead: `key:` (pattern ^field_/^layout_/^group_) to pin a key, the YAML field-map key (or a layout's own `name:`) to control the name, the top-level `type:` enum to pick the field shape, and the field/layout's own `fields:`/`layouts:` map to author nested content — never `wp:`. `wp.conditional_logic` is deliberately NOT reserved here — see FieldsGenerator's own dangling-reference validation, which is the correctness gate for that prop instead."
+        },
         "fieldMap": {
             "type": "object",
             "minProperties": 1,
@@ -73,7 +80,7 @@
             "additionalProperties": false,
             "properties": {
                 "type": {
-                    "enum": ["text", "richtext", "number", "boolean", "select", "media", "link", "reference", "group", "repeater", "date"]
+                    "enum": ["text", "richtext", "number", "boolean", "select", "media", "link", "reference", "group", "repeater", "flexible_content", "date"]
                 },
                 "role": { "enum": ["field", "query", "computed", "global"] },
                 "label": { "type": "string", "minLength": 1 },
@@ -105,8 +112,9 @@
                 "resolved_from": { "type": "array", "items": { "type": "string" } },
                 "source": { "type": "string" },
                 "demo": {},
-                "wp": { "type": "object" },
-                "fields": { "$ref": "#/$defs/fieldMap" }
+                "wp": { "$ref": "#/$defs/wpOverlay" },
+                "fields": { "$ref": "#/$defs/fieldMap" },
+                "layouts": { "$ref": "#/$defs/layoutMap" }
             },
             "allOf": [
                 {
@@ -116,8 +124,32 @@
                 {
                     "if": { "properties": { "type": { "enum": ["group", "repeater"] } }, "required": ["type"] },
                     "then": { "required": ["fields"] }
+                },
+                {
+                    "if": { "properties": { "type": { "const": "flexible_content" } }, "required": ["type"] },
+                    "then": { "required": ["layouts"] }
                 }
             ]
+        },
+        "layoutMap": {
+            "type": "object",
+            "minProperties": 1,
+            "propertyNames": { "pattern": "^[a-z][a-z0-9_]*$" },
+            "additionalProperties": { "$ref": "#/$defs/layout" }
+        },
+        "layout": {
+            "type": "object",
+            "required": ["fields", "label"],
+            "additionalProperties": false,
+            "properties": {
+                "label": { "type": "string", "minLength": 1 },
+                "key": { "type": "string", "pattern": "^layout_" },
+                "name": { "type": "string", "minLength": 1 },
+                "min": { "type": "integer", "minimum": 0 },
+                "max": { "type": "integer", "minimum": 0 },
+                "wp": { "$ref": "#/$defs/wpOverlay" },
+                "fields": { "$ref": "#/$defs/fieldMap" }
+            }
         }
     }
 }

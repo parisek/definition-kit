@@ -137,6 +137,26 @@ final class RootFieldGroupBuilder
     }
 
     /**
+     * Round 7 — the residual overlay used to exclude ONLY `key`/`label`/
+     * `open`/`before` (the props this method itself consumes for
+     * positioning/baseline construction). An accordion element sourced
+     * from `wp.accordions` — hand-authored or produced by a future
+     * migration bug — could therefore carry `type`/`name`/`fields`/
+     * `sub_fields`/`layouts`/`parent_repeater` and have them overlaid
+     * verbatim onto the pseudo-field, impersonating an arbitrary field
+     * shape (e.g. `type: text, name: bogus_child` smuggling a real field
+     * in through the accordion channel) despite `accordionBaseline()`
+     * fixing `type: 'accordion'` / `name: ''` immediately above. Mirrors
+     * {@see FieldsGenerator::RESERVED_WP_PROPS} — same reserved set, same
+     * "identity/structure has exactly one source" rule, applied to this
+     * accordion-residual code path instead of an ordinary field's `wp:`.
+     */
+    private const ACCORDION_RESIDUAL_EXCLUDED_PROPS = [
+        'key', 'label', 'open', 'before',
+        'type', 'name', 'fields', 'sub_fields', 'layouts', 'parent_repeater',
+    ];
+
+    /**
      * @param array<string,mixed> $accordion
      * @return array<string,mixed>
      */
@@ -149,12 +169,15 @@ final class RootFieldGroupBuilder
         );
         // Overlay the captured non-derivable residual verbatim — instructions,
         // non-zero wpml_cf_preferences, multi_expand, … : any real ACF prop the
-        // migration self-diff found deviating from the baseline. Meta keys are
-        // consumed above (key/label/open) or used only for positioning
-        // (before), never overlaid. Reassigning an existing key keeps its
+        // migration self-diff found deviating from the baseline. Meta/reserved
+        // keys are consumed above (key/label/open), used only for positioning
+        // (before), or structurally fixed by accordionBaseline() and must have
+        // exactly one source (type/name/fields/sub_fields/layouts/
+        // parent_repeater — see ACCORDION_RESIDUAL_EXCLUDED_PROPS) — none of
+        // those are ever overlaid. Reassigning an existing key keeps its
         // position, so key order is unchanged.
         foreach ($accordion as $prop => $value) {
-            if (!in_array($prop, ['key', 'label', 'open', 'before'], true)) {
+            if (!in_array($prop, self::ACCORDION_RESIDUAL_EXCLUDED_PROPS, true)) {
                 $pseudo[$prop] = $value;
             }
         }

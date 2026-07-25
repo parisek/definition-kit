@@ -38,6 +38,9 @@ number:
 repeater:
   min: 0
   max: 0
+flexible_content:
+  min: 0
+  max: 0
 file:
   min_size: ''
   max_size: ''

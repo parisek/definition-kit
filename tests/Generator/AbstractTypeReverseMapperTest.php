@@ -166,6 +166,19 @@ final class AbstractTypeReverseMapperTest extends TestCase
         self::assertArrayNotHasKey('button_label', $result['extra']);
     }
 
+    public function test_flexible_content_rebuilds_button_label_from_add_label(): void
+    {
+        $result = $this->mapper->reverse(['type' => 'flexible_content', 'label' => 'T', 'add_label' => 'Add Položky']);
+        self::assertSame('flexible_content', $result['acfType']);
+        self::assertSame('Add Položky', $result['extra']['button_label']);
+    }
+
+    public function test_flexible_content_omits_button_label_extra_when_add_label_absent(): void
+    {
+        $result = $this->mapper->reverse(['type' => 'flexible_content', 'label' => 'T']);
+        self::assertArrayNotHasKey('button_label', $result['extra']);
+    }
+
     public function test_unsupported_abstract_type_throws(): void
     {
         $this->expectException(\DomainException::class);

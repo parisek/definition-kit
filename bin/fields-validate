@@ -3,6 +3,8 @@
 
 declare(strict_types=1);
 
+use Parisek\DefinitionKit\Generator\FieldsGenerator;
+use Parisek\DefinitionKit\Generator\GenerationValidationException;
 use Parisek\DefinitionKit\Lint\KindLinter;
 use Parisek\DefinitionKit\Schema\FieldsSchemaValidator;
 use Symfony\Component\Yaml\Yaml;
@@ -47,6 +49,36 @@ foreach ($paths as $path) {
         foreach ($findings as $finding) {
             echo "       [{$finding['severity']}] {$finding['message']}\n";
         }
+        continue;
+    }
+
+    // `wp.conditional_logic` parity with `fields-generate` — see the
+    // `component.fields.schema.json` `wpOverlay` $def for the reserved-props
+    // half of this precedent (a pure JSON-Schema shape check both tools share
+    // via FieldsSchemaValidator above) and FieldsGenerator's own
+    // `assertConditionalLogicReferencesResolve()` docblock for why
+    // conditional_logic gets a validation gate instead of an outright ban.
+    //
+    // Shape validation (malformed conditional_logic) is a static check with
+    // no dependency on the assembled field tree. Reference RESOLUTION (does
+    // `field: X` name a key that actually exists) is NOT static — ACF field
+    // keys are derived through FieldsGenerator::deriveOrPinKey()'s full
+    // precedence chain (authored `key:`, the `wp.key` escape hatch, or a
+    // convention-derived dotted name-chain join), the exact same computation
+    // `siblingKeyMap()` / `buildField()` perform while assembling the tree.
+    // There is no lighter-weight way to know "what keys exist" than building
+    // that tree. Rather than re-implement key derivation a second time here
+    // (which is exactly the kind of split-brain this fix exists to close),
+    // this calls FieldsGenerator::generate() directly — a pure, side-effect-
+    // free computation (nothing is written to disk; only `fields-generate`
+    // persists the result via AcfJsonWriter/BlockJsonWriter). Both the shape
+    // check and the reference-resolution check therefore ride the same call.
+    try {
+        (new FieldsGenerator())->generate($definition, basename($path, '.yaml'), 0);
+    } catch (GenerationValidationException $e) {
+        $failed = true;
+        echo "FAIL {$path}\n";
+        echo "       {$e->getMessage()}\n";
         continue;
     }
 

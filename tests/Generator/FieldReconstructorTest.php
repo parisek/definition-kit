@@ -54,6 +54,29 @@ final class FieldReconstructorTest extends TestCase
         self::assertSame(3, $out['wpml_cf_preferences']);
     }
 
+    public function test_flexible_content_never_reconstructs_wpml_cf_preferences(): void
+    {
+        // Unlike group/repeater (always 3), flexible_content's own wpml
+        // is genuinely inconsistent across real corpus exports — never
+        // auto-emitted, whatever `translatable` says.
+        $out = $this->reconstructor->reconstruct(
+            ['type' => 'flexible_content', 'label' => 'T', 'translatable' => true, 'layouts' => []],
+            [],
+        );
+        self::assertArrayNotHasKey('wpml_cf_preferences', $out);
+    }
+
+    public function test_flexible_content_min_max_present_only_when_authored(): void
+    {
+        $withoutIt = $this->reconstructor->reconstruct(['type' => 'flexible_content', 'label' => 'T'], []);
+        self::assertArrayNotHasKey('min', $withoutIt);
+        self::assertArrayNotHasKey('max', $withoutIt);
+
+        $withIt = $this->reconstructor->reconstruct(['type' => 'flexible_content', 'label' => 'T', 'min' => 2, 'max' => 2], []);
+        self::assertSame(2, $withIt['min']);
+        self::assertSame(2, $withIt['max']);
+    }
+
     public function test_maxlength_present_only_when_authored(): void
     {
         $withoutIt = $this->reconstructor->reconstruct(['type' => 'text', 'label' => 'T'], []);

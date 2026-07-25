@@ -412,4 +412,314 @@ final class AcfJsonReaderTest extends TestCase
             'sub_fields' => [['key' => 'field_demo_g_acc', 'name' => '', 'type' => 'accordion', 'label' => 'S']],
         ]]), 'demo');
     }
+
+    // --- flexible_content ---------------------------------------------
+
+    public function test_flexible_content_lifts_layouts_keyed_by_name(): void
+    {
+        $tree = $this->reader->read($this->group([[
+            'key' => 'field_demo_items', 'name' => 'items', 'label' => 'Položky', 'type' => 'flexible_content',
+            'button_label' => 'Add Položky', 'min' => 2, 'max' => 2,
+            'layouts' => [
+                [
+                    'key' => 'layout_demo_items_title', 'name' => 'title', 'label' => 'Nadpis', 'display' => 'block',
+                    'sub_fields' => [
+                        ['key' => 'field_demo_items_title_title', 'name' => 'title', 'label' => 'Nadpis', 'type' => 'text'],
+                    ],
+                    'min' => '', 'max' => '', 'location' => null,
+                ],
+                [
+                    'key' => 'layout_demo_items_image', 'name' => 'image', 'label' => 'Obrázek', 'display' => 'block',
+                    'sub_fields' => [
+                        ['key' => 'field_demo_items_image_image', 'name' => 'image', 'label' => 'Obrázek', 'type' => 'image'],
+                    ],
+                    'min' => '', 'max' => '', 'location' => null,
+                ],
+            ],
+        ]]), 'demo');
+
+        $items = $tree['fields']['items'];
+        self::assertSame('flexible_content', $items['type']);
+        self::assertSame('Add Položky', $items['add_label']);
+        self::assertSame(2, $items['min']);
+        self::assertSame(2, $items['max']);
+        self::assertSame(['title', 'image'], array_keys($items['layouts']));
+        self::assertSame('Nadpis', $items['layouts']['title']['label']);
+        // Finding 1 (round 3) — a layout's key is ALWAYS pinned, even when
+        // it matches the derived convention. Unlike ordinary fields (whose
+        // `name` IS the identity, so omit-if-matching is safe), a layout's
+        // YAML map key is cosmetic — only `key` is the real ACF identity.
+        // Always pinning means renaming the map key later can never
+        // silently re-derive a different key. See
+        // test_flexible_content_layout_key_is_pinned_even_when_matching_convention_so_renaming_the_map_key_is_safe.
+        self::assertSame('layout_demo_items_title', $items['layouts']['title']['key']);
+        self::assertSame('text', $items['layouts']['title']['fields']['title']['type']);
+        self::assertSame('media', $items['layouts']['image']['fields']['image']['type']);
+        self::assertSame('image', $items['layouts']['image']['fields']['image']['kind']);
+    }
+
+    public function test_flexible_content_layout_key_deviating_from_convention_is_pinned(): void
+    {
+        $tree = $this->reader->read($this->group([[
+            'key' => 'field_demo_items', 'name' => 'items', 'label' => 'Položky', 'type' => 'flexible_content',
+            'layouts' => [[
+                'key' => 'layout_demo_legacy_hash_abc123', 'name' => 'title', 'label' => 'Nadpis', 'display' => 'block',
+                'sub_fields' => [
+                    ['key' => 'field_demo_items_title_title', 'name' => 'title', 'label' => 'Nadpis', 'type' => 'text'],
+                ],
+            ]],
+        ]]), 'demo');
+
+        self::assertSame('layout_demo_legacy_hash_abc123', $tree['fields']['items']['layouts']['title']['key']);
+    }
+
+    /**
+     * Finding 1 (round 3, CRITICAL) — the regression this pinning fix
+     * exists for. Migrate a layout whose ACF key happens to already match
+     * the derived convention (so, pre-fix, AcfJsonReader would NOT have
+     * pinned it), then simulate a maintainer renaming the layout's YAML
+     * map key (`title` -> `heading`) — a routine, innocent-looking
+     * refactor. Assert the migrated layout's `key` is present and
+     * unchanged by that rename: FieldsGenerator must regenerate the exact
+     * same `layout_demo_items_title` key regardless of the map key,
+     * because AcfJsonReader always pins it verbatim at migration time.
+     * Before the fix, this key would silently re-derive to
+     * `layout_demo_items_heading`, orphaning any `acf_fc_layout: "title"`
+     * postmeta already stored in production.
+     */
+    public function test_flexible_content_layout_key_is_pinned_even_when_matching_convention_so_renaming_the_map_key_is_safe(): void
+    {
+        $tree = $this->reader->read($this->group([[
+            'key' => 'field_demo_items', 'name' => 'items', 'label' => 'Položky', 'type' => 'flexible_content',
+            'layouts' => [[
+                'key' => 'layout_demo_items_title', 'name' => 'title', 'label' => 'Nadpis', 'display' => 'block',
+                'sub_fields' => [
+                    ['key' => 'field_demo_items_title_title', 'name' => 'title', 'label' => 'Nadpis', 'type' => 'text'],
+                ],
+            ]],
+        ]]), 'demo');
+
+        $migratedLayout = $tree['fields']['items']['layouts']['title'];
+        self::assertSame('layout_demo_items_title', $migratedLayout['key']);
+
+        // Simulate the maintainer renaming the map key post-migration —
+        // the YAML the generator now sees carries the SAME pinned `key`
+        // under a different map key.
+        $renamedLayouts = ['heading' => $migratedLayout];
+        $renamedTree = $tree;
+        $renamedTree['fields']['items']['layouts'] = $renamedLayouts;
+
+        $generated = (new \Parisek\DefinitionKit\Generator\FieldsGenerator())->generate($renamedTree, 'demo', 1);
+        $regeneratedLayout = $generated['fields'][0]['layouts'][0];
+
+        self::assertSame(
+            'layout_demo_items_title',
+            $regeneratedLayout['key'],
+            'Renaming the layout map key must not change its ACF key — otherwise '
+            . 'every acf_fc_layout="title" value already stored in postmeta is orphaned.',
+        );
+    }
+
+    /**
+     * Finding 1 (round 4, CRITICAL) — the round-3 fix pinned the layout's
+     * `key` but left the layout's ACF `name` derived from the YAML map key.
+     * `FieldsGenerator::buildLayouts()` emits `'name' => (string) $layoutName`
+     * — the map key IS the regenerated ACF `name`. WordPress stores
+     * `acf_fc_layout` postmeta BY NAME, not by key, so renaming the map key
+     * silently changes what every existing content row's `acf_fc_layout`
+     * value must match against — exactly the same class of orphaning the
+     * key-pin was meant to prevent, just on the other identity half.
+     *
+     * This asserts the name-preservation half directly: migrate a layout,
+     * rename its YAML map key (an innocent-looking refactor), regenerate,
+     * and require the regenerated ACF `name` to still be the ORIGINAL
+     * `title` — not the renamed map key `heading`. Before this fix, the
+     * regenerated `name` silently became `heading`, orphaning any
+     * `acf_fc_layout: "title"` postmeta already stored in production and
+     * breaking every `{% if layout.acf_fc_layout == 'title' %}` Twig branch.
+     */
+    public function test_flexible_content_layout_name_is_pinned_so_renaming_the_map_key_does_not_orphan_acf_fc_layout(): void
+    {
+        $tree = $this->reader->read($this->group([[
+            'key' => 'field_demo_items', 'name' => 'items', 'label' => 'Položky', 'type' => 'flexible_content',
+            'layouts' => [[
+                'key' => 'layout_demo_items_title', 'name' => 'title', 'label' => 'Nadpis', 'display' => 'block',
+                'sub_fields' => [
+                    ['key' => 'field_demo_items_title_title', 'name' => 'title', 'label' => 'Nadpis', 'type' => 'text'],
+                ],
+            ]],
+        ]]), 'demo');
+
+        $migratedLayout = $tree['fields']['items']['layouts']['title'];
+
+        // Simulate the maintainer renaming the map key post-migration.
+        $renamedLayouts = ['heading' => $migratedLayout];
+        $renamedTree = $tree;
+        $renamedTree['fields']['items']['layouts'] = $renamedLayouts;
+
+        $generated = (new \Parisek\DefinitionKit\Generator\FieldsGenerator())->generate($renamedTree, 'demo', 1);
+        $regeneratedLayout = $generated['fields'][0]['layouts'][0];
+
+        self::assertSame(
+            'title',
+            $regeneratedLayout['name'],
+            'Renaming the layout map key must not change its ACF name — otherwise '
+            . 'every acf_fc_layout="title" value already stored in postmeta is orphaned '
+            . 'and every Twig branch on acf_fc_layout breaks.',
+        );
+    }
+
+    public function test_flexible_content_min_max_zero_is_omitted_as_acf_no_limit_sentinel(): void
+    {
+        $tree = $this->reader->read($this->group([[
+            'key' => 'field_demo_items', 'name' => 'items', 'label' => 'Položky', 'type' => 'flexible_content',
+            'min' => 0, 'max' => 0,
+            'layouts' => [[
+                'key' => 'layout_demo_items_title', 'name' => 'title', 'label' => 'Nadpis', 'display' => 'block',
+                'sub_fields' => [
+                    ['key' => 'field_demo_items_title_title', 'name' => 'title', 'label' => 'Nadpis', 'type' => 'text'],
+                ],
+            ]],
+        ]]), 'demo');
+        self::assertArrayNotHasKey('min', $tree['fields']['items']);
+        self::assertArrayNotHasKey('max', $tree['fields']['items']);
+    }
+
+    public function test_flexible_content_wpml_cf_preferences_is_never_lifted_to_translatable(): void
+    {
+        // Real corpus shows 1/2 on some projects, absent on others, never 3
+        // — never lift to `translatable`, whatever value is present.
+        $tree = $this->reader->read($this->group([[
+            'key' => 'field_demo_items', 'name' => 'items', 'label' => 'Položky', 'type' => 'flexible_content',
+            'wpml_cf_preferences' => 2,
+            'layouts' => [[
+                'key' => 'layout_demo_items_title', 'name' => 'title', 'label' => 'Nadpis', 'display' => 'block',
+                'sub_fields' => [
+                    ['key' => 'field_demo_items_title_title', 'name' => 'title', 'label' => 'Nadpis', 'type' => 'text'],
+                ],
+            ]],
+        ]]), 'demo');
+        self::assertArrayNotHasKey('translatable', $tree['fields']['items']);
+        self::assertSame(2, $tree['fields']['items']['wp']['wpml_cf_preferences']);
+    }
+
+    public function test_flexible_content_absent_wpml_cf_preferences_leaves_no_wp_trace(): void
+    {
+        $tree = $this->reader->read($this->group([[
+            'key' => 'field_demo_items', 'name' => 'items', 'label' => 'Položky', 'type' => 'flexible_content',
+            'layouts' => [[
+                'key' => 'layout_demo_items_title', 'name' => 'title', 'label' => 'Nadpis', 'display' => 'block',
+                'sub_fields' => [
+                    ['key' => 'field_demo_items_title_title', 'name' => 'title', 'label' => 'Nadpis', 'type' => 'text'],
+                ],
+            ]],
+        ]]), 'demo');
+        self::assertArrayNotHasKey('wpml_cf_preferences', $tree['fields']['items']['wp'] ?? []);
+    }
+
+    public function test_flexible_content_layout_sub_field_carries_no_parent_repeater_key_expectation(): void
+    {
+        // Nested key derivation treats the layout name as just another
+        // nesting segment — field_<slug>_<fcName>_<layoutName>_<subName>.
+        $tree = $this->reader->read($this->group([[
+            'key' => 'field_demo_items', 'name' => 'items', 'label' => 'Položky', 'type' => 'flexible_content',
+            'layouts' => [[
+                'key' => 'layout_demo_items_cta', 'name' => 'cta', 'label' => 'CTA', 'display' => 'block',
+                'sub_fields' => [
+                    ['key' => 'field_demo_items_cta_title', 'name' => 'title', 'label' => 'Nadpis', 'type' => 'text'],
+                ],
+            ]],
+        ]]), 'demo');
+        self::assertArrayNotHasKey('key', $tree['fields']['items']['layouts']['cta']['fields']['title']);
+    }
+
+    public function test_flexible_content_with_zero_layouts_throws(): void
+    {
+        $this->expectException(\RuntimeException::class);
+        $this->reader->read($this->group([[
+            'key' => 'field_demo_items', 'name' => 'items', 'label' => 'Položky', 'type' => 'flexible_content',
+            'layouts' => [],
+        ]]), 'demo');
+    }
+
+    public function test_flexible_content_layout_with_zero_non_accordion_sub_fields_throws(): void
+    {
+        $this->expectException(\RuntimeException::class);
+        $this->reader->read($this->group([[
+            'key' => 'field_demo_items', 'name' => 'items', 'label' => 'Položky', 'type' => 'flexible_content',
+            'layouts' => [[
+                'key' => 'layout_demo_items_empty', 'name' => 'empty', 'label' => 'Empty', 'display' => 'block',
+                'sub_fields' => [['key' => 'field_demo_items_empty_acc', 'name' => '', 'type' => 'accordion', 'label' => 'S']],
+            ]],
+        ]]), 'demo');
+    }
+
+    /**
+     * Finding B (CRITICAL) — two layouts sharing the same `name` collapse
+     * into one PHP array key (`$out[$layoutName] = …`) with no collision
+     * check: the earlier layout AND its key silently vanish. Reproduced
+     * live against a synthetic ACF export by an adversarial reviewer.
+     * The reader must throw, matching the style of the adjacent
+     * empty-layouts / empty-sub-fields guards above.
+     */
+    public function test_flexible_content_duplicate_layout_names_throws_instead_of_silently_overwriting(): void
+    {
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessageMatches('/duplicate/i');
+
+        $this->reader->read($this->group([[
+            'key' => 'field_demo_items', 'name' => 'items', 'label' => 'Položky', 'type' => 'flexible_content',
+            'layouts' => [
+                [
+                    'key' => 'layout_demo_items_title_v1', 'name' => 'title', 'label' => 'Nadpis V1', 'display' => 'block',
+                    'sub_fields' => [
+                        ['key' => 'field_demo_items_title_v1_a', 'name' => 'a', 'label' => 'A', 'type' => 'text'],
+                    ],
+                ],
+                [
+                    'key' => 'layout_demo_items_title_v2', 'name' => 'title', 'label' => 'Nadpis V2', 'display' => 'block',
+                    'sub_fields' => [
+                        ['key' => 'field_demo_items_title_v2_b', 'name' => 'b', 'label' => 'B', 'type' => 'text'],
+                    ],
+                ],
+            ],
+        ]]), 'demo');
+    }
+
+    /**
+     * Finding C (CRITICAL) — a layout authored with a non-default
+     * `display` (`table` / `row`) must round-trip verbatim, not be
+     * silently dropped (the generator side currently hardcodes `block`
+     * unconditionally, so the reader must actually capture the raw
+     * value for the round-trip to be possible at all).
+     */
+    public function test_flexible_content_layout_non_default_display_is_captured(): void
+    {
+        $tree = $this->reader->read($this->group([[
+            'key' => 'field_demo_items', 'name' => 'items', 'label' => 'Položky', 'type' => 'flexible_content',
+            'layouts' => [[
+                'key' => 'layout_demo_items_title', 'name' => 'title', 'label' => 'Nadpis', 'display' => 'table',
+                'sub_fields' => [
+                    ['key' => 'field_demo_items_title_title', 'name' => 'title', 'label' => 'Nadpis', 'type' => 'text'],
+                ],
+            ]],
+        ]]), 'demo');
+
+        self::assertSame('table', $tree['fields']['items']['layouts']['title']['wp']['display']);
+    }
+
+    public function test_flexible_content_layout_default_display_leaves_no_wp_trace(): void
+    {
+        $tree = $this->reader->read($this->group([[
+            'key' => 'field_demo_items', 'name' => 'items', 'label' => 'Položky', 'type' => 'flexible_content',
+            'layouts' => [[
+                'key' => 'layout_demo_items_title', 'name' => 'title', 'label' => 'Nadpis', 'display' => 'block',
+                'sub_fields' => [
+                    ['key' => 'field_demo_items_title_title', 'name' => 'title', 'label' => 'Nadpis', 'type' => 'text'],
+                ],
+            ]],
+        ]]), 'demo');
+
+        self::assertArrayNotHasKey('wp', $tree['fields']['items']['layouts']['title']);
+    }
 }

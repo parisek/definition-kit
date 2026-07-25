@@ -33,7 +33,7 @@
             "required": 0,
             "conditional_logic": false,
             "wrapper": { "width": "", "class": "", "id": "" },
-            "wpml_cf_preferences": 2,
+            "wpml_cf_preferences": 1,
             "return_format": "array",
             "preview_size": "medium",
             "insert": "append",
