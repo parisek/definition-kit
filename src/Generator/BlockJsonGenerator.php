@@ -86,10 +86,13 @@ final class BlockJsonGenerator
         // section replaces the derived one verbatim; reassigning an existing
         // key preserves its position, so key order is unchanged. `wp.block`
         // absent → byte-identical to the pure derivation above (no-regression
-        // for the reference set). Only these three sections are ever captured;
-        // `array_key_exists` honours a captured `null`.
+        // for the reference set). `array_key_exists` honours a captured
+        // `null` — which is the whole point for `example`: a component whose
+        // preview is deliberately null (form-configurator, whose Vue app has
+        // no styleguide-shaped preview) must keep it even when regenerating
+        // from scratch, where preservation-from-disk has no file to read.
         $wpBlock = (array) (($definitionTree['wp'] ?? [])['block'] ?? []);
-        foreach (['acf', 'supports', 'attributes'] as $section) {
+        foreach (['acf', 'supports', 'attributes', 'example'] as $section) {
             if (array_key_exists($section, $wpBlock)) {
                 $block[$section] = $wpBlock[$section];
             }

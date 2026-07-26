@@ -22,14 +22,48 @@ function fields_migrate_one(string $componentDir, bool $dryRun): array
     $componentDir = rtrim($componentDir, '/');
     $componentName = basename($componentDir);
     $acfPath = "{$componentDir}/acf.json";
+    $blockPath = "{$componentDir}/block.json";
 
-    if (!is_file($acfPath)) {
-        return ['ok' => false, 'component' => $componentName, 'error' => "no acf.json at {$acfPath}"];
+    // A Gutenberg block with no editor fields has a block.json and no
+    // acf.json -- `divider`, `form-configurator`. Requiring acf.json locked
+    // out exactly the components definition-kit 0.4.0 made expressible, and
+    // left hand-transcribing the block residual into `wp.block` as the only
+    // way to adopt one. Only the case where NEITHER file exists is genuinely
+    // nothing to migrate.
+    if (!is_file($acfPath) && !is_file($blockPath)) {
+        return [
+            'ok' => false,
+            'component' => $componentName,
+            'error' => "no acf.json or block.json at {$componentDir}",
+        ];
     }
 
-    $decoded = json_decode(file_get_contents($acfPath), true);
-    if (!is_array($decoded)) {
-        return ['ok' => false, 'component' => $componentName, 'error' => 'invalid JSON in acf.json'];
+    if (is_file($acfPath)) {
+        $decoded = json_decode(file_get_contents($acfPath), true);
+        if (!is_array($decoded)) {
+            return ['ok' => false, 'component' => $componentName, 'error' => 'invalid JSON in acf.json'];
+        }
+    } else {
+        // Synthesise an empty ACF document. `title` is only a fallback --
+        // AcfJsonReader prefers the twig front-comment `name:` -- and the
+        // empty field map is what the definition should say: this component
+        // has no ACF-backed fields.
+        //
+        // It deliberately does NOT try to guess non-ACF inputs. A component
+        // like form-configurator takes nine values from timber_context(),
+        // and no file on disk records that; inferring provenance would be a
+        // guess, and a wrong `role:` is worse than an honest empty map the
+        // author then fills in. The CLI says so on stdout.
+        $blockDecodedForTitle = json_decode((string) file_get_contents($blockPath), true);
+        $decoded = [
+            // The derived key, so AcfJsonReader sees nothing worth pinning:
+            // there is no ACF group here, so the definition should not claim
+            // one. (It pins root `key` only when the real key differs from
+            // `group_<slug>`; an absent key would pin '' and fail ^group_.)
+            'key' => 'group_' . $componentName,
+            'title' => is_array($blockDecodedForTitle) ? (string) ($blockDecodedForTitle['title'] ?? '') : '',
+            'fields' => [],
+        ];
     }
 
     $twigPath = "{$componentDir}/{$componentName}.twig";
@@ -49,7 +83,6 @@ function fields_migrate_one(string $componentDir, bool $dryRun): array
     // supports / attributes the generator can't reproduce) into root
     // `wp.block`, so block.json round-trips losslessly. Absent/invalid
     // block.json or an all-derivable one leaves the tree untouched.
-    $blockPath = "{$componentDir}/block.json";
     if (is_file($blockPath)) {
         $blockDecoded = json_decode(file_get_contents($blockPath), true);
         if (is_array($blockDecoded)) {

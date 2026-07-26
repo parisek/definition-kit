@@ -61,6 +61,35 @@ final class BlockResidualCapturer
             }
         }
 
+        // `example` needs a different comparison from the three sections
+        // above. BlockJsonGenerator PRESERVES an existing block.json's
+        // example verbatim (issue #13), and it is handed the real file on
+        // line 52 -- so $derived['example'] always equals the real one and a
+        // diff against it can never fire. The question that matters is what
+        // a FROM-SCRATCH generation would produce, which is what happens
+        // when a project regenerates before block.json exists.
+        //
+        // That case is real: `form-configurator` needs `example: null` (its
+        // Vue app has no styleguide-shaped preview, so Gutenberg should show
+        // the icon rather than a broken placeholder), and a from-scratch
+        // generation derives a non-null example instead. Without capturing
+        // it, adopting that component silently produces the wrong preview
+        // the first time the file is not already on disk.
+        // Narrow on purpose: ONLY a null example is captured. A non-null one
+        // is sample preview data owned by the sync-gutenberg-block-examples
+        // skill and living in block.json; capturing it here would duplicate
+        // that ownership and change the migration output of all 40 existing
+        // components (measured — it captures on every one of them).
+        //
+        // `null` is different in kind. It is not data the generator failed to
+        // reproduce, it is a decision -- "this block has no meaningful
+        // preview" -- and nothing else on disk records it. A from-scratch
+        // generation derives a non-null example instead, so without this the
+        // decision is lost the first time block.json is not already there.
+        if (array_key_exists('example', $realBlockJson) && null === $realBlockJson['example']) {
+            $wpBlock['example'] = null;
+        }
+
         return $wpBlock;
     }
 }
