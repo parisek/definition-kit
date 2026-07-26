@@ -6,6 +6,19 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- `block.json` no longer emits `"postTypes": {}` where it should emit
+  `"postTypes": []`. 0.4.0 encoded the whole document through the
+  object-for-empty-map conversion built for schema validation, which is right
+  for `example.attributes.data` and wrong for `acf.postTypes` — a genuine
+  list. 18 components across the downstream fleet were affected.
+
+  PHP cannot tell an empty list from an empty map (both are `[]`), so the
+  emptiness is now resolved per key against what block.json actually defines
+  as an object, rather than inferred from the value. Both polarities are
+  pinned by a test, since fixing one by breaking the other is how the
+  regression arose. ([#16](https://github.com/parisek/definition-kit/issues/16))
 ## [0.4.0] - 2026-07-26
 ### Added
 
