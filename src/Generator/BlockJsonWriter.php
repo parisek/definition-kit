@@ -40,7 +40,14 @@ final class BlockJsonWriter
             ));
         }
 
-        $json = json_encode($block, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        // Encode $jsonModel (stdClass-for-maps), not the raw $block array —
+        // otherwise an empty PHP array (e.g. a rule-7 empty-fields
+        // component's `example.attributes.data: {}`) round-trips through
+        // json_encode() as `[]`, silently flipping a JSON object into a
+        // JSON array. $jsonModel already disambiguates empty-map-vs-list
+        // for schema validation above; reusing it here keeps the WRITTEN
+        // bytes consistent with what was just validated.
+        $json = json_encode($jsonModel, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
         if (false === $json) {
             throw new \RuntimeException("Cannot JSON-encode generated block for '{$outPath}'");
         }

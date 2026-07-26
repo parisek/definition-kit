@@ -41,6 +41,7 @@ final class FieldsLintCliTest extends TestCase
         $tree = ['name' => ucfirst($slug), 'fields' => ['title' => ['type' => 'text', 'label' => 'Title']]];
         file_put_contents("{$dir}/{$slug}.yaml", Yaml::dump($tree, 10, 2));
         $fieldGroup = (new FieldsGenerator())->generate($tree, $slug, 1_700_000_000);
+        self::assertNotNull($fieldGroup);
         (new AcfJsonWriter())->write($fieldGroup, "{$dir}/acf.json");
     }
 

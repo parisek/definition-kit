@@ -510,6 +510,7 @@ final class AcfJsonReaderTest extends TestCase
         $renamedTree['fields']['items']['layouts'] = $renamedLayouts;
 
         $generated = (new \Parisek\DefinitionKit\Generator\FieldsGenerator())->generate($renamedTree, 'demo', 1);
+        self::assertNotNull($generated);
         $regeneratedLayout = $generated['fields'][0]['layouts'][0];
 
         self::assertSame(
@@ -558,6 +559,7 @@ final class AcfJsonReaderTest extends TestCase
         $renamedTree['fields']['items']['layouts'] = $renamedLayouts;
 
         $generated = (new \Parisek\DefinitionKit\Generator\FieldsGenerator())->generate($renamedTree, 'demo', 1);
+        self::assertNotNull($generated);
         $regeneratedLayout = $generated['fields'][0]['layouts'][0];
 
         self::assertSame(

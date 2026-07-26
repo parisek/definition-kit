@@ -178,16 +178,40 @@ final class FieldsGenerator
         private readonly ConstraintSentinels $constraintSentinels = new ConstraintSentinels(),
         private readonly FieldReconstructor $fieldReconstructor = new FieldReconstructor(),
         private readonly RootFieldGroupBuilder $rootBuilder = new RootFieldGroupBuilder(),
+        private readonly FieldProjectionFilter $projectionFilter = new FieldProjectionFilter(),
     ) {
     }
 
     /**
      * @param array<string,mixed> $definitionTree
-     * @return array<string,mixed>
+     * @return array<string,mixed>|null null when the definition has zero
+     *     projecting (`acf: true`) fields — either `fields: {}` was
+     *     authored explicitly, or every field resolved to a non-projecting
+     *     `acf: false` (see FieldProjectionFilter). Callers must NOT write
+     *     an acf.json in that case (issue #13) — "no ACF layer" and "an
+     *     empty ACF layer" are different statements this class keeps
+     *     distinct on purpose.
      */
-    public function generate(array $definitionTree, string $componentSlug, int $modifiedAt): array
+    public function generate(array $definitionTree, string $componentSlug, int $modifiedAt): ?array
     {
         $fields = (array) ($definitionTree['fields'] ?? []);
+
+        // `role:`/`acf:` two-axis model (issue #13) — strip every
+        // non-projecting field (and, per rule 9, every container left with
+        // zero projecting children) BEFORE any ACF-shape logic below ever
+        // sees it. Must run first: a non-projecting field never had an ACF
+        // key/name to derive, so letting it reach siblingKeyMap()/
+        // buildField() would be building ACF shape for something that isn't
+        // an ACF field. A no-op for any definition where nothing declares
+        // `role:`/`acf:` — which is every component that predates this
+        // feature (defaults: role -> field, acf -> true).
+        $fields = $this->projectionFilter->filterProjecting($fields);
+
+        if ([] === $fields) {
+            return null;
+        }
+
+        $definitionTree = [...$definitionTree, 'fields' => $fields];
 
         // Round 6 defensive check — belt-and-braces alongside the JSON
         // Schema deny-list (component.fields.schema.json `wpOverlay`

@@ -26,9 +26,29 @@ final class FieldsGeneratorTest extends TestCase
         return [...$rootExtra, 'name' => $rootExtra['name'] ?? 'Demo', 'fields' => $fields];
     }
 
+    /**
+     * Thin non-null wrapper around FieldsGenerator::generate() for the vast
+     * majority of tests in this file that assert on a produced field group
+     * and never expect the issue #13 "zero projecting fields" `null`
+     * outcome — that outcome has its own dedicated tests further down,
+     * which call ->generator->generate() directly so `null` stays a
+     * legitimate, assertable result there.
+     *
+     * @param array<string,mixed> $definitionTree
+     * @return array<string,mixed>
+     */
+    private function generateGroup(array $definitionTree, string $componentSlug, int $modifiedAt): array
+    {
+        $result = $this->generator->generate($definitionTree, $componentSlug, $modifiedAt);
+        if (null === $result) {
+            throw new \RuntimeException('Expected a non-null field group in this test — got null.');
+        }
+        return $result;
+    }
+
     public function test_field_gets_baseline_defaults_merged_in(): void
     {
-        $group = $this->generator->generate($this->tree([
+        $group = $this->generateGroup($this->tree([
             'title' => ['type' => 'text', 'label' => 'Nadpis'],
         ]), 'demo', 1700000000);
 
@@ -39,7 +59,7 @@ final class FieldsGeneratorTest extends TestCase
 
     public function test_constraint_sentinel_fills_in_when_not_authored(): void
     {
-        $group = $this->generator->generate($this->tree([
+        $group = $this->generateGroup($this->tree([
             'title' => ['type' => 'text', 'label' => 'Nadpis'],
         ]), 'demo', 1700000000);
         self::assertSame('', $group['fields'][0]['maxlength']);
@@ -47,7 +67,7 @@ final class FieldsGeneratorTest extends TestCase
 
     public function test_authored_constraint_overrides_the_sentinel(): void
     {
-        $group = $this->generator->generate($this->tree([
+        $group = $this->generateGroup($this->tree([
             'title' => ['type' => 'text', 'label' => 'Nadpis', 'maxlength' => 60],
         ]), 'demo', 1700000000);
         self::assertSame(60, $group['fields'][0]['maxlength']);
@@ -55,7 +75,7 @@ final class FieldsGeneratorTest extends TestCase
 
     public function test_wp_overlay_wins_over_baseline_and_reconstruction(): void
     {
-        $group = $this->generator->generate($this->tree([
+        $group = $this->generateGroup($this->tree([
             'body' => ['type' => 'richtext', 'label' => 'Text', 'wp' => ['toolbar' => 'full']],
         ]), 'demo', 1700000000);
         self::assertSame('full', $group['fields'][0]['toolbar']);
@@ -71,7 +91,7 @@ final class FieldsGeneratorTest extends TestCase
      */
     public function test_wp_acf_type_marker_is_stripped_not_leaked_into_generated_output(): void
     {
-        $group = $this->generator->generate($this->tree([
+        $group = $this->generateGroup($this->tree([
             'contact_email' => ['type' => 'text', 'label' => 'E-mail', 'wp' => ['acf_type' => 'email']],
         ]), 'demo', 1700000000);
 
@@ -94,7 +114,7 @@ final class FieldsGeneratorTest extends TestCase
      */
     public function test_root_metadata_keys_never_leak_into_generated_acf_json(): void
     {
-        $group = $this->generator->generate($this->tree([
+        $group = $this->generateGroup($this->tree([
             'title' => ['type' => 'text', 'label' => 'Nadpis'],
         ], [
             'name' => 'Demo',
@@ -119,7 +139,7 @@ final class FieldsGeneratorTest extends TestCase
 
     public function test_key_derives_by_convention(): void
     {
-        $group = $this->generator->generate($this->tree([
+        $group = $this->generateGroup($this->tree([
             'title' => ['type' => 'text', 'label' => 'Nadpis'],
         ]), 'demo', 1700000000);
         self::assertSame('field_demo_title', $group['fields'][0]['key']);
@@ -127,7 +147,7 @@ final class FieldsGeneratorTest extends TestCase
 
     public function test_key_is_pinned_when_authored(): void
     {
-        $group = $this->generator->generate($this->tree([
+        $group = $this->generateGroup($this->tree([
             'title' => ['type' => 'text', 'label' => 'Nadpis', 'key' => 'field_demo_legacy_hash'],
         ]), 'demo', 1700000000);
         self::assertSame('field_demo_legacy_hash', $group['fields'][0]['key']);
@@ -135,7 +155,7 @@ final class FieldsGeneratorTest extends TestCase
 
     public function test_name_comes_from_the_fields_map_key(): void
     {
-        $group = $this->generator->generate($this->tree([
+        $group = $this->generateGroup($this->tree([
             'product_title' => ['type' => 'text', 'label' => 'T'],
         ]), 'demo', 1700000000);
         self::assertSame('product_title', $group['fields'][0]['name']);
@@ -143,7 +163,7 @@ final class FieldsGeneratorTest extends TestCase
 
     public function test_group_recurses_and_derives_dotted_child_keys(): void
     {
-        $group = $this->generator->generate($this->tree([
+        $group = $this->generateGroup($this->tree([
             'heading' => ['type' => 'group', 'label' => 'H', 'fields' => [
                 'title' => ['type' => 'text', 'label' => 'T'],
             ]],
@@ -158,7 +178,7 @@ final class FieldsGeneratorTest extends TestCase
 
     public function test_repeater_sub_fields_carry_parent_repeater(): void
     {
-        $group = $this->generator->generate($this->tree([
+        $group = $this->generateGroup($this->tree([
             'items' => ['type' => 'repeater', 'label' => 'I', 'fields' => [
                 'label' => ['type' => 'text', 'label' => 'L'],
             ]],
@@ -180,7 +200,7 @@ final class FieldsGeneratorTest extends TestCase
      */
     public function test_parent_repeater_lands_on_the_group_container_but_not_its_grandchildren(): void
     {
-        $group = $this->generator->generate($this->tree([
+        $group = $this->generateGroup($this->tree([
             'items' => ['type' => 'repeater', 'label' => 'I', 'fields' => [
                 'meta' => ['type' => 'group', 'label' => 'M', 'fields' => [
                     'label' => ['type' => 'text', 'label' => 'L'],
@@ -203,7 +223,7 @@ final class FieldsGeneratorTest extends TestCase
      */
     public function test_parent_repeater_on_a_nested_repeater_points_at_the_nearest_enclosing_one(): void
     {
-        $group = $this->generator->generate($this->tree([
+        $group = $this->generateGroup($this->tree([
             'items' => ['type' => 'repeater', 'label' => 'I', 'fields' => [
                 'tags' => ['type' => 'repeater', 'label' => 'T', 'fields' => [
                     'label' => ['type' => 'text', 'label' => 'L'],
@@ -218,7 +238,7 @@ final class FieldsGeneratorTest extends TestCase
 
     public function test_flexible_content_builds_layouts_keyed_by_layout_name(): void
     {
-        $group = $this->generator->generate($this->tree([
+        $group = $this->generateGroup($this->tree([
             'items' => ['type' => 'flexible_content', 'label' => 'Položky', 'add_label' => 'Add Položky', 'min' => 2, 'max' => 2, 'layouts' => [
                 'title' => ['label' => 'Nadpis', 'fields' => [
                     'title' => ['type' => 'text', 'label' => 'Nadpis'],
@@ -256,7 +276,7 @@ final class FieldsGeneratorTest extends TestCase
 
     public function test_flexible_content_layout_key_can_be_pinned(): void
     {
-        $group = $this->generator->generate($this->tree([
+        $group = $this->generateGroup($this->tree([
             'items' => ['type' => 'flexible_content', 'label' => 'Položky', 'layouts' => [
                 'title' => ['label' => 'Nadpis', 'key' => 'layout_legacy_hash_abc123', 'fields' => [
                     'title' => ['type' => 'text', 'label' => 'Nadpis'],
@@ -269,7 +289,7 @@ final class FieldsGeneratorTest extends TestCase
 
     public function test_flexible_content_layout_min_max_are_reconstructed_when_authored(): void
     {
-        $group = $this->generator->generate($this->tree([
+        $group = $this->generateGroup($this->tree([
             'items' => ['type' => 'flexible_content', 'label' => 'Položky', 'layouts' => [
                 'title' => ['label' => 'Nadpis', 'min' => 1, 'max' => 3, 'fields' => [
                     'title' => ['type' => 'text', 'label' => 'Nadpis'],
@@ -283,7 +303,7 @@ final class FieldsGeneratorTest extends TestCase
 
     public function test_visible_when_resolves_against_sibling_fields_only(): void
     {
-        $group = $this->generator->generate($this->tree([
+        $group = $this->generateGroup($this->tree([
             'title' => ['type' => 'text', 'label' => 'T'],
             'sub' => ['type' => 'text', 'label' => 'S', 'visible_when' => ['field' => 'title', 'not_empty' => true]],
         ]), 'demo', 1700000000);
@@ -294,7 +314,7 @@ final class FieldsGeneratorTest extends TestCase
 
     public function test_same_local_name_at_different_nesting_levels_does_not_collide(): void
     {
-        $group = $this->generator->generate($this->tree([
+        $group = $this->generateGroup($this->tree([
             'heading' => ['type' => 'group', 'label' => 'H', 'fields' => [
                 'title' => ['type' => 'text', 'label' => 'T1'],
             ]],
@@ -309,7 +329,7 @@ final class FieldsGeneratorTest extends TestCase
 
     public function test_delegates_root_assembly_to_root_field_group_builder(): void
     {
-        $group = $this->generator->generate($this->tree([
+        $group = $this->generateGroup($this->tree([
             'title' => ['type' => 'text', 'label' => 'Nadpis'],
         ], ['usage' => 'homepage']), 'demo', 1700000000);
 
@@ -320,7 +340,7 @@ final class FieldsGeneratorTest extends TestCase
 
     public function test_accordions_are_replayed_by_generate(): void
     {
-        $group = $this->generator->generate($this->tree(
+        $group = $this->generateGroup($this->tree(
             ['title' => ['type' => 'text', 'label' => 'T']],
             ['wp' => ['accordions' => [['key' => 'field_demo_a', 'label' => 'A', 'open' => 0, 'before' => 'title']]]],
         ), 'demo', 1700000000);
@@ -343,7 +363,7 @@ final class FieldsGeneratorTest extends TestCase
         $this->expectException(\Parisek\DefinitionKit\Generator\GenerationValidationException::class);
         $this->expectExceptionMessageMatches('/field_demo_items_a_b_c/');
 
-        $this->generator->generate($this->tree([
+        $this->generateGroup($this->tree([
             'items' => ['type' => 'flexible_content', 'label' => 'Items', 'layouts' => [
                 'a_b' => ['label' => 'A B', 'fields' => [
                     'c' => ['type' => 'text', 'label' => 'C'],
@@ -365,7 +385,7 @@ final class FieldsGeneratorTest extends TestCase
     {
         $this->expectException(\Parisek\DefinitionKit\Generator\GenerationValidationException::class);
 
-        $this->generator->generate($this->tree([
+        $this->generateGroup($this->tree([
             'a_b' => ['type' => 'group', 'label' => 'A B', 'fields' => [
                 'c' => ['type' => 'text', 'label' => 'C'],
             ]],
@@ -394,7 +414,7 @@ final class FieldsGeneratorTest extends TestCase
         $this->expectException(\Parisek\DefinitionKit\Generator\GenerationValidationException::class);
         $this->expectExceptionMessageMatches('/field_demo_title/');
 
-        $this->generator->generate($this->tree([
+        $this->generateGroup($this->tree([
             'title' => ['type' => 'text', 'label' => 'Nadpis'],
         ], [
             'name' => 'Demo',
@@ -414,7 +434,7 @@ final class FieldsGeneratorTest extends TestCase
         $this->expectException(\Parisek\DefinitionKit\Generator\GenerationValidationException::class);
         $this->expectExceptionMessageMatches('/field_demo_dup_accordion/');
 
-        $this->generator->generate($this->tree([
+        $this->generateGroup($this->tree([
             'title' => ['type' => 'text', 'label' => 'Nadpis'],
         ], [
             'name' => 'Demo',
@@ -431,7 +451,7 @@ final class FieldsGeneratorTest extends TestCase
      */
     public function test_distinct_flexible_content_layout_names_generate_without_collision(): void
     {
-        $group = $this->generator->generate($this->tree([
+        $group = $this->generateGroup($this->tree([
             'items' => ['type' => 'flexible_content', 'label' => 'Items', 'layouts' => [
                 'alpha' => ['label' => 'Alpha', 'fields' => [
                     'c' => ['type' => 'text', 'label' => 'C'],
@@ -462,7 +482,7 @@ final class FieldsGeneratorTest extends TestCase
         $this->expectException(\Parisek\DefinitionKit\Generator\GenerationValidationException::class);
         $this->expectExceptionMessageMatches('/title/');
 
-        $this->generator->generate($this->tree([
+        $this->generateGroup($this->tree([
             'items' => ['type' => 'flexible_content', 'label' => 'Items', 'layouts' => [
                 'layout_one' => ['label' => 'Layout One', 'key' => 'layout_demo_items_one', 'name' => 'title', 'fields' => [
                     'c' => ['type' => 'text', 'label' => 'C'],
@@ -481,7 +501,7 @@ final class FieldsGeneratorTest extends TestCase
      */
     public function test_same_layout_name_in_different_flexible_content_fields_does_not_collide(): void
     {
-        $group = $this->generator->generate($this->tree([
+        $group = $this->generateGroup($this->tree([
             'items' => ['type' => 'flexible_content', 'label' => 'Items', 'layouts' => [
                 'title' => ['label' => 'Title', 'fields' => [
                     'c' => ['type' => 'text', 'label' => 'C'],
@@ -521,7 +541,7 @@ final class FieldsGeneratorTest extends TestCase
         $this->expectExceptionMessageMatches('/wp\.name/');
         $this->expectExceptionMessageMatches('/field-map key/');
 
-        $this->generator->generate($this->tree([
+        $this->generateGroup($this->tree([
             'field_one' => ['type' => 'text', 'label' => 'One', 'wp' => ['name' => 'clash']],
             'field_two' => ['type' => 'text', 'label' => 'Two'],
         ]), 'demo', 1700000000);
@@ -536,7 +556,7 @@ final class FieldsGeneratorTest extends TestCase
      */
     public function test_same_field_map_key_at_different_nesting_levels_does_not_collide(): void
     {
-        $group = $this->generator->generate($this->tree([
+        $group = $this->generateGroup($this->tree([
             'field_one' => ['type' => 'text', 'label' => 'One'],
             'wrapper' => ['type' => 'group', 'label' => 'Wrapper', 'fields' => [
                 'field_one' => ['type' => 'text', 'label' => 'One (nested)'],
@@ -553,7 +573,7 @@ final class FieldsGeneratorTest extends TestCase
      */
     public function test_flexible_content_layout_display_is_reconstructed_when_non_default(): void
     {
-        $group = $this->generator->generate($this->tree([
+        $group = $this->generateGroup($this->tree([
             'items' => ['type' => 'flexible_content', 'label' => 'Položky', 'layouts' => [
                 'title' => ['label' => 'Nadpis', 'wp' => ['display' => 'table'], 'fields' => [
                     'title' => ['type' => 'text', 'label' => 'Nadpis'],
@@ -566,7 +586,7 @@ final class FieldsGeneratorTest extends TestCase
 
     public function test_flexible_content_layout_display_defaults_to_block_when_not_authored(): void
     {
-        $group = $this->generator->generate($this->tree([
+        $group = $this->generateGroup($this->tree([
             'items' => ['type' => 'flexible_content', 'label' => 'Položky', 'layouts' => [
                 'title' => ['label' => 'Nadpis', 'fields' => [
                     'title' => ['type' => 'text', 'label' => 'Nadpis'],
@@ -598,7 +618,7 @@ final class FieldsGeneratorTest extends TestCase
      */
     public function test_conditional_logic_references_survive_a_pinned_key(): void
     {
-        $group = $this->generator->generate($this->tree([
+        $group = $this->generateGroup($this->tree([
             'toggle' => ['type' => 'boolean', 'label' => 'Toggle', 'key' => 'field_test_custom_toggle_key'],
             'conditional_field' => [
                 'type' => 'text',
@@ -682,7 +702,7 @@ final class FieldsGeneratorTest extends TestCase
      */
     public function test_conditional_logic_references_survive_a_pinned_key_inside_a_group(): void
     {
-        $group = $this->generator->generate($this->tree([
+        $group = $this->generateGroup($this->tree([
             'wrapper' => ['type' => 'group', 'label' => 'Wrapper', 'fields' => [
                 'toggle' => ['type' => 'boolean', 'label' => 'Toggle', 'key' => 'field_test_custom_nested_key'],
                 'conditional_field' => [
@@ -716,7 +736,7 @@ final class FieldsGeneratorTest extends TestCase
         $this->expectException(\Parisek\DefinitionKit\Generator\GenerationValidationException::class);
         $this->expectExceptionMessageMatches('/wp\.name/');
 
-        $this->generator->generate($this->tree([
+        $this->generateGroup($this->tree([
             'field_one' => ['type' => 'text', 'label' => 'One', 'wp' => ['name' => '']],
             'field_two' => ['type' => 'text', 'label' => 'Two'],
         ]), 'demo', 1700000000);
@@ -747,7 +767,7 @@ final class FieldsGeneratorTest extends TestCase
         // the two forbidden props the deny-list happens to report first.
         $this->expectExceptionMessageMatches('/wp\.(type|name)/');
 
-        $this->generator->generate($this->tree([
+        $this->generateGroup($this->tree([
             'field_one' => ['type' => 'text', 'label' => 'One', 'wp' => ['type' => 'accordion', 'name' => 'clash']],
             'field_two' => ['type' => 'text', 'label' => 'Two', 'wp' => ['type' => 'accordion', 'name' => 'clash']],
         ]), 'demo', 1700000000);
@@ -765,7 +785,7 @@ final class FieldsGeneratorTest extends TestCase
      */
     public function test_two_genuine_accordions_still_coexist_without_collision(): void
     {
-        $group = $this->generator->generate($this->tree([
+        $group = $this->generateGroup($this->tree([
             'title' => ['type' => 'text', 'label' => 'Nadpis'],
         ], [
             'name' => 'Demo',
@@ -794,7 +814,7 @@ final class FieldsGeneratorTest extends TestCase
         $this->expectExceptionMessageMatches('/wp\.key/');
         $this->expectExceptionMessageMatches('/top-level `key:`/');
 
-        $this->generator->generate($this->tree([
+        $this->generateGroup($this->tree([
             'title' => ['type' => 'text', 'label' => 'Nadpis', 'wp' => ['key' => 'bogus']],
         ]), 'demo', 1700000000);
     }
@@ -805,7 +825,7 @@ final class FieldsGeneratorTest extends TestCase
         $this->expectException(\Parisek\DefinitionKit\Generator\GenerationValidationException::class);
         $this->expectExceptionMessageMatches('/wp\.key/');
 
-        $this->generator->generate($this->tree([
+        $this->generateGroup($this->tree([
             'title' => ['type' => 'text', 'label' => 'Nadpis', 'wp' => ['key' => null]],
         ]), 'demo', 1700000000);
     }
@@ -822,7 +842,7 @@ final class FieldsGeneratorTest extends TestCase
         $this->expectExceptionMessageMatches('/wp\.type/');
         $this->expectExceptionMessageMatches('/top-level `type:`/');
 
-        $this->generator->generate($this->tree([
+        $this->generateGroup($this->tree([
             'title' => ['type' => 'text', 'label' => 'Nadpis', 'wp' => ['type' => 'textarea']],
         ]), 'demo', 1700000000);
     }
@@ -841,7 +861,7 @@ final class FieldsGeneratorTest extends TestCase
         $this->expectExceptionMessageMatches('/wp\.key/');
         $this->expectExceptionMessageMatches('/layout/i');
 
-        $this->generator->generate($this->tree([
+        $this->generateGroup($this->tree([
             'items' => ['type' => 'flexible_content', 'label' => 'Items', 'layouts' => [
                 'title' => ['label' => 'Title', 'wp' => ['key' => 'layout_bogus'], 'fields' => [
                     'c' => ['type' => 'text', 'label' => 'C'],
@@ -856,7 +876,7 @@ final class FieldsGeneratorTest extends TestCase
         $this->expectException(\Parisek\DefinitionKit\Generator\GenerationValidationException::class);
         $this->expectExceptionMessageMatches('/wp\.name/');
 
-        $this->generator->generate($this->tree([
+        $this->generateGroup($this->tree([
             'items' => ['type' => 'flexible_content', 'label' => 'Items', 'layouts' => [
                 'title' => ['label' => 'Title', 'wp' => ['name' => 'clash'], 'fields' => [
                     'c' => ['type' => 'text', 'label' => 'C'],
@@ -874,7 +894,7 @@ final class FieldsGeneratorTest extends TestCase
      */
     public function test_layout_wp_overlay_still_works_for_non_identity_props(): void
     {
-        $group = $this->generator->generate($this->tree([
+        $group = $this->generateGroup($this->tree([
             'items' => ['type' => 'flexible_content', 'label' => 'Items', 'layouts' => [
                 'title' => ['label' => 'Title', 'wp' => ['display' => 'table'], 'fields' => [
                     'c' => ['type' => 'text', 'label' => 'C'],
@@ -898,7 +918,7 @@ final class FieldsGeneratorTest extends TestCase
         $this->expectException(\Parisek\DefinitionKit\Generator\GenerationValidationException::class);
         $this->expectExceptionMessageMatches('/wp\.key/');
 
-        $this->generator->generate($this->tree([
+        $this->generateGroup($this->tree([
             'title' => ['type' => 'text', 'label' => 'Nadpis'],
         ], [
             'name' => 'Demo',
@@ -918,7 +938,7 @@ final class FieldsGeneratorTest extends TestCase
         $this->expectException(\Parisek\DefinitionKit\Generator\GenerationValidationException::class);
         $this->expectExceptionMessageMatches('/wp\.fields/');
 
-        $this->generator->generate($this->tree([
+        $this->generateGroup($this->tree([
             'title' => ['type' => 'text', 'label' => 'Nadpis'],
             'subtitle' => ['type' => 'text', 'label' => 'Podnadpis'],
         ], [
@@ -943,7 +963,7 @@ final class FieldsGeneratorTest extends TestCase
         $this->expectException(\Parisek\DefinitionKit\Generator\GenerationValidationException::class);
         $this->expectExceptionMessageMatches('/wp\.sub_fields/');
 
-        $this->generator->generate($this->tree([
+        $this->generateGroup($this->tree([
             'title' => [
                 'type' => 'text',
                 'label' => 'Nadpis',
@@ -960,7 +980,7 @@ final class FieldsGeneratorTest extends TestCase
         $this->expectException(\Parisek\DefinitionKit\Generator\GenerationValidationException::class);
         $this->expectExceptionMessageMatches('/wp\.layouts/');
 
-        $this->generator->generate($this->tree([
+        $this->generateGroup($this->tree([
             'title' => [
                 'type' => 'text',
                 'label' => 'Nadpis',
@@ -984,7 +1004,7 @@ final class FieldsGeneratorTest extends TestCase
         $this->expectException(\Parisek\DefinitionKit\Generator\GenerationValidationException::class);
         $this->expectExceptionMessageMatches('/wp\.parent_repeater/');
 
-        $this->generator->generate($this->tree([
+        $this->generateGroup($this->tree([
             'items' => ['type' => 'repeater', 'label' => 'Items', 'fields' => [
                 'title' => [
                     'type' => 'text',
@@ -1001,7 +1021,7 @@ final class FieldsGeneratorTest extends TestCase
         $this->expectException(\Parisek\DefinitionKit\Generator\GenerationValidationException::class);
         $this->expectExceptionMessageMatches('/wp\.key/');
 
-        $this->generator->generate($this->tree([
+        $this->generateGroup($this->tree([
             'outer' => ['type' => 'group', 'label' => 'Outer', 'fields' => [
                 'inner' => ['type' => 'group', 'label' => 'Inner', 'fields' => [
                     'leaf' => ['type' => 'text', 'label' => 'Leaf', 'wp' => ['key' => 'bogus']],
@@ -1015,7 +1035,7 @@ final class FieldsGeneratorTest extends TestCase
     {
         foreach (['fields', 'sub_fields', 'layouts', 'parent_repeater'] as $prop) {
             try {
-                $this->generator->generate($this->tree([
+                $this->generateGroup($this->tree([
                     'items' => ['type' => 'flexible_content', 'label' => 'Items', 'layouts' => [
                         'title' => ['label' => 'Title', 'wp' => [$prop => []], 'fields' => [
                             'c' => ['type' => 'text', 'label' => 'C'],
@@ -1039,7 +1059,7 @@ final class FieldsGeneratorTest extends TestCase
      */
     public function test_legitimate_props_pass_while_every_newly_reserved_prop_is_rejected(): void
     {
-        $group = $this->generator->generate($this->tree([
+        $group = $this->generateGroup($this->tree([
             'body' => [
                 'type' => 'richtext',
                 'label' => 'Text',
@@ -1051,7 +1071,7 @@ final class FieldsGeneratorTest extends TestCase
 
         foreach (['fields', 'sub_fields', 'layouts', 'parent_repeater'] as $prop) {
             try {
-                $this->generator->generate($this->tree([
+                $this->generateGroup($this->tree([
                     'body' => ['type' => 'richtext', 'label' => 'Text', 'wp' => [$prop => []]],
                 ]), 'demo', 1700000000);
                 self::fail("wp.{$prop} on a field was expected to be rejected but generation succeeded.");
@@ -1072,7 +1092,7 @@ final class FieldsGeneratorTest extends TestCase
      */
     public function test_accordion_residual_cannot_inject_a_bogus_type_or_name(): void
     {
-        $group = $this->generator->generate($this->tree([
+        $group = $this->generateGroup($this->tree([
             'title' => ['type' => 'text', 'label' => 'Nadpis'],
         ], [
             'name' => 'Demo',
@@ -1103,7 +1123,7 @@ final class FieldsGeneratorTest extends TestCase
      */
     public function test_accordion_with_legitimate_residual_props_still_works(): void
     {
-        $group = $this->generator->generate($this->tree([
+        $group = $this->generateGroup($this->tree([
             'title' => ['type' => 'text', 'label' => 'Nadpis'],
         ], [
             'name' => 'Demo',
@@ -1141,7 +1161,7 @@ final class FieldsGeneratorTest extends TestCase
      */
     public function test_wp_conditional_logic_fallback_with_resolvable_reference_still_works(): void
     {
-        $group = $this->generator->generate($this->tree([
+        $group = $this->generateGroup($this->tree([
             'toggle' => ['type' => 'boolean', 'label' => 'Toggle', 'key' => 'field_test_toggle_key'],
             'conditional_field' => [
                 'type' => 'text',
@@ -1163,7 +1183,7 @@ final class FieldsGeneratorTest extends TestCase
         $this->expectExceptionMessageMatches('/conditional_logic/');
         $this->expectExceptionMessageMatches('/field_does_not_exist/');
 
-        $this->generator->generate($this->tree([
+        $this->generateGroup($this->tree([
             'conditional_field' => [
                 'type' => 'text',
                 'label' => 'Conditional',
@@ -1189,7 +1209,7 @@ final class FieldsGeneratorTest extends TestCase
         $this->expectException(\Parisek\DefinitionKit\Generator\GenerationValidationException::class);
         $this->expectExceptionMessageMatches('/conditional_logic/');
 
-        $this->generator->generate($this->tree([
+        $this->generateGroup($this->tree([
             'toggle' => ['type' => 'boolean', 'label' => 'Toggle'],
             'conditional_field' => [
                 'type' => 'text',
@@ -1205,7 +1225,7 @@ final class FieldsGeneratorTest extends TestCase
         $this->expectException(\Parisek\DefinitionKit\Generator\GenerationValidationException::class);
         $this->expectExceptionMessageMatches('/conditional_logic/');
 
-        $this->generator->generate($this->tree([
+        $this->generateGroup($this->tree([
             'toggle' => ['type' => 'boolean', 'label' => 'Toggle'],
             'conditional_field' => [
                 'type' => 'text',
@@ -1227,7 +1247,7 @@ final class FieldsGeneratorTest extends TestCase
         $this->expectException(\Parisek\DefinitionKit\Generator\GenerationValidationException::class);
         $this->expectExceptionMessageMatches('/conditional_logic/');
 
-        $this->generator->generate($this->tree([
+        $this->generateGroup($this->tree([
             'toggle' => ['type' => 'boolean', 'label' => 'Toggle'],
             'conditional_field' => [
                 'type' => 'text',
@@ -1242,7 +1262,7 @@ final class FieldsGeneratorTest extends TestCase
     /** A well-formed, resolvable shape (a single OR-group, two AND-rules) must still pass — shape validation must not be over-eager. */
     public function test_wp_conditional_logic_well_formed_multi_rule_shape_still_works(): void
     {
-        $group = $this->generator->generate($this->tree([
+        $group = $this->generateGroup($this->tree([
             'toggle' => ['type' => 'boolean', 'label' => 'Toggle', 'key' => 'field_test_toggle_key'],
             'other' => ['type' => 'boolean', 'label' => 'Other', 'key' => 'field_test_other_key'],
             'conditional_field' => [
@@ -1258,5 +1278,250 @@ final class FieldsGeneratorTest extends TestCase
         ], ['name' => 'Test']), 'test', 1700000000);
 
         self::assertIsArray($group['fields'][2]['conditional_logic']);
+    }
+
+    // --- `role:`/`acf:` two-axis model (issue #13) ----------------------
+
+    public function test_field_with_no_role_or_acf_defaults_to_field_and_is_included(): void
+    {
+        $group = $this->generateGroup($this->tree([
+            'title' => ['type' => 'text', 'label' => 'Nadpis'],
+        ]), 'demo', 1700000000);
+
+        self::assertCount(1, $group['fields']);
+        self::assertSame('title', $group['fields'][0]['name']);
+    }
+
+    public function test_role_field_with_explicit_acf_true_is_included(): void
+    {
+        $group = $this->generateGroup($this->tree([
+            'title' => ['type' => 'text', 'label' => 'Nadpis', 'role' => 'field', 'acf' => true],
+        ]), 'demo', 1700000000);
+
+        self::assertCount(1, $group['fields']);
+    }
+
+    public function test_role_global_field_defaults_to_non_projecting_and_is_excluded(): void
+    {
+        $group = $this->generateGroup($this->tree([
+            'title' => ['type' => 'text', 'label' => 'Nadpis'],
+            'config' => [
+                'type' => 'group',
+                'label' => 'Config',
+                'role' => 'global',
+                'source' => 'global.form_configurator',
+                'fields' => [
+                    'debug' => ['type' => 'boolean', 'label' => 'Debug'],
+                ],
+            ],
+        ]), 'demo', 1700000000);
+
+        self::assertCount(1, $group['fields']);
+        self::assertSame('title', $group['fields'][0]['name']);
+    }
+
+    public function test_role_query_field_defaults_to_non_projecting_and_is_excluded(): void
+    {
+        $group = $this->generateGroup($this->tree([
+            'title' => ['type' => 'text', 'label' => 'Nadpis'],
+            'items' => [
+                'type' => 'repeater',
+                'label' => 'Items',
+                'role' => 'query',
+                'source' => 'query.related_posts',
+                'fields' => [
+                    'excerpt' => ['type' => 'text', 'label' => 'Excerpt'],
+                ],
+            ],
+        ]), 'demo', 1700000000);
+
+        self::assertCount(1, $group['fields']);
+        self::assertSame('title', $group['fields'][0]['name']);
+    }
+
+    public function test_descendants_of_a_non_projecting_group_inherit_role_and_are_excluded(): void
+    {
+        $group = $this->generateGroup($this->tree([
+            'config' => [
+                'type' => 'group',
+                'label' => 'Config',
+                'role' => 'global',
+                'source' => 'global.form_configurator',
+                'fields' => [
+                    // no own `role:` — must inherit `global` from the parent,
+                    // not silently default back to `field`.
+                    'restURL' => ['type' => 'text', 'label' => 'REST URL'],
+                    'nested' => [
+                        'type' => 'group',
+                        'label' => 'Nested',
+                        'fields' => [
+                            'deep' => ['type' => 'text', 'label' => 'Deep'],
+                        ],
+                    ],
+                ],
+            ],
+            'title' => ['type' => 'text', 'label' => 'Nadpis'],
+        ]), 'demo', 1700000000);
+
+        self::assertCount(1, $group['fields']);
+        self::assertSame('title', $group['fields'][0]['name']);
+    }
+
+    public function test_component_with_only_non_projecting_fields_produces_no_acf_group(): void
+    {
+        $group = $this->generator->generate($this->tree([
+            'config' => [
+                'type' => 'group',
+                'label' => 'Config',
+                'role' => 'global',
+                'source' => 'global.form_configurator',
+                'fields' => [
+                    'debug' => ['type' => 'boolean', 'label' => 'Debug'],
+                ],
+            ],
+        ]), 'demo', 1700000000);
+
+        self::assertNull($group);
+    }
+
+    public function test_component_with_explicit_empty_fields_map_produces_no_acf_group(): void
+    {
+        $group = $this->generator->generate($this->tree([]), 'demo', 1700000000);
+
+        self::assertNull($group);
+    }
+
+    public function test_descendant_cannot_override_back_to_acf_true_under_a_non_projecting_ancestor(): void
+    {
+        $this->expectException(\Parisek\DefinitionKit\Generator\GenerationValidationException::class);
+        $this->expectExceptionMessageMatches('/climb back out/');
+
+        $this->generateGroup($this->tree([
+            'config' => [
+                'type' => 'group',
+                'label' => 'Config',
+                'role' => 'global',
+                'source' => 'global.form_configurator',
+                'fields' => [
+                    'rogue' => ['type' => 'text', 'label' => 'Rogue', 'acf' => true],
+                ],
+            ],
+        ]), 'demo', 1700000000);
+    }
+
+    public function test_invalid_role_value_is_rejected(): void
+    {
+        $this->expectException(\Parisek\DefinitionKit\Generator\GenerationValidationException::class);
+
+        $this->generateGroup($this->tree([
+            'title' => ['type' => 'text', 'label' => 'Nadpis', 'role' => 'bogus'],
+        ]), 'demo', 1700000000);
+    }
+
+    public function test_non_bool_acf_value_is_rejected(): void
+    {
+        $this->expectException(\Parisek\DefinitionKit\Generator\GenerationValidationException::class);
+
+        $this->generateGroup($this->tree([
+            'title' => ['type' => 'text', 'label' => 'Nadpis', 'acf' => 'yes'],
+        ]), 'demo', 1700000000);
+    }
+
+    // --- `role: computed` — no default, both polarities (issue #13) -----
+
+    public function test_role_computed_without_explicit_acf_is_rejected(): void
+    {
+        $this->expectException(\Parisek\DefinitionKit\Generator\GenerationValidationException::class);
+        $this->expectExceptionMessageMatches('/role: computed/');
+
+        $this->generateGroup($this->tree([
+            'columns' => ['type' => 'select', 'label' => 'Columns', 'role' => 'computed', 'options' => ['column-2' => '2']],
+        ]), 'demo', 1700000000);
+    }
+
+    public function test_role_computed_with_acf_true_is_included_like_benefits_list_columns(): void
+    {
+        $group = $this->generateGroup($this->tree([
+            'columns' => [
+                'type' => 'select',
+                'label' => 'Columns',
+                'role' => 'computed',
+                'acf' => true,
+                'options' => ['column-2' => '2 sloupce', 'column-3' => '3 sloupce'],
+            ],
+        ]), 'demo', 1700000000);
+
+        self::assertCount(1, $group['fields']);
+        self::assertSame('columns', $group['fields'][0]['name']);
+    }
+
+    public function test_role_computed_with_acf_false_is_excluded_like_faq_title(): void
+    {
+        $group = $this->generateGroup($this->tree([
+            'title' => ['type' => 'text', 'label' => 'Title', 'role' => 'computed', 'acf' => false, 'source' => 'heading.title'],
+            'heading' => [
+                'type' => 'group',
+                'label' => 'Heading',
+                'fields' => ['title' => ['type' => 'text', 'label' => 'Title']],
+            ],
+        ]), 'demo', 1700000000);
+
+        self::assertCount(1, $group['fields']);
+        self::assertSame('heading', $group['fields'][0]['name']);
+        // No root-level `title` key — matching the eprukaz faq acceptance case.
+        self::assertNotContains('title', array_column($group['fields'], 'name'));
+    }
+
+    // --- rule 9 — projecting container with zero projecting children ----
+
+    public function test_projecting_group_with_all_children_stripped_is_dropped_entirely(): void
+    {
+        $group = $this->generateGroup($this->tree([
+            'title' => ['type' => 'text', 'label' => 'Nadpis'],
+            'wrapper' => [
+                'type' => 'group',
+                'label' => 'Wrapper',
+                'fields' => [
+                    'internal' => ['type' => 'text', 'label' => 'Internal', 'role' => 'computed', 'acf' => false],
+                ],
+            ],
+        ]), 'demo', 1700000000);
+
+        self::assertCount(1, $group['fields']);
+        self::assertSame('title', $group['fields'][0]['name']);
+    }
+
+    public function test_projecting_repeater_with_all_children_stripped_is_dropped_entirely(): void
+    {
+        $group = $this->generateGroup($this->tree([
+            'title' => ['type' => 'text', 'label' => 'Nadpis'],
+            'items' => [
+                'type' => 'repeater',
+                'label' => 'Items',
+                'fields' => [
+                    'computed_only' => ['type' => 'text', 'label' => 'Computed', 'role' => 'computed', 'acf' => false],
+                ],
+            ],
+        ]), 'demo', 1700000000);
+
+        self::assertCount(1, $group['fields']);
+        self::assertSame('title', $group['fields'][0]['name']);
+    }
+
+    // --- rule 8 — dangling conditional_logic after filtering -------------
+
+    public function test_visible_when_targeting_a_stripped_field_is_a_dangling_reference_error(): void
+    {
+        $this->expectException(\Parisek\DefinitionKit\Generator\GenerationValidationException::class);
+        $this->expectExceptionMessageMatches('/dangling reference/');
+
+        $this->generateGroup($this->tree([
+            'trigger' => ['type' => 'boolean', 'label' => 'Trigger', 'role' => 'global', 'source' => 'global.trigger'],
+            'title' => [
+                'type' => 'text',
+                'label' => 'Nadpis',
+                'visible_when' => ['field' => 'trigger', 'equals' => true],
+            ],
+        ]), 'demo', 1700000000);
     }
 }

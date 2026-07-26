@@ -3,153 +3,456 @@
     "$id": "https://schemas.parisek.dev/definition-kit/component.fields.schema.json",
     "title": "Component field definition",
     "type": "object",
-    "required": ["name", "fields"],
+    "required": [
+        "name",
+        "fields"
+    ],
     "additionalProperties": false,
     "properties": {
-        "name": { "type": "string", "minLength": 1 },
-        "key": { "type": "string", "pattern": "^group_" },
+        "name": {
+            "type": "string",
+            "minLength": 1
+        },
+        "key": {
+            "type": "string",
+            "pattern": "^group_"
+        },
         "usage": {
             "oneOf": [
-                { "type": "string", "minLength": 1 },
-                { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1 }
+                {
+                    "type": "string",
+                    "minLength": 1
+                },
+                {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "minItems": 1
+                }
             ]
         },
-        "category": { "type": "string", "minLength": 1 },
+        "category": {
+            "type": "string",
+            "minLength": 1
+        },
         "kind": {
             "type": "string",
-            "enum": ["block", "section", "element", "part", "utility"],
+            "enum": [
+                "block",
+                "section",
+                "element",
+                "part",
+                "utility"
+            ],
             "description": "What the component IS, as opposed to `category`, which is the styleguide sidebar bucket. block = editor-insertable (has block.json); section = page-level chrome, not editor-insertable; element = self-contained and reusable across unrelated parents; part = fragment authored for one specific parent's structure; utility = rendering helper with no visual identity of its own. Drives visual-baseline inclusion, catalogue presentation and Gutenberg eligibility. See tailwind-base ADR 0012."
         },
         "render": {
             "type": "string",
-            "enum": ["inset", "bleed", "chrome", "overlay"],
+            "enum": [
+                "inset",
+                "bleed",
+                "chrome",
+                "overlay"
+            ],
             "description": "Iframe-wrapper mode for the styleguide preview — how the component is FRAMED, not what it is (that is `kind`). Mirrors ComponentParser::RENDER_MODES in parisek/styleguide, which silently defaults an unknown value; this enum makes the mistake loud instead."
         },
-        "web": { "type": "string", "minLength": 1 },
-        "asana": { "type": "string", "minLength": 1 },
-        "figma": { "type": "string", "minLength": 1 },
-        "drupal": { "type": "string", "minLength": 1 },
-        "description": { "type": "string" },
-        "weight": { "type": "integer" },
-        "responsive": { "type": "boolean" },
-        "wp": { "$ref": "#/$defs/wpOverlay" },
-        "fields": { "$ref": "#/$defs/fieldMap" }
+        "web": {
+            "type": "string",
+            "minLength": 1
+        },
+        "asana": {
+            "type": "string",
+            "minLength": 1
+        },
+        "figma": {
+            "type": "string",
+            "minLength": 1
+        },
+        "drupal": {
+            "type": "string",
+            "minLength": 1
+        },
+        "description": {
+            "type": "string"
+        },
+        "weight": {
+            "type": "integer"
+        },
+        "responsive": {
+            "type": "boolean"
+        },
+        "wp": {
+            "$ref": "#/$defs/wpOverlay"
+        },
+        "fields": {
+            "$ref": "#/$defs/rootFieldMap"
+        }
     },
     "$defs": {
         "wpOverlay": {
             "type": "object",
             "propertyNames": {
-                "not": { "enum": ["key", "name", "type", "fields", "sub_fields", "layouts", "parent_repeater"] }
+                "not": {
+                    "enum": [
+                        "key",
+                        "name",
+                        "type",
+                        "fields",
+                        "sub_fields",
+                        "layouts",
+                        "parent_repeater"
+                    ]
+                }
             },
             "description": "`wp:` is a fully open escape-hatch object merged with HIGHEST precedence over every derived/reconstructed prop. Two classes of prop are reserved: scalar identity (`key`/`name`/`type` — a field's WHOLE identity: ACF postmeta key, postmeta name, field-shape discriminator) and structural containers (`fields`/`sub_fields`/`layouts` — which carry the identity of NESTED nodes one level down, so letting `wp:` overwrite them is the exact same hazard one level removed) plus `parent_repeater` (ACF-computed structural metadata re-derived from nesting on every generation; it has no legitimate authoring path at all). Letting `wp:` override any of these gives identity two independent, silently-diverging paths (seven review rounds each found a new bug of this exact shape — round 7 found the ROOT-level `wp:` bag wasn't covered at all, plus the field/layout-level bypasses via the structural props). Use the sanctioned top-level prop instead: `key:` (pattern ^field_/^layout_/^group_) to pin a key, the YAML field-map key (or a layout's own `name:`) to control the name, the top-level `type:` enum to pick the field shape, and the field/layout's own `fields:`/`layouts:` map to author nested content — never `wp:`. `wp.conditional_logic` is deliberately NOT reserved here — see FieldsGenerator's own dangling-reference validation, which is the correctness gate for that prop instead."
         },
         "fieldMap": {
             "type": "object",
             "minProperties": 1,
-            "additionalProperties": { "$ref": "#/$defs/field" }
+            "additionalProperties": {
+                "$ref": "#/$defs/field"
+            }
         },
         "multivalueAnnotation": {
             "oneOf": [
-                { "type": "string", "minLength": 1 },
-                { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1 }
+                {
+                    "type": "string",
+                    "minLength": 1
+                },
+                {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "minItems": 1
+                }
             ]
         },
         "visibleWhen": {
             "type": "object",
-            "required": ["field"],
+            "required": [
+                "field"
+            ],
             "additionalProperties": false,
             "properties": {
-                "field": { "type": "string", "minLength": 1 },
+                "field": {
+                    "type": "string",
+                    "minLength": 1
+                },
                 "equals": {},
                 "not_equals": {},
-                "empty": { "const": true },
-                "not_empty": { "const": true },
+                "empty": {
+                    "const": true
+                },
+                "not_empty": {
+                    "const": true
+                },
                 "contains": {}
             },
             "oneOf": [
-                { "required": ["equals"] },
-                { "required": ["not_equals"] },
-                { "required": ["empty"] },
-                { "required": ["not_empty"] },
-                { "required": ["contains"] }
+                {
+                    "required": [
+                        "equals"
+                    ]
+                },
+                {
+                    "required": [
+                        "not_equals"
+                    ]
+                },
+                {
+                    "required": [
+                        "empty"
+                    ]
+                },
+                {
+                    "required": [
+                        "not_empty"
+                    ]
+                },
+                {
+                    "required": [
+                        "contains"
+                    ]
+                }
             ]
         },
         "field": {
             "type": "object",
-            "required": ["type", "label"],
+            "required": [
+                "type",
+                "label"
+            ],
             "additionalProperties": false,
             "properties": {
                 "type": {
-                    "enum": ["text", "richtext", "number", "boolean", "select", "media", "link", "reference", "group", "repeater", "flexible_content", "date"]
+                    "enum": [
+                        "text",
+                        "richtext",
+                        "number",
+                        "boolean",
+                        "select",
+                        "media",
+                        "link",
+                        "reference",
+                        "group",
+                        "repeater",
+                        "flexible_content",
+                        "date"
+                    ]
                 },
-                "role": { "enum": ["field", "query", "computed", "global"] },
-                "label": { "type": "string", "minLength": 1 },
-                "description": { "type": "string" },
-                "mcp": { "$ref": "#/$defs/multivalueAnnotation" },
-                "dev": { "$ref": "#/$defs/multivalueAnnotation" },
-                "translatable": { "type": "boolean" },
-                "required": { "type": "boolean" },
-                "key": { "type": "string", "pattern": "^field_" },
-                "multiline": { "type": "boolean" },
-                "kind": { "enum": ["image", "file", "gallery"] },
-                "shape": { "enum": ["url", "link"] },
-                "of": { "type": "string" },
-                "multiple": { "type": "boolean" },
-                "min": { "type": "integer", "minimum": 0 },
-                "max": { "type": "integer", "minimum": 0 },
-                "step": { "type": "number", "minimum": 0 },
-                "maxlength": { "type": "integer", "minimum": 1 },
-                "accept": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1 },
-                "max_size": { "type": "number", "minimum": 0 },
-                "min_width": { "type": "integer", "minimum": 0 },
-                "max_width": { "type": "integer", "minimum": 0 },
-                "min_height": { "type": "integer", "minimum": 0 },
-                "max_height": { "type": "integer", "minimum": 0 },
-                "add_label": { "type": "string", "minLength": 1 },
-                "placeholder": { "type": "string", "minLength": 1 },
-                "visible_when": { "$ref": "#/$defs/visibleWhen" },
-                "options": { "type": "object", "minProperties": 1, "additionalProperties": { "type": "string" } },
-                "resolved_from": { "type": "array", "items": { "type": "string" } },
-                "source": { "type": "string" },
+                "role": {
+                    "enum": [
+                        "field",
+                        "query",
+                        "computed",
+                        "global"
+                    ]
+                },
+                "label": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "description": {
+                    "type": "string"
+                },
+                "mcp": {
+                    "$ref": "#/$defs/multivalueAnnotation"
+                },
+                "dev": {
+                    "$ref": "#/$defs/multivalueAnnotation"
+                },
+                "translatable": {
+                    "type": "boolean"
+                },
+                "required": {
+                    "type": "boolean"
+                },
+                "key": {
+                    "type": "string",
+                    "pattern": "^field_"
+                },
+                "multiline": {
+                    "type": "boolean"
+                },
+                "kind": {
+                    "enum": [
+                        "image",
+                        "file",
+                        "gallery"
+                    ]
+                },
+                "shape": {
+                    "enum": [
+                        "url",
+                        "link"
+                    ]
+                },
+                "of": {
+                    "type": "string"
+                },
+                "multiple": {
+                    "type": "boolean"
+                },
+                "min": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "max": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "step": {
+                    "type": "number",
+                    "minimum": 0
+                },
+                "maxlength": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "accept": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "minItems": 1
+                },
+                "max_size": {
+                    "type": "number",
+                    "minimum": 0
+                },
+                "min_width": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "max_width": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "min_height": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "max_height": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "add_label": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "placeholder": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "visible_when": {
+                    "$ref": "#/$defs/visibleWhen"
+                },
+                "options": {
+                    "type": "object",
+                    "minProperties": 1,
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "resolved_from": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "source": {
+                    "type": "string"
+                },
+                "acf": {
+                    "type": "boolean",
+                    "description": "Axis A (projection) from issue #13 — whether this field has an ACF-backed representation in acf.json. Derives from `role` when omitted (field -> true, global/query -> false); `role: computed` has no default and requires this key explicitly."
+                },
                 "demo": {},
-                "wp": { "$ref": "#/$defs/wpOverlay" },
-                "fields": { "$ref": "#/$defs/fieldMap" },
-                "layouts": { "$ref": "#/$defs/layoutMap" }
+                "wp": {
+                    "$ref": "#/$defs/wpOverlay"
+                },
+                "fields": {
+                    "$ref": "#/$defs/fieldMap"
+                },
+                "layouts": {
+                    "$ref": "#/$defs/layoutMap"
+                }
             },
             "allOf": [
                 {
-                    "if": { "properties": { "type": { "const": "select" } }, "required": ["type"] },
-                    "then": { "required": ["options"] }
+                    "if": {
+                        "properties": {
+                            "type": {
+                                "const": "select"
+                            }
+                        },
+                        "required": [
+                            "type"
+                        ]
+                    },
+                    "then": {
+                        "required": [
+                            "options"
+                        ]
+                    }
                 },
                 {
-                    "if": { "properties": { "type": { "enum": ["group", "repeater"] } }, "required": ["type"] },
-                    "then": { "required": ["fields"] }
+                    "if": {
+                        "properties": {
+                            "type": {
+                                "enum": [
+                                    "group",
+                                    "repeater"
+                                ]
+                            }
+                        },
+                        "required": [
+                            "type"
+                        ]
+                    },
+                    "then": {
+                        "required": [
+                            "fields"
+                        ]
+                    }
                 },
                 {
-                    "if": { "properties": { "type": { "const": "flexible_content" } }, "required": ["type"] },
-                    "then": { "required": ["layouts"] }
+                    "if": {
+                        "properties": {
+                            "type": {
+                                "const": "flexible_content"
+                            }
+                        },
+                        "required": [
+                            "type"
+                        ]
+                    },
+                    "then": {
+                        "required": [
+                            "layouts"
+                        ]
+                    }
                 }
             ]
         },
         "layoutMap": {
             "type": "object",
             "minProperties": 1,
-            "propertyNames": { "pattern": "^[a-z][a-z0-9_]*$" },
-            "additionalProperties": { "$ref": "#/$defs/layout" }
+            "propertyNames": {
+                "pattern": "^[a-z][a-z0-9_]*$"
+            },
+            "additionalProperties": {
+                "$ref": "#/$defs/layout"
+            }
         },
         "layout": {
             "type": "object",
-            "required": ["fields", "label"],
+            "required": [
+                "fields",
+                "label"
+            ],
             "additionalProperties": false,
             "properties": {
-                "label": { "type": "string", "minLength": 1 },
-                "key": { "type": "string", "pattern": "^layout_" },
-                "name": { "type": "string", "minLength": 1 },
-                "min": { "type": "integer", "minimum": 0 },
-                "max": { "type": "integer", "minimum": 0 },
-                "wp": { "$ref": "#/$defs/wpOverlay" },
-                "fields": { "$ref": "#/$defs/fieldMap" }
+                "label": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "key": {
+                    "type": "string",
+                    "pattern": "^layout_"
+                },
+                "name": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "min": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "max": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "wp": {
+                    "$ref": "#/$defs/wpOverlay"
+                },
+                "fields": {
+                    "$ref": "#/$defs/fieldMap"
+                }
             }
+        },
+        "rootFieldMap": {
+            "type": "object",
+            "minProperties": 0,
+            "additionalProperties": {
+                "$ref": "#/$defs/field"
+            },
+            "description": "Root field map. May be empty (`fields: {}`) for a component with no inputs at all -- but the key itself stays required, so a typo like `feilds:` still fails."
         }
     }
 }

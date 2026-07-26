@@ -5,6 +5,47 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+
+- `role:` and `acf:` implement the two facts a field carries, which earlier
+  drafts kept collapsing into one. `role:` (`field` / `query` / `computed` /
+  `global`) says where the runtime value comes from; `acf:` says whether an
+  ACF field is projected for it. They are independent: `benefits-list.columns`
+  in a real downstream project is a genuine ACF `select` whose saved value a
+  block filter post-processes — editor-backed *and* computed — while
+  `faq.title` is computed and purely synthetic, lifted from `heading.title`
+  with no backing field. A single discriminator cannot express both.
+
+  `role:` defaults to `field` and `acf:` derives from it — `field` projects,
+  `global` and `query` do not. `computed` occurs with both polarities, so
+  there `acf:` is **required**; the author states it rather than inheriting a
+  coin flip. Every existing component is unaffected: omitting `role:` means
+  `field`, which is what they already are.
+
+  Both properties were already declared in the schema and consumed by nothing.
+  This wires them up rather than adding a third vocabulary for the same idea.
+
+- The root `fields:` map may now be empty (`fields: {}`) for a component with
+  no inputs at all. The key itself stays required, so a typo like `feilds:`
+  still fails loudly.
+
+### Changed
+
+- `fields-generate` no longer writes an `acf.json` when nothing projects. An
+  ACF field group with `fields: []` is a real artifact that gets registered —
+  "no ACF layer" and "an empty ACF layer" are different statements.
+- `DriftLinter` treats a leftover `acf.json` as drift, and its absence as
+  clean when nothing projects. Generation deliberately does not delete the
+  stale file: reporting it is safer than removing something a user may have
+  hand-maintained. The two had to change together — fixing only one leaves
+  "generate does nothing, lint still fails".
+- Non-projecting fields are stripped before key derivation, so they never
+  influence key or name uniqueness. `conditional_logic` is validated against
+  the filtered tree, so a `visible_when` pointing at a stripped field is
+  reported instead of shipping as a dangling reference.
+- `fields-migrate` sets `role: field` on everything. Provenance cannot be
+  inferred from an ACF export; anything else needs a manual audit.
+
 
 ## [0.3.1] - 2026-07-25
 

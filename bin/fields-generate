@@ -80,24 +80,46 @@ function fields_generate_one(string $componentDir, bool $dryRun): array
     $acfOutPath = $dryRun ? tempnam(sys_get_temp_dir(), 'fields-generate-dry-run-acf-') : "{$componentDir}/acf.json";
     $blockOutPath = $dryRun ? tempnam(sys_get_temp_dir(), 'fields-generate-dry-run-block-') : $existingBlockJsonPath;
 
+    // Rule 4 (issue #13) — `null` means the definition has zero projecting
+    // (`acf: true`) fields. Deletion semantics are explicit and deliberate:
+    // generation never deletes a stale acf.json on disk — a component that
+    // transitions from producing one to not producing one keeps whatever
+    // is already committed until a human/CI removes it. DriftLinter is the
+    // gate that reports that leftover file as drift; this script's job is
+    // only to stop WRITING a fresh (now meaningless) one.
+    $acfWritten = null !== $fieldGroup;
+    if ($acfWritten) {
+        try {
+            (new AcfJsonWriter())->write($fieldGroup, $acfOutPath);
+        } catch (\Throwable $e) {
+            if ($dryRun) {
+                @unlink($acfOutPath);
+            }
+            return ['ok' => false, 'component' => $componentName, 'error' => $e->getMessage()];
+        }
+    }
+
     try {
-        (new AcfJsonWriter())->write($fieldGroup, $acfOutPath);
         (new BlockJsonWriter())->write($block, $blockOutPath);
     } catch (\Throwable $e) {
         if ($dryRun) {
-            @unlink($acfOutPath);
+            if ($acfWritten) {
+                @unlink($acfOutPath);
+            }
             @unlink($blockOutPath);
         }
         return ['ok' => false, 'component' => $componentName, 'error' => $e->getMessage()];
     }
 
     if ($dryRun) {
-        @unlink($acfOutPath);
+        if ($acfWritten) {
+            @unlink($acfOutPath);
+        }
         @unlink($blockOutPath);
         return ['ok' => true, 'component' => $componentName];
     }
 
-    return ['ok' => true, 'component' => $componentName, 'out' => $acfOutPath];
+    return ['ok' => true, 'component' => $componentName] + ($acfWritten ? ['out' => $acfOutPath] : []);
 }
 
 $args = array_slice($argv, 1);

@@ -25,6 +25,13 @@ final class GenerationRoundTripTest extends TestCase
 
         $tree = (new AcfJsonReader())->read($original, $slug, $twigSource);
         $regenerated = (new FieldsGenerator())->generate($tree, $slug, (int) $original['modified']);
+        // Every fixture here is a real, committed acf.json with at least
+        // one field (rule 10 — migration sets `role: field` on everything,
+        // which always projects) — `null` (issue #13's "zero projecting
+        // fields" outcome) is never a legitimate round-trip result.
+        if (null === $regenerated) {
+            throw new \RuntimeException("Round-trip regeneration of '{$slug}' unexpectedly produced no fields.");
+        }
 
         return ['original' => $original, 'regenerated' => $regenerated];
     }
@@ -154,6 +161,7 @@ final class GenerationRoundTripTest extends TestCase
         self::assertSame('ACF group own description', $tree['wp']['description']);
 
         $regenerated = (new FieldsGenerator())->generate($tree, 'service-feature', (int) $original['modified']);
+        self::assertNotNull($regenerated);
 
         self::assertSame('ACF group own description', $regenerated['description']);
     }
@@ -383,6 +391,7 @@ final class GenerationRoundTripTest extends TestCase
 
         $tree = (new AcfJsonReader())->read($original, 'nested');
         $regenerated = (new FieldsGenerator())->generate($tree, 'nested', 1700000000);
+        self::assertNotNull($regenerated);
 
         // Not a full structural-exact diff (this hand-typed minimal
         // fixture doesn't carry every real-ACF baseline prop) — the
@@ -432,6 +441,7 @@ final class GenerationRoundTripTest extends TestCase
         self::assertSame(3, $tree['fields']['items']['layouts']['title']['max']);
 
         $regenerated = (new FieldsGenerator())->generate($tree, 'bounds', 1700000000);
+        self::assertNotNull($regenerated);
         $layout = $regenerated['fields'][0]['layouts'][0];
         self::assertSame(1, $layout['min']);
         self::assertSame(3, $layout['max']);
