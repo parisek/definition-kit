@@ -99,4 +99,34 @@ final class BlockResidualCapturerTest extends TestCase
 
         self::assertSame(['acf'], array_keys($wpBlock));
     }
+
+    /**
+     * A deliberate `example: null` means "this block has no meaningful
+     * preview" — form-configurator, whose Vue app needs live REST data.
+     * Nothing else on disk records that decision, and a from-scratch
+     * generation derives a non-null example instead, so it must be captured.
+     */
+    public function test_a_deliberately_null_example_is_captured(): void
+    {
+        $real = $this->derived();
+        $real['example'] = null;
+
+        self::assertSame(['example' => null], $this->capturer->capture(['name' => 'Demo'], 'demo', $real));
+    }
+
+    /**
+     * The counterpart, and the reason the rule is narrow. A non-null example
+     * is sample preview data owned by the sync-gutenberg-block-examples skill
+     * and living in block.json. Capturing it would duplicate that ownership —
+     * and measured against a real 40-component project, a broader rule
+     * captured on every single one of them, changing the migration output of
+     * components this change is not supposed to touch.
+     */
+    public function test_a_non_null_example_is_not_captured(): void
+    {
+        $real = $this->derived();
+        $real['example'] = ['viewportWidth' => 1280, 'attributes' => ['data' => ['title' => 'Sample']]];
+
+        self::assertArrayNotHasKey('example', $this->capturer->capture(['name' => 'Demo'], 'demo', $real));
+    }
 }

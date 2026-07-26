@@ -5,6 +5,36 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+
+- `fields-migrate` can now adopt a Gutenberg block that has no ACF fields —
+  a component with a `block.json` and no `acf.json`. It previously refused
+  outright, which locked out exactly the components 0.4.0 had just made
+  expressible, and left hand-transcribing the block residual into `wp.block`
+  as the only way to adopt one. Only the case where neither file exists is
+  now an error.
+
+  The generated definition carries `fields: {}` and does not guess. A
+  component may take inputs from `timber_context()` or a query, but nothing
+  on disk records that, and a wrong `role:` is worse than an honest empty map
+  the author fills in.
+
+### Fixed
+
+- `BlockResidualCapturer` now captures a deliberate `example: null`. That
+  value means "this block has no meaningful preview" — a component mounting a
+  JS app that needs live data — and nothing else on disk records the
+  decision. Preservation-from-disk hid the gap: it only fires when a
+  `block.json` is already there, so the wrong, derived preview appeared the
+  first time a project regenerated without one.
+
+  Only `null` is captured. A non-null example is sample data owned by the
+  `sync-gutenberg-block-examples` skill and living in `block.json`; capturing
+  it would duplicate that ownership. Measured against a real 40-component
+  project, the broader rule captured on every single component and would have
+  changed the migration output of all of them.
+  ([#18](https://github.com/parisek/definition-kit/issues/18))
+
 
 ## [0.4.1] - 2026-07-26
 
