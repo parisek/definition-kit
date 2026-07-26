@@ -38,4 +38,28 @@ final class BlockJsonWriterTest extends TestCase
         }
         self::assertFileDoesNotExist($outPath);
     }
+
+    /**
+     * Regression for issue #16. PHP cannot tell an empty list from an empty
+     * map — both are `[]` — so 0.4.0's blanket "encode every empty array as
+     * an object" flipped `acf.postTypes` from `[]` to `{}` on the 18 real
+     * components across the downstream fleet whose postTypes is empty.
+     *
+     * Both directions are pinned here deliberately: fixing one polarity by
+     * breaking the other is exactly how the regression arose.
+     */
+    public function test_empty_postTypes_stays_an_array_and_empty_example_data_stays_an_object(): void
+    {
+        $block = (new BlockJsonGenerator())->generate(['name' => 'Demo'], 'demo');
+        $block['acf']['postTypes'] = [];
+        $block['example'] = ['viewportWidth' => 1280, 'attributes' => ['align' => 'full', 'data' => []]];
+
+        $outPath = sys_get_temp_dir() . '/block-json-writer-' . uniqid('', true) . '.json';
+        (new BlockJsonWriter())->write($block, $outPath);
+        $raw = (string) file_get_contents($outPath);
+        @unlink($outPath);
+
+        self::assertStringContainsString('"postTypes": []', $raw, 'postTypes is a list; its empty value must stay []');
+        self::assertStringContainsString('"data": {}', $raw, 'example.attributes.data is an object; its empty value must stay {}');
+    }
 }

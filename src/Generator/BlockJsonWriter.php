@@ -40,14 +40,22 @@ final class BlockJsonWriter
             ));
         }
 
-        // Encode $jsonModel (stdClass-for-maps), not the raw $block array —
-        // otherwise an empty PHP array (e.g. a rule-7 empty-fields
-        // component's `example.attributes.data: {}`) round-trips through
-        // json_encode() as `[]`, silently flipping a JSON object into a
-        // JSON array. $jsonModel already disambiguates empty-map-vs-list
-        // for schema validation above; reusing it here keeps the WRITTEN
-        // bytes consistent with what was just validated.
-        $json = json_encode($jsonModel, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        // PHP cannot tell an empty list from an empty map — both are `[]` —
+        // so the emptiness has to be resolved per KEY, never per value shape.
+        // ArrayJsonModel::toJsonModel() resolves every empty array to an
+        // object, which is right for validation (it satisfies the object
+        // schemas) but wrong for writing: `acf.postTypes` is a genuine list
+        // and `[]` is its correct empty value. Encoding $jsonModel here
+        // flipped it to `{}` in 0.4.0 — see issue #16.
+        //
+        // So: encode the raw $block, and convert to stdClass only the keys
+        // block.json actually defines as objects. The list is explicit
+        // because the alternative — inferring from the value — is exactly
+        // the ambiguity that caused the regression.
+        $json = json_encode(
+            self::withObjectValuedKeys($block),
+            JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE,
+        );
         if (false === $json) {
             throw new \RuntimeException("Cannot JSON-encode generated block for '{$outPath}'");
         }
@@ -59,5 +67,27 @@ final class BlockJsonWriter
         if (!rename($tmpPath, $outPath)) {
             throw new \RuntimeException("Cannot move {$tmpPath} to {$outPath}");
         }
+    }
+
+    /**
+     * block.json keys whose empty value is a JSON object, not an array.
+     * Everything not listed keeps PHP's natural `[]` encoding — notably
+     * `acf.postTypes`, `keywords` and `supports.align`, which are lists.
+     *
+     * @param array<string,mixed> $block
+     * @return array<string,mixed>
+     */
+    private static function withObjectValuedKeys(array $block): array
+    {
+        // `example.attributes.data` — a component with no fields still needs
+        // `"data": {}` so the inserter preview reads it as an (empty) prop bag.
+        if (isset($block['example']['attributes']) && is_array($block['example']['attributes'])
+            && array_key_exists('data', $block['example']['attributes'])
+            && [] === $block['example']['attributes']['data']
+        ) {
+            $block['example']['attributes']['data'] = new \stdClass();
+        }
+
+        return $block;
     }
 }
