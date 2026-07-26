@@ -56,7 +56,14 @@ final class BlockJsonGenerator
             $example['attributes'] = ['align' => 'full', ...$example['attributes']];
         }
 
-        if (null !== $existingBlockJson && isset($existingBlockJson['example'])) {
+        // `array_key_exists`, not `isset` — a component whose example is
+        // deliberately `example: null` (issue #13 acceptance: form-configurator,
+        // where no styleguide-shaped preview makes sense — see gutenberg.md
+        // "When no meaningful preview is possible") must have that `null`
+        // preserved verbatim, exactly like a real captured example array.
+        // `isset()` treats `null` as absent and would silently regenerate a
+        // (wrong) non-null example on every subsequent run.
+        if (null !== $existingBlockJson && array_key_exists('example', $existingBlockJson)) {
             $example = $existingBlockJson['example'];
         }
 

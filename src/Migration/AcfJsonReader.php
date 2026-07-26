@@ -336,6 +336,17 @@ final class AcfJsonReader
             ksort($out['wp']);
         }
 
+        // Rule 10 (issue #13) — provenance cannot be inferred from an ACF
+        // export (a raw acf.json says nothing about WHERE a runtime value
+        // comes from, only that ACF is currently backing it), so migration
+        // sets the one role an ACF-sourced field is always at minimum
+        // compatible with: `field`. This also happens to be
+        // FieldsGenerator's own default, so it's a no-op for projection —
+        // stated explicitly here purely as an authoring/audit aid; a human
+        // reviewing the migrated YAML can then deliberately promote
+        // specific fields to `query`/`computed`/`global` where warranted.
+        $out['role'] = 'field';
+
         return $this->orderField($out);
     }
 

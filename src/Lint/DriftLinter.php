@@ -59,22 +59,22 @@ final class DriftLinter
             return DriftResult::error($componentName, 'invalid definition: ' . implode('; ', $messages));
         }
 
-        if (!is_file($acfJsonPath)) {
-            return DriftResult::error($componentName, 'acf.json missing — run fields-generate');
-        }
-
         $tree = Yaml::parseFile($yamlPath);
         if (!is_array($tree)) {
             return DriftResult::error($componentName, 'malformed YAML');
         }
 
-        $acfJsonRaw = file_get_contents($acfJsonPath);
-        if (false === $acfJsonRaw) {
-            return DriftResult::error($componentName, "unable to read {$acfJsonPath}");
-        }
-        $committedAcf = json_decode($acfJsonRaw, true);
-        if (!is_array($committedAcf)) {
-            return DriftResult::error($componentName, 'acf.json is not valid JSON');
+        $acfJsonExists = is_file($acfJsonPath);
+        $committedAcf = null;
+        if ($acfJsonExists) {
+            $acfJsonRaw = file_get_contents($acfJsonPath);
+            if (false === $acfJsonRaw) {
+                return DriftResult::error($componentName, "unable to read {$acfJsonPath}");
+            }
+            $committedAcf = json_decode($acfJsonRaw, true);
+            if (!is_array($committedAcf)) {
+                return DriftResult::error($componentName, 'acf.json is not valid JSON');
+            }
         }
         // Injected, not allowlisted: `modified` legitimately changes every
         // regeneration, so comparing it at all would make every component
@@ -90,11 +90,32 @@ final class DriftLinter
             return DriftResult::error($componentName, $e->getMessage());
         }
 
-        $acfDiffs = $this->allowlist->filter(
-            $componentName,
-            StructuralDiff::diff($generatedAcf, $committedAcf),
-            $generatedAcf,
-        );
+        // Rule 4 (issue #13) — three-way split on "does the definition
+        // want an acf.json" x "is one committed":
+        //   generated null,  no acf.json  -> clean (nothing wanted, nothing there)
+        //   generated null,  acf.json     -> drift (stale leftover — fields-generate never deletes it)
+        //   generated array, no acf.json  -> error (missing, run fields-generate)
+        //   generated array, acf.json     -> normal structural diff below
+        if (null === $generatedAcf) {
+            if ($acfJsonExists) {
+                return DriftResult::error(
+                    $componentName,
+                    'acf.json is present but the definition now has zero ACF-backed fields '
+                    . '(every field is non-projecting, or `fields:` is empty) — this acf.json is stale. '
+                    . 'Delete it (fields-generate will not delete it for you).',
+                );
+            }
+            $acfDiffs = [];
+        } elseif (!$acfJsonExists) {
+            return DriftResult::error($componentName, 'acf.json missing — run fields-generate');
+        } else {
+            /** @var array<string,mixed> $committedAcf */
+            $acfDiffs = $this->allowlist->filter(
+                $componentName,
+                StructuralDiff::diff($generatedAcf, $committedAcf),
+                $generatedAcf,
+            );
+        }
 
         $blockDiffs = [];
         if (is_file($blockJsonPath)) {

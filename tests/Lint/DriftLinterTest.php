@@ -39,6 +39,12 @@ final class DriftLinterTest extends TestCase
     private function generateCleanAcfAndBlock(array $tree, int $modifiedAt): void
     {
         $fieldGroup = (new FieldsGenerator())->generate($tree, 'demo-card', $modifiedAt);
+        // Every caller of this helper hands it a definition with at least
+        // one projecting field — `null` is exercised by its own dedicated
+        // tests, which never go through this helper.
+        if (null === $fieldGroup) {
+            throw new \RuntimeException('Expected a non-null field group in this test — got null.');
+        }
         (new AcfJsonWriter())->write($fieldGroup, "{$this->dir}/acf.json");
         $block = (new BlockJsonGenerator())->generate($tree, 'demo-card');
         (new BlockJsonWriter())->write($block, "{$this->dir}/block.json");
@@ -151,6 +157,7 @@ final class DriftLinterTest extends TestCase
         $tree = $this->minimalTree();
         $this->writeDefinition($tree);
         $fieldGroup = (new FieldsGenerator())->generate($tree, 'demo-card', 1_700_000_000);
+        self::assertNotNull($fieldGroup);
         (new AcfJsonWriter())->write($fieldGroup, "{$this->dir}/acf.json");
         // no block.json written at all
 
@@ -168,6 +175,48 @@ final class DriftLinterTest extends TestCase
 
         self::assertFalse($result->clean);
         self::assertStringContainsString('acf.json missing', (string) $result->error);
+    }
+
+    /** @return array<string,mixed> */
+    private function nonProjectingOnlyTree(): array
+    {
+        return [
+            'name' => 'Demo card',
+            'fields' => [
+                'config' => [
+                    'type' => 'group',
+                    'label' => 'Config',
+                    'role' => 'global',
+                    'source' => 'global.demo_config',
+                    'fields' => ['debug' => ['type' => 'boolean', 'label' => 'Debug']],
+                ],
+            ],
+        ];
+    }
+
+    public function test_non_projecting_only_definition_with_no_acf_json_on_disk_is_clean(): void
+    {
+        $this->writeDefinition($this->nonProjectingOnlyTree());
+        // deliberately no acf.json written — the definition has zero
+        // ACF-backed fields, so none is expected.
+
+        $result = (new DriftLinter())->lint($this->dir);
+
+        self::assertTrue($result->clean, (string) $result->error);
+    }
+
+    public function test_non_projecting_only_definition_with_a_stale_acf_json_on_disk_is_an_error(): void
+    {
+        $this->writeDefinition($this->nonProjectingOnlyTree());
+        // a stale acf.json left over from before the fields moved to
+        // `role: global` — fields-generate never deletes it on its own,
+        // so DriftLinter is the gate that must catch the mismatch.
+        file_put_contents("{$this->dir}/acf.json", '{"key":"group_demo_card","fields":[]}');
+
+        $result = (new DriftLinter())->lint($this->dir);
+
+        self::assertFalse($result->clean);
+        self::assertStringContainsString('zero ACF-backed fields', (string) $result->error);
     }
 
     public function test_invalid_definition_is_reported_as_an_error_not_a_crash(): void
@@ -283,6 +332,7 @@ final class DriftLinterTest extends TestCase
         $tree = $this->minimalTree();
         $this->writeDefinition($tree);
         $fieldGroup = (new FieldsGenerator())->generate($tree, 'demo-card', 1_700_000_000);
+        self::assertNotNull($fieldGroup);
         (new AcfJsonWriter())->write($fieldGroup, "{$this->dir}/acf.json");
         // Present but malformed block.json — a bare JSON string, not an object.
         file_put_contents("{$this->dir}/block.json", '"not an object"');
