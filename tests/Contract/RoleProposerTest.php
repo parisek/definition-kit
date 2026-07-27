@@ -300,6 +300,76 @@ final class RoleProposerTest extends TestCase
         self::assertContains('sources', $proposal->unresolved);
     }
 
+    public function testANestedReadIsProposedAtItsOwnLevel(): void
+    {
+        // article-video-grid reads `items.sources` — the framework enrichment
+        // `role: derived` was invented for. A top-level-only proposer flagged
+        // it instead of proposing it, which made the check noisy about the one
+        // case the role exists to describe.
+        $dir = $this->component('article-video-grid', [
+            'article-video-grid.yaml' => "name: Video grid\nfields:\n"
+                . "  items:\n    type: repeater\n    label: Items\n    role: field\n    fields:\n"
+                . "      video: { type: media, kind: file, label: Video, role: field }\n",
+            'article-video-grid.twig' => '{% for item in content.items %}{{ item.sources }}{% endfor %}',
+        ]);
+
+        $proposal = (new RoleProposer())->propose($dir);
+
+        self::assertSame('derived', $proposal->roles['items.sources']);
+        self::assertSame('video', $proposal->derivedFrom['items.sources']);
+
+        $definition = (array) $proposal->definition;
+        self::assertIsArray($definition['fields']);
+        self::assertSame(
+            ['role' => 'derived', 'from' => 'video'],
+            $definition['fields']['items']['fields']['sources'],
+        );
+    }
+
+    public function testANestedBlankIsReportedWithItsFullPath(): void
+    {
+        $dir = $this->component('list', [
+            'list.yaml' => "name: List\nfields:\n"
+                . "  items:\n    type: repeater\n    label: Items\n    role: field\n    fields:\n"
+                . "      title: { type: text, label: T, role: field }\n",
+            'list.twig' => '{% for item in content.items %}{{ item.subtitle }}{% endfor %}',
+        ]);
+
+        self::assertSame(['items.subtitle'], (new RoleProposer())->propose($dir)->unresolved);
+    }
+
+    public function testASidecarIsNotEvidenceAboutARepeaterRow(): void
+    {
+        // A sidecar assigns onto `$content`, and a caller hands props to the
+        // component — neither says anything about a row of one of its
+        // repeaters. Reusing that evidence one level down would be a guess.
+        $dir = $this->component('list', [
+            'list.yaml' => "name: List\nfields:\n"
+                . "  items:\n    type: repeater\n    label: Items\n    role: field\n    fields:\n"
+                . "      title: { type: text, label: T, role: field }\n",
+            'list.twig' => '{% for item in content.items %}{{ item.total }}{% endfor %}',
+            'list.php' => "<?php\n\$query = new WP_Query([]);\n\$content['total'] = \$query->found_posts;\n",
+        ]);
+
+        $proposal = (new RoleProposer())->propose($dir);
+
+        self::assertArrayNotHasKey('items.total', $proposal->roles);
+        self::assertContains('items.total', $proposal->unresolved);
+    }
+
+    public function testReadsPastADeclaredLeafAreStillNotProps(): void
+    {
+        $dir = $this->component('cta', [
+            'cta.yaml' => "name: CTA\nfields:\n  button: { type: link, shape: link, label: B, role: field }\n",
+            'cta.twig' => '<a href="{{ content.button.url }}">{{ content.button.title }}</a>',
+        ]);
+
+        $proposal = (new RoleProposer())->propose($dir);
+
+        self::assertSame([], $proposal->roles);
+        self::assertSame([], $proposal->unresolved);
+    }
+
     public function testTheAppliedDefinitionIsSchemaValidAndReRunsToANoOp(): void
     {
         $this->component('divider', [

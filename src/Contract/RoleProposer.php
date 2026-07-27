@@ -68,6 +68,7 @@ final class RoleProposer
 
         $roles = [];
         $derivedFrom = [];
+        $nestedDerivedFrom = [];
         $unresolved = [];
         $baselineProps = [];
 
@@ -97,32 +98,37 @@ final class RoleProposer
             $roles[$fieldName] = $role;
         }
 
-        // 2. Props the twig reads that the definition does not declare at all.
-        foreach ($this->topLevelReads($reads) as $prop) {
-            if (isset($fields[$prop])) {
-                continue;
-            }
-
-            if ($this->frameworkProps->isFrameworkProp($prop)) {
-                $baselineProps[] = $prop;
-                continue;
-            }
+        // 2. Props the twig reads that the definition does not declare at all,
+        //    at whatever depth the definition stops describing them.
+        foreach ($this->undeclaredReads($reads, $fields, $baselineProps) as $path => $siblings) {
+            $path = (string) $path;
+            $segments = explode('.', $path);
+            $prop = end($segments);
+            $isRoot = 1 === count($segments);
 
             $role = $this->roleForUndeclaredProp(
                 $prop,
-                $fields,
-                $sidecar,
-                $sidecarDerivedFrom,
-                $callSites,
+                $siblings,
+                // A sidecar assigns onto `$content`, and a caller hands props to
+                // the component, not to a row of one of its repeaters. Neither
+                // is evidence about anything nested.
+                $isRoot ? $sidecar : [],
+                $isRoot ? $sidecarDerivedFrom : [],
+                $isRoot ? $callSites : null,
                 $name,
-                $derivedFrom,
+                $nestedDerivedFrom,
             );
+
             if (null === $role) {
-                $unresolved[] = $prop;
+                $unresolved[] = $path;
                 continue;
             }
 
-            $roles[$prop] = $role;
+            $roles[$path] = $role;
+            if (isset($nestedDerivedFrom[$prop])) {
+                $derivedFrom[$path] = $nestedDerivedFrom[$prop];
+                unset($nestedDerivedFrom[$prop]);
+            }
         }
 
         sort($unresolved);
@@ -257,19 +263,94 @@ final class RoleProposer
     }
 
     /**
-     * @return list<string>
+     * The reads the definition does not account for, each mapped to the
+     * `fields:` map it would be declared in.
+     *
+     * Descends exactly as far as the definition itself does. A read stops being
+     * describable at the first segment that is missing from a level the
+     * definition enumerates — everything below that belongs to a prop that does
+     * not exist yet, and everything past a declared leaf or a non-`field` role
+     * is that value's own shape rather than the component's contract.
+     *
+     * Nesting matters more than it looks: `article-video-grid` reads
+     * `items.sources`, the framework enrichment `role: derived` was invented
+     * for, and a top-level-only proposer flags it instead of proposing it.
+     *
+     * @param array<string,mixed> $fields
+     * @param list<string> $baselineProps collected as a side effect
+     * @return array<string,array<string,mixed>> dotted path => the sibling map it belongs to
      */
-    private function topLevelReads(PropReads $reads): array
+    private function undeclaredReads(PropReads $reads, array $fields, array &$baselineProps): array
     {
-        $roots = [];
+        $candidates = [];
+
         foreach ($reads->reads as $read) {
-            $root = explode('.', $read)[0];
-            if (!in_array($root, $roots, true)) {
-                $roots[] = $root;
+            $segments = explode('.', $read);
+
+            if ($this->frameworkProps->isFrameworkProp($segments[0])) {
+                if (!in_array($segments[0], $baselineProps, true)) {
+                    $baselineProps[] = $segments[0];
+                }
+
+                continue;
+            }
+
+            $level = $fields;
+            $walked = [];
+
+            foreach ($segments as $segment) {
+                $walked[] = $segment;
+                $field = $level[$segment] ?? null;
+
+                if (!is_array($field)) {
+                    $candidates[implode('.', $walked)] = $level;
+                    break;
+                }
+
+                $children = $this->enumeratedChildren($field);
+                if (null === $children) {
+                    break;
+                }
+
+                $level = $children;
             }
         }
 
-        return $roots;
+        ksort($candidates);
+
+        return $candidates;
+    }
+
+    /**
+     * The fields a container enumerates, or null when what is below is not the
+     * definition's to describe. Mirrors ContractLinter's rule, so the proposer
+     * and the check agree on where a contract stops.
+     *
+     * @param array<string,mixed> $field
+     * @return array<string,mixed>|null
+     */
+    private function enumeratedChildren(array $field): ?array
+    {
+        if ('field' !== ($field['role'] ?? 'field')) {
+            return null;
+        }
+
+        if (isset($field['fields']) && is_array($field['fields'])) {
+            return $field['fields'];
+        }
+
+        if (isset($field['layouts']) && is_array($field['layouts'])) {
+            $merged = [];
+            foreach ($field['layouts'] as $layout) {
+                if (is_array($layout) && isset($layout['fields']) && is_array($layout['fields'])) {
+                    $merged = [...$merged, ...$layout['fields']];
+                }
+            }
+
+            return $merged;
+        }
+
+        return null;
     }
 
     /**
@@ -323,27 +404,80 @@ final class RoleProposer
     {
         $fields = isset($definition['fields']) && is_array($definition['fields']) ? $definition['fields'] : [];
 
-        foreach ($roles as $prop => $role) {
-            $existing = isset($fields[$prop]) && is_array($fields[$prop]) ? $fields[$prop] : null;
-
-            if (null === $existing) {
-                // A prop the twig reads and the definition never had. It has no
-                // ACF field behind it (that is why it was missing), so it gets
-                // no `type`/`label` either — inventing an editor label for a
-                // value no editor ever sees would be noise the author then has
-                // to delete.
-                $fields[$prop] = ['role' => $role];
-            } else {
-                $fields[$prop] = ['role' => $role, ...$existing];
-            }
-
-            if ('derived' === $role && isset($derivedFrom[$prop])) {
-                $fields[$prop]['from'] = $derivedFrom[$prop];
-            }
+        foreach ($roles as $path => $role) {
+            $from = 'derived' === $role ? ($derivedFrom[$path] ?? null) : null;
+            $fields = $this->applyOne($fields, explode('.', (string) $path), $role, $from);
         }
 
         $definition['fields'] = $fields;
 
         return $definition;
+    }
+
+    /**
+     * Writes one role at the depth its path names.
+     *
+     * The walk stops wherever the definition stops enumerating, which is the
+     * same place `undeclaredReads()` found the prop — so a path always lands
+     * either on an existing field or in the map that field would live in.
+     *
+     * @param array<string,mixed> $fields
+     * @param list<string> $segments
+     * @return array<string,mixed>
+     */
+    private function applyOne(array $fields, array $segments, string $role, ?string $from): array
+    {
+        $name = array_shift($segments);
+        if (null === $name) {
+            return $fields;
+        }
+
+        if ([] !== $segments) {
+            $child = isset($fields[$name]) && is_array($fields[$name]) ? $fields[$name] : null;
+            if (null === $child) {
+                return $fields;
+            }
+
+            if (isset($child['fields']) && is_array($child['fields'])) {
+                $child['fields'] = $this->applyOne($child['fields'], $segments, $role, $from);
+                $fields[$name] = $child;
+
+                return $fields;
+            }
+
+            if (isset($child['layouts']) && is_array($child['layouts'])) {
+                // A flexible_content read names a layout's field without saying
+                // which layout. Writing the role into every layout that already
+                // declares the sibling would be a guess about shape; writing it
+                // into the one layout that does is not.
+                foreach ($child['layouts'] as $layoutName => $layout) {
+                    if (!is_array($layout) || !isset($layout['fields']) || !is_array($layout['fields'])) {
+                        continue;
+                    }
+                    if (null !== $from && !isset($layout['fields'][$from])) {
+                        continue;
+                    }
+                    $layout['fields'] = $this->applyOne($layout['fields'], $segments, $role, $from);
+                    $child['layouts'][$layoutName] = $layout;
+                }
+                $fields[$name] = $child;
+            }
+
+            return $fields;
+        }
+
+        $existing = isset($fields[$name]) && is_array($fields[$name]) ? $fields[$name] : null;
+
+        // A prop the twig reads and the definition never had. It has no ACF
+        // field behind it (that is why it was missing), so it gets no
+        // `type`/`label` either — inventing an editor label for a value no
+        // editor ever sees is noise the author then has to delete.
+        $fields[$name] = null === $existing ? ['role' => $role] : ['role' => $role, ...$existing];
+
+        if (null !== $from) {
+            $fields[$name]['from'] = $from;
+        }
+
+        return $fields;
     }
 }
