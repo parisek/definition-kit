@@ -7,6 +7,32 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 ### Added
 
+- **`fields-lint` now checks a component's input contract** — a prop the twig
+  reads that no role accounts for, and that the framework baseline does not
+  supply, is reported by name (issue #27). #26 planned this as a linter with a
+  maintained exception table; declaring the other provenances instead removed
+  the need for one, which is why the check is the smallest piece of the work
+  rather than the largest.
+
+  **Gated per component, not per project.** A component is *typed* when it
+  declares at least one field and every declared field carries a role
+  (explicitly, or inherited from an ancestor that does) — an author saying they
+  have been through the definition with the vocabulary in hand. Only a typed
+  component is checked for real; everything else is reported as **untyped**,
+  which is deliberately not the same as passing. A project-level gate would
+  leave the check untrustworthy until every component was done, so nobody would
+  enable it, so it would never get done.
+
+  `fields: {}` counts as untyped rather than vacuously clean. The empty map is
+  honest — `fields-migrate` writes it rather than guess — but it records that
+  nobody has stated the contract, not that there is none.
+
+  A read that goes past a declared leaf (`cta.url`, `image.src`) or into a
+  `query`/`parent`/`global`/`derived` structure is not a violation: the first is
+  ACF's own return shape, the second is a value whose shape belongs to its
+  source. A read that names something unknown at a level the definition *does*
+  enumerate is — including a typo in an enumerated repeater row.
+
 - **A Twig prop extractor** (`src/Contract/TwigPropExtractor.php`) — what a
   component's template actually reads off `content`, using Twig's own lexer and
   parser (issue #27). `twig/twig` becomes a runtime dependency: every project

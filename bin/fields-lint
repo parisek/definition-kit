@@ -3,6 +3,8 @@
 
 declare(strict_types=1);
 
+use Parisek\DefinitionKit\Contract\ContractLinter;
+use Parisek\DefinitionKit\Contract\ContractResult;
 use Parisek\DefinitionKit\Lint\DriftLinter;
 
 foreach ([__DIR__ . '/../vendor/autoload.php', __DIR__ . '/../../../autoload.php'] as $autoload) {
@@ -56,15 +58,22 @@ if (null !== $root && !is_dir($root)) {
     exit(2);
 }
 
+$contractLinter = new ContractLinter();
+
+/** @var list<ContractResult> $contractResults */
+$contractResults = [];
+
 $results = [];
 if (null !== $root) {
     $dirs = glob(rtrim($root, '/') . '/*', GLOB_ONLYDIR) ?: [];
     sort($dirs);
     foreach ($dirs as $dir) {
         $results[] = fields_lint_one($dir);
+        $contractResults[] = $contractLinter->lint($dir);
     }
 } else {
     $results[] = fields_lint_one($single);
+    $contractResults[] = $contractLinter->lint($single);
 }
 
 $failures = 0;
@@ -99,6 +108,59 @@ foreach ($results as $result) {
             break;
     }
 }
+// --- input contract (issue #27) --------------------------------------------
+//
+// Reported separately from drift, and gated per component: only a definition
+// whose every field carries a role is checked for real. Everything else is
+// listed as untyped, which is deliberately not the same as passing — a run
+// that says "40 OK" while 35 of them were never checked is how a lint stops
+// being believed.
+$contractFailures = 0;
+$typed = 0;
+$untyped = 0;
+$unanalysed = 0;
+
+echo "\ninput contract:\n";
+foreach ($contractResults as $contract) {
+    switch ($contract->status) {
+        case ContractResult::TYPED:
+            $typed++;
+            echo "  OK        {$contract->component}\n";
+            break;
+        case ContractResult::VIOLATIONS:
+            $typed++;
+            $contractFailures++;
+            $failures++;
+            echo "  UNDECLARED {$contract->component}\n";
+            foreach ($contract->violations as $prop) {
+                echo "    {$contract->component}.twig reads `content.{$prop}`, which no role accounts for\n";
+            }
+            echo "    fix: declare it under `fields:` with the role it comes from "
+                . "(field/query/global/parent/inherited/derived)\n";
+            break;
+        case ContractResult::UNTYPED:
+            $untyped++;
+            echo "  UNTYPED   {$contract->component}: {$contract->reason}\n";
+            break;
+        case ContractResult::UNANALYSED:
+            $unanalysed++;
+            echo "  UNREAD    {$contract->component}: {$contract->reason}\n";
+            break;
+    }
+
+    foreach ($contract->notes as $note) {
+        echo "    [{$note['kind']}] {$note['detail']}\n";
+    }
+}
+
+echo sprintf(
+    "  %d typed (%d with undeclared props), %d untyped, %d unanalysed\n",
+    $typed,
+    $contractFailures,
+    $untyped,
+    $unanalysed,
+);
+
 echo sprintf("%d component(s), %d failed\n", count($results), $failures);
 
 exit($failures > 0 ? 1 : 0);
