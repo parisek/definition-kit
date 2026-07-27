@@ -27,121 +27,6 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   stops descending at an open map: what is inside belongs to whoever fills it.
   It does not excuse the field from carrying a role.
 
-### Fixed
-
-- **`styleguide.*.twig` fixtures no longer count as call-site evidence.** In a
-  styleguide repository fixtures are the only data source, so *every* prop of
-  *every* component is "passed by a template" there — including the ones an
-  editor authors. On mairateam 191 props are fixture-only against 58 from
-  production templates; that project has an `acf.json` per component and `field`
-  outranks a call site, so nothing broke, but a CMS-agnostic skeleton has
-  nothing to outrank anything and all 191 would have been mislabelled `parent`.
-
-  The rule call sites serve is not "somebody passes it" but what the prop *is*:
-  content an editor would author is `field` even when only a fixture supplies
-  it, and a prop that exists so a parent can wire a child into its composition
-  is `parent`. Call-site evidence decides ambiguous cases; it does not decide
-  the rule.
-
-  A fixture-passed prop is still reported — as a *hint* on the blank rather than
-  as a proposal, naming the question a reviewer has to answer. 12 of mairateam's
-  28 blanks now carry one.
-
-- **`fields-roles` proposes at any depth, not just the root.** It considered
-  top-level reads only, so `article-video-grid.items.sources` — the framework
-  enrichment `role: derived` was invented for — was flagged by the check instead
-  of proposed by the bootstrap. The proposer now descends exactly as far as the
-  definition itself does, stopping at the first segment missing from a level the
-  definition enumerates, which is the same rule `ContractLinter` uses; the two
-  agree on where a contract ends.
-
-  Evidence does not descend with it. A sidecar assigns onto `$content` and a
-  caller hands props to the component, so neither says anything about a row of
-  one of its repeaters — reusing that evidence one level down would be a guess.
-  Nested proposals therefore come from the derived-props table, which names the
-  sibling it needs and can be checked against the row it lands in.
-
-  On mairateam: `derived` proposals 2 → 4, components flagged by the check
-  11 → 9, and one violation turned into a review item, which is the honest
-  answer for a prop nothing on disk explains.
-
-- **`fields-migrate` adopts a component that has only a twig.** `button`,
-  `picture`, `header`, `breadcrumb` — rendered by a caller, never by the editor,
-  so no ACF group and no `block.json` will ever exist for them. That is **17 of
-  mairateam's 69 components**, including the two most-called in the whole theme
-  (`picture` at 77 call sites, `button` at 31), and refusing them kept the
-  contract check blind to exactly the components #14 called load-bearing.
-
-  The template is the thing being described, so its presence is what makes a
-  directory a component; only a directory with none of the three files is
-  nothing to migrate. Nothing is guessed — the definition carries what the twig
-  front-comment already states (name, category, usage, render, description) and
-  an empty `fields:` map for `fields-roles` to fill from evidence.
-
-  A `--root` sweep now covers every shape the single-component form accepts. It
-  had migrated only acf.json components, silently passing over the block-only
-  ones the CLI has accepted one at a time since 0.4.2.
-
-- **`fields-roles --call-sites=<dir>`**, defaulting to the parent of the
-  components root. `footer` and `header` are rendered by `page/_partials/*.twig`
-  — one level up, outside the sweep — so scanning only the components directory
-  left every one of their props with no evidence. On mairateam this took the
-  blank rate from 40% to **21%**, which is the figure the plan predicted before
-  any of it had been run.
-
-- **`role: derived` covers any value built out of a declared sibling**, not only
-  the framework's field-formatting layer (issue #27). The mairateam run found
-  `reference-slider.php` doing `$content['title'] = wp_kses_post($content['heading']['title'])`
-  — a component's own PHP lifting a nested field to the root. No database, no
-  options, no caller: under the narrow definition it had no role at all, which
-  is the gap the removal of `computed` was supposed not to leave.
-
-  Who builds the value turned out not to be the interesting fact; where it comes
-  from is, and `from:` records that either way. The framework case
-  (`article-video-grid.sources` from `video`) and the lift case are the same
-  claim, and both stay checkable.
-
-  `fields-roles` proposes the lift straight from the sidecar — the assigning
-  statement names the sibling — and refuses when that sibling is undeclared or
-  when two siblings are combined, since `from:` names one origin and picking
-  either would be a guess dressed as evidence.
-
-### Fixed
-
-- **`fields-roles` now sees the call sites that actually exist.** The first
-  version recognised only `{% include %}`/`{% embed %}`; a run over a real
-  69-component project found **304 `component_*()` calls and zero includes
-  between components**, so `role: parent` was proposable exactly nowhere.
-  `CallSiteIndex` now understands parisek/timber-kit's `component_*` Twig
-  function (`StarterBase::twig_component_template()`), including its `_`-for-`-`
-  slug normalisation and the `styleguide_data()|merge({…})` shape its fixtures
-  use.
-
-  `styleguide.*.twig` fixtures count as call sites: they pass exactly the props
-  a real caller passes, and for a component with no ACF layer they are often
-  the only call sites there are. An ACF field still wins over a call site, so
-  demo data cannot relabel a genuine `field` prop as `parent`.
-
-- **Sidecar evidence recognises the shapes sidecars are actually written in.**
-  Every real sidecar in the corpus came back unclassified, because the parser
-  understood only `$content['x'] = <marker>`. Now also handled: `$content['x'][]
-  = …` and `$content['x']['y'] = …`; evidence carried across a `foreach` over a
-  query result; two-variable chains (`$q = Timber::get_posts(); $p =
-  $q->pagination(); $content['pagination'] = Helpers::pagination($p)`); and
-  `Timber::get_posts` / `get_categories` as query markers.
-
-  `formatFields` stopped being a `global` marker. It is timber-kit's field
-  formatter, called on a post far more often than on options, and listing it
-  made every query-built row report as `global` — a confidently wrong answer,
-  which is worse than the blank it replaced. `'option'` alone still catches
-  `get_option()`, `get_field(…, 'option')` and `formatFields('option')`.
-
-  Measured on the same corpus: blanks fell from 17 to 5, and the proposals went
-  from 202 `field` + 1 `derived` to 203 `field`, 6 `query`, 6 `parent`,
-  1 `derived`.
-
-### Added
-
 - **`fields-roles`, a bootstrap that proposes rather than guesses** (issue #27).
   Roles for 200 components cannot be hand-written, and a tool that guesses at
   them is worse than none: a wrong `role:` is a false claim about where a value
@@ -162,16 +47,6 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Only an explicit `with { … }` counts as a call site: a bare include hands over
   the whole context, and counting that would let every component claim every
   prop as `parent`.
-
-### Changed
-
-- **`type:` and `label:` are required only of a field that projects into
-  acf.json.** They describe an ACF field — the widget and the caption above it —
-  and a `role: parent` / `query` / `global` / `inherited` / `derived` prop has
-  neither. Requiring them anyway would mean writing an editor label for a value
-  no editor ever sees, which an author then has to delete before the definition
-  reads true. Absent `role:` still means `field`, so every definition written
-  before this is unaffected.
 
 - **`fields-lint` now checks a component's input contract** — a prop the twig
   reads that no role accounts for, and that the framework baseline does not
@@ -241,6 +116,128 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `is_preview` is in the list because `BlockRenderer` sets it one line above the
   other two with identical unconditional semantics. It was missing from the
   first draft only because nobody read the line above.
+
+- **`fields-roles` proposes at any depth, not just the root.** It considered
+  top-level reads only, so `article-video-grid.items.sources` — the framework
+  enrichment `role: derived` was invented for — was flagged by the check instead
+  of proposed by the bootstrap. The proposer now descends exactly as far as the
+  definition itself does, stopping at the first segment missing from a level the
+  definition enumerates, which is the same rule `ContractLinter` uses; the two
+  agree on where a contract ends.
+
+  Evidence does not descend with it. A sidecar assigns onto `$content` and a
+  caller hands props to the component, so neither says anything about a row of
+  one of its repeaters — reusing that evidence one level down would be a guess.
+  Nested proposals therefore come from the derived-props table, which names the
+  sibling it needs and can be checked against the row it lands in.
+
+  On mairateam: `derived` proposals 2 → 4, components flagged by the check
+  11 → 9, and one violation turned into a review item, which is the honest
+  answer for a prop nothing on disk explains.
+
+- **`fields-migrate` adopts a component that has only a twig.** `button`,
+  `picture`, `header`, `breadcrumb` — rendered by a caller, never by the editor,
+  so no ACF group and no `block.json` will ever exist for them. That is **17 of
+  mairateam's 69 components**, including the two most-called in the whole theme
+  (`picture` at 77 call sites, `button` at 31), and refusing them kept the
+  contract check blind to exactly the components #14 called load-bearing.
+
+  The template is the thing being described, so its presence is what makes a
+  directory a component; only a directory with none of the three files is
+  nothing to migrate. Nothing is guessed — the definition carries what the twig
+  front-comment already states (name, category, usage, render, description) and
+  an empty `fields:` map for `fields-roles` to fill from evidence.
+
+  A `--root` sweep now covers every shape the single-component form accepts. It
+  had migrated only acf.json components, silently passing over the block-only
+  ones the CLI has accepted one at a time since 0.4.2.
+
+- **`fields-roles --call-sites=<dir>`**, defaulting to the parent of the
+  components root. `footer` and `header` are rendered by `page/_partials/*.twig`
+  — one level up, outside the sweep — so scanning only the components directory
+  left every one of their props with no evidence. On mairateam this took the
+  blank rate from 40% to **21%**, which is the figure the plan predicted before
+  any of it had been run.
+
+- **`role: derived` covers any value built out of a declared sibling**, not only
+  the framework's field-formatting layer (issue #27). The mairateam run found
+  `reference-slider.php` doing `$content['title'] = wp_kses_post($content['heading']['title'])`
+  — a component's own PHP lifting a nested field to the root. No database, no
+  options, no caller: under the narrow definition it had no role at all, which
+  is the gap the removal of `computed` was supposed not to leave.
+
+  Who builds the value turned out not to be the interesting fact; where it comes
+  from is, and `from:` records that either way. The framework case
+  (`article-video-grid.sources` from `video`) and the lift case are the same
+  claim, and both stay checkable.
+
+  `fields-roles` proposes the lift straight from the sidecar — the assigning
+  statement names the sibling — and refuses when that sibling is undeclared or
+  when two siblings are combined, since `from:` names one origin and picking
+  either would be a guess dressed as evidence.
+
+### Changed
+
+- **`type:` and `label:` are required only of a field that projects into
+  acf.json.** They describe an ACF field — the widget and the caption above it —
+  and a `role: parent` / `query` / `global` / `inherited` / `derived` prop has
+  neither. Requiring them anyway would mean writing an editor label for a value
+  no editor ever sees, which an author then has to delete before the definition
+  reads true. Absent `role:` still means `field`, so every definition written
+  before this is unaffected.
+
+### Fixed
+
+- **`styleguide.*.twig` fixtures no longer count as call-site evidence.** In a
+  styleguide repository fixtures are the only data source, so *every* prop of
+  *every* component is "passed by a template" there — including the ones an
+  editor authors. On mairateam 191 props are fixture-only against 58 from
+  production templates; that project has an `acf.json` per component and `field`
+  outranks a call site, so nothing broke, but a CMS-agnostic skeleton has
+  nothing to outrank anything and all 191 would have been mislabelled `parent`.
+
+  The rule call sites serve is not "somebody passes it" but what the prop *is*:
+  content an editor would author is `field` even when only a fixture supplies
+  it, and a prop that exists so a parent can wire a child into its composition
+  is `parent`. Call-site evidence decides ambiguous cases; it does not decide
+  the rule.
+
+  A fixture-passed prop is still reported — as a *hint* on the blank rather than
+  as a proposal, naming the question a reviewer has to answer. 12 of mairateam's
+  28 blanks now carry one.
+
+- **`fields-roles` now sees the call sites that actually exist.** The first
+  version recognised only `{% include %}`/`{% embed %}`; a run over a real
+  69-component project found **304 `component_*()` calls and zero includes
+  between components**, so `role: parent` was proposable exactly nowhere.
+  `CallSiteIndex` now understands parisek/timber-kit's `component_*` Twig
+  function (`StarterBase::twig_component_template()`), including its `_`-for-`-`
+  slug normalisation and the `styleguide_data()|merge({…})` shape its fixtures
+  use.
+
+  `styleguide.*.twig` fixtures count as call sites: they pass exactly the props
+  a real caller passes, and for a component with no ACF layer they are often
+  the only call sites there are. An ACF field still wins over a call site, so
+  demo data cannot relabel a genuine `field` prop as `parent`.
+
+- **Sidecar evidence recognises the shapes sidecars are actually written in.**
+  Every real sidecar in the corpus came back unclassified, because the parser
+  understood only `$content['x'] = <marker>`. Now also handled: `$content['x'][]
+  = …` and `$content['x']['y'] = …`; evidence carried across a `foreach` over a
+  query result; two-variable chains (`$q = Timber::get_posts(); $p =
+  $q->pagination(); $content['pagination'] = Helpers::pagination($p)`); and
+  `Timber::get_posts` / `get_categories` as query markers.
+
+  `formatFields` stopped being a `global` marker. It is timber-kit's field
+  formatter, called on a post far more often than on options, and listing it
+  made every query-built row report as `global` — a confidently wrong answer,
+  which is worse than the blank it replaced. `'option'` alone still catches
+  `get_option()`, `get_field(…, 'option')` and `formatFields('option')`.
+
+  Measured on the same corpus: blanks fell from 17 to 5, and the proposals went
+  from 202 `field` + 1 `derived` to 203 `field`, 6 `query`, 6 `parent`,
+  1 `derived`.
+
 
 ## [0.5.1] - 2026-07-27
 ### Added
