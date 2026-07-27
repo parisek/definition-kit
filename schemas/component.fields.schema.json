@@ -221,9 +221,17 @@
                     "enum": [
                         "field",
                         "query",
-                        "computed",
-                        "global"
-                    ]
+                        "global",
+                        "parent",
+                        "inherited",
+                        "derived"
+                    ],
+                    "description": "Axis B (provenance) from issue #13, completed in #27 — where this input's runtime value comes from. field = authored in the CMS by an editor. query = assembled by the component's own PHP sidecar from the database. global = site-wide options. parent = passed in by the calling template (include/embed). inherited = injected framework-wide into every component; carried by schemas/framework-props-baseline.yaml and never written into a definition. derived = produced by the field-formatting layer from a sibling field, and requires `from:` naming that sibling. Defaults to `field` when omitted, and a descendant inherits its ancestor's role. `computed` was removed in #27: no instance was found across ~200 components that was not `query`."
+                },
+                "from": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "The sibling field this one is derived from. Required by `role: derived`, forbidden otherwise. `article-video-grid.sources` is derived from `video` — the field-formatting layer builds the source cascade out of it. Naming the origin is what makes `derived` verifiable rather than a place to hide an unclassified prop: the linter checks the named sibling actually exists at the same level."
                 },
                 "label": {
                     "type": "string",
@@ -343,7 +351,7 @@
                 },
                 "acf": {
                     "type": "boolean",
-                    "description": "Axis A (projection) from issue #13 — whether this field has an ACF-backed representation in acf.json. Derives from `role` when omitted (field -> true, global/query -> false); `role: computed` has no default and requires this key explicitly."
+                    "description": "Axis A (projection) from issue #13 — whether this field has an ACF-backed representation in acf.json. Derives from `role` when omitted: `field` -> true, every other role -> false, because only an editor-authored value needs an ACF field behind it. An explicit `acf:` always wins over the derivation, which is how a `query` repeater that still needs projecting children declares itself."
                 },
                 "demo": {},
                 "wp": {
@@ -409,6 +417,30 @@
                         "required": [
                             "layouts"
                         ]
+                    }
+                },
+                {
+                    "if": {
+                        "properties": {
+                            "role": {
+                                "const": "derived"
+                            }
+                        },
+                        "required": [
+                            "role"
+                        ]
+                    },
+                    "then": {
+                        "required": [
+                            "from"
+                        ]
+                    },
+                    "else": {
+                        "not": {
+                            "required": [
+                                "from"
+                            ]
+                        }
                     }
                 }
             ]

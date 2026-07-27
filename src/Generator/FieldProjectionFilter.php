@@ -11,8 +11,13 @@ namespace Parisek\DefinitionKit\Generator;
  * acf.json). Earlier drafts of this feature hung projection off `role`
  * directly; a real component (`benefits-list.columns` — an ACF `select`
  * that is ALSO post-processed by PHP) falsified that: a field can be both
- * editor-backed and computed. The two questions are independent, so they
- * get independent keys.
+ * editor-backed and post-processed. The two questions are independent, so
+ * they get independent keys.
+ *
+ * Issue #27 completed axis B into the six roles below and removed
+ * `computed`, which the corpus never justified: every occurrence was
+ * database-backed (`query`) or built by the field-formatting layer out of a
+ * sibling (`derived`). `role: computed` is now rejected by name.
  *
  * This class runs once, at the very top of FieldsGenerator::generate(),
  * over the RAW (pre-reconstruction) `fields:` map — the same shape
@@ -30,17 +35,20 @@ namespace Parisek\DefinitionKit\Generator;
  *
  * ## Axis A defaults (rule 1)
  *
- * | `role`     | `acf:` default | why                                    |
- * | ---------- | -------------- | --------------------------------------- |
- * | `field`    | `true`         | the editor fills it — definitional      |
- * | `global`   | `false`        | the theme supplies it                   |
- * | `query`    | `false`        | a query supplies it                     |
- * | `computed` | none — required| derivation says nothing about a backing field |
+ * | `role`      | `acf:` default | why                                |
+ * | ----------- | -------------- | ---------------------------------- |
+ * | `field`     | `true`         | the editor fills it — definitional  |
+ * | `global`    | `false`        | the theme supplies it              |
+ * | `query`     | `false`        | a query supplies it                |
+ * | `parent`    | `false`        | the calling template passes it     |
+ * | `inherited` | `false`        | the render pipeline injects it     |
+ * | `derived`   | `false`        | the field-formatting layer builds it from a sibling |
  *
- * `role` itself defaults to `field` when omitted, and an explicit `acf:`
- * always wins over the default regardless of role (`benefits-list.columns`
- * is `role: computed, acf: true`; `faq.title` is `role: computed, acf:
- * false`). This makes the class a no-op for every pre-existing component:
+ * Only `field` projects, because only an editor-authored value needs an ACF
+ * field behind it. `role` itself defaults to `field` when omitted, and an
+ * explicit `acf:` always wins over the default regardless of role — that is
+ * how a `role: query` repeater which still needs projecting children
+ * declares itself. This makes the class a no-op for every pre-existing component:
  * no `role:`/`acf:` key anywhere means every field defaults to
  * `role: field` / `acf: true`, so nothing is ever stripped — the single
  * most important compatibility property of this feature (issue #13, "all
@@ -71,13 +79,16 @@ namespace Parisek\DefinitionKit\Generator;
  */
 final class FieldProjectionFilter
 {
-    private const VALID_ROLES = ['field', 'query', 'computed', 'global'];
+    private const VALID_ROLES = ['field', 'query', 'global', 'parent', 'inherited', 'derived'];
 
-    /** @var array<string,bool> role => default `acf:` value; `computed` is deliberately absent — no default. */
+    /** @var array<string,bool> role => default `acf:` value */
     private const ROLE_ACF_DEFAULTS = [
         'field' => true,
         'query' => false,
         'global' => false,
+        'parent' => false,
+        'inherited' => false,
+        'derived' => false,
     ];
 
     /**
@@ -203,6 +214,16 @@ final class FieldProjectionFilter
             return $inheritedRole;
         }
 
+        if ('computed' === $declared) {
+            throw new GenerationValidationException(sprintf(
+                "Field '%s' sets `role: computed`, which was removed in issue #27. Every instance found "
+                . 'across ~200 components turned out to be database-backed, so use `role: query` — and if '
+                . 'the value is built by the field-formatting layer out of a sibling field instead, that is '
+                . '`role: derived` with `from:` naming the sibling.',
+                implode('.', $chain),
+            ));
+        }
+
         if (!is_string($declared) || !in_array($declared, self::VALID_ROLES, true)) {
             throw new GenerationValidationException(sprintf(
                 "Field '%s' sets `role: %s`, which is not one of the supported values (%s).",
@@ -231,16 +252,6 @@ final class FieldProjectionFilter
                 ));
             }
             return $declared;
-        }
-
-        if ('computed' === $role) {
-            throw new GenerationValidationException(sprintf(
-                "Field '%s' sets `role: computed` without an explicit `acf:` key. Derivation says "
-                . 'nothing about whether a backing ACF field exists, so `computed` has no default — '
-                . 'state `acf: true` (an editor-facing field that is also post-processed, like '
-                . "benefits-list.columns) or `acf: false` (purely synthetic, like faq.title) explicitly.",
-                implode('.', $chain),
-            ));
         }
 
         return self::ROLE_ACF_DEFAULTS[$role] ?? true;

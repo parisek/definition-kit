@@ -7,6 +7,46 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 ### Added
 
+- **The role vocabulary is complete: `field` / `query` / `global` / `parent` /
+  `inherited` / `derived`** (issue #27). A definition described a component's
+  ACF fields; it is meant to describe the component's whole input contract, and
+  it could not, because two thirds of a real component's inputs had no way to be
+  declared. `parent` (passed by the calling template) and `inherited` (injected
+  framework-wide) were designed in #14 and never built — without them, the most
+  reused components in a project are the ones a contract check can say least
+  about: `button` and `divider` have inputs that are *entirely* `parent`, and
+  zero ACF fields between them.
+
+- **`role: derived` with a required `from:`.** A seventh provenance turned up
+  in the corpus that none of the six roles could express: `article-video-grid`
+  reads `sources`, which is not authored, not queried, not passed in, and
+  produced by no per-component code — the field-formatting layer builds it out
+  of the sibling `video` field on the same row. `from:` names that sibling, and
+  `fields-validate` checks it resolves at the same level. That check is the
+  point of the key: an unverifiable role is a hiding place for props nobody
+  managed to classify, and this one points at something a linter can confirm.
+
+  Declaring the enrichment on the *type* instead (`media` returns `sources`)
+  would have covered `image` srcset and `link` shapes in one move, and was
+  rejected: the enrichment is conditional on the data, not the type — `sources`
+  exists only for a row that carries a video — so a type-level rule would assert
+  a key that is usually absent.
+
+### Removed
+
+- **`role: computed`.** It was defined as "derivation says nothing about a
+  backing field", which is why it alone had no `acf:` default and demanded the
+  key explicitly. A sweep of ~200 components across five projects found no
+  instance that was not database-backed, so it was a permanent explanation
+  burden covering nothing. Use `role: query`, or `role: derived` when the value
+  is built from a sibling. `role: computed` is now rejected by name, with the
+  replacement in the message — it shipped, so somebody's definition still
+  carries it.
+
+  `acf:` derivation is simpler as a result: `field` projects, every other role
+  does not, and an explicit `acf:` still overrides — which is how a `role: query`
+  repeater that needs projecting children declares itself.
+
 - **A bare `mcp:` / `dev:` now validates and means "deliberately none".** 0.5.0
   gave a component two states — the key is absent, or it carries guidance — so
   a lint reporting un-annotated components had no way to stop reporting the ones

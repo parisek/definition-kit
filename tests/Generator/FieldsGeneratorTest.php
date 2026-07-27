@@ -1427,25 +1427,50 @@ final class FieldsGeneratorTest extends TestCase
         ]), 'demo', 1700000000);
     }
 
-    // --- `role: computed` — no default, both polarities (issue #13) -----
+    // --- the completed role vocabulary (issue #27) -----------------------
 
-    public function test_role_computed_without_explicit_acf_is_rejected(): void
+    public function test_role_computed_is_rejected_by_name_with_its_replacement(): void
     {
         $this->expectException(\Parisek\DefinitionKit\Generator\GenerationValidationException::class);
-        $this->expectExceptionMessageMatches('/role: computed/');
+        // The message has to name the replacement, not just refuse the value —
+        // `computed` was a documented, shipped role and somebody's definition
+        // still carries it.
+        $this->expectExceptionMessageMatches('/role: computed.*removed in issue #27.*role: query/s');
 
         $this->generateGroup($this->tree([
             'columns' => ['type' => 'select', 'label' => 'Columns', 'role' => 'computed', 'options' => ['column-2' => '2']],
         ]), 'demo', 1700000000);
     }
 
-    public function test_role_computed_with_acf_true_is_included_like_benefits_list_columns(): void
+    public function test_every_role_but_field_defaults_to_non_projecting(): void
     {
+        $roles = [
+            'query' => [],
+            'global' => [],
+            'parent' => [],
+            'inherited' => [],
+            'derived' => ['from' => 'video'],
+        ];
+
+        foreach ($roles as $role => $extra) {
+            $group = $this->generateGroup($this->tree([
+                'video' => ['type' => 'media', 'kind' => 'file', 'label' => 'Video'],
+                'sources' => ['type' => 'text', 'label' => 'Sources', 'role' => $role, ...$extra],
+            ]), 'demo', 1700000000);
+
+            self::assertSame(['video'], array_column($group['fields'], 'name'), "role: {$role}");
+        }
+    }
+
+    public function test_explicit_acf_true_still_wins_over_a_non_projecting_role(): void
+    {
+        // The `role: query` repeater that needs projecting children — the case
+        // that made projection a separate axis in the first place.
         $group = $this->generateGroup($this->tree([
             'columns' => [
                 'type' => 'select',
                 'label' => 'Columns',
-                'role' => 'computed',
+                'role' => 'query',
                 'acf' => true,
                 'options' => ['column-2' => '2 sloupce', 'column-3' => '3 sloupce'],
             ],
@@ -1455,21 +1480,24 @@ final class FieldsGeneratorTest extends TestCase
         self::assertSame('columns', $group['fields'][0]['name']);
     }
 
-    public function test_role_computed_with_acf_false_is_excluded_like_faq_title(): void
+    public function test_role_derived_carrying_from_is_excluded_and_does_not_disturb_its_origin(): void
     {
+        // article-video-grid: `sources` is built by the field-formatting layer
+        // out of `video` on the same row. The origin still projects; the
+        // derivation does not.
         $group = $this->generateGroup($this->tree([
-            'title' => ['type' => 'text', 'label' => 'Title', 'role' => 'computed', 'acf' => false, 'source' => 'heading.title'],
-            'heading' => [
-                'type' => 'group',
-                'label' => 'Heading',
-                'fields' => ['title' => ['type' => 'text', 'label' => 'Title']],
+            'items' => [
+                'type' => 'repeater',
+                'label' => 'Items',
+                'fields' => [
+                    'video' => ['type' => 'media', 'kind' => 'file', 'label' => 'Video'],
+                    'sources' => ['type' => 'text', 'label' => 'Sources', 'role' => 'derived', 'from' => 'video'],
+                ],
             ],
         ]), 'demo', 1700000000);
 
         self::assertCount(1, $group['fields']);
-        self::assertSame('heading', $group['fields'][0]['name']);
-        // No root-level `title` key — matching the eprukaz faq acceptance case.
-        self::assertNotContains('title', array_column($group['fields'], 'name'));
+        self::assertSame(['video'], array_column($group['fields'][0]['sub_fields'], 'name'));
     }
 
     // --- rule 9 — projecting container with zero projecting children ----
@@ -1482,7 +1510,7 @@ final class FieldsGeneratorTest extends TestCase
                 'type' => 'group',
                 'label' => 'Wrapper',
                 'fields' => [
-                    'internal' => ['type' => 'text', 'label' => 'Internal', 'role' => 'computed', 'acf' => false],
+                    'internal' => ['type' => 'text', 'label' => 'Internal', 'role' => 'query', 'acf' => false],
                 ],
             ],
         ]), 'demo', 1700000000);
@@ -1499,7 +1527,7 @@ final class FieldsGeneratorTest extends TestCase
                 'type' => 'repeater',
                 'label' => 'Items',
                 'fields' => [
-                    'computed_only' => ['type' => 'text', 'label' => 'Computed', 'role' => 'computed', 'acf' => false],
+                    'query_only' => ['type' => 'text', 'label' => 'From a query', 'role' => 'query', 'acf' => false],
                 ],
             ],
         ]), 'demo', 1700000000);
