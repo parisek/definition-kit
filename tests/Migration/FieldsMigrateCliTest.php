@@ -131,16 +131,69 @@ final class FieldsMigrateCliTest extends TestCase
         self::assertFileDoesNotExist("{$dir}/acf.json");
     }
 
-    public function test_fails_only_when_neither_acf_json_nor_block_json_exists(): void
+    public function test_adopts_a_component_that_has_only_a_twig(): void
+    {
+        // `button`, `picture`, `header`, `breadcrumb` — rendered by a caller,
+        // never by the editor, so no ACF group and no block.json will ever
+        // exist for them. 17 of mairateam's 69 components are this shape,
+        // including the two most-called in the whole theme.
+        $dir = sys_get_temp_dir() . '/fields-migrate-cli-' . uniqid('', true) . '/button';
+        mkdir($dir, 0777, true);
+        file_put_contents(
+            "{$dir}/button.twig",
+            "{#\nname: \"Button\"\ncategory: \"Basic\"\ndescription: \"A button\"\n#}\n<a>{{ content.label }}</a>\n",
+        );
+
+        $output = shell_exec(sprintf('php %s %s 2>&1', escapeshellarg($this->binPath), escapeshellarg($dir)));
+
+        self::assertIsString($output);
+        self::assertStringContainsString('OK   button', $output);
+
+        $yaml = (string) file_get_contents("{$dir}/button.yaml");
+        // The twig front-comment carries the metadata, so the definition is
+        // worth having even with no fields in it.
+        self::assertStringContainsString('name: Button', $yaml);
+        self::assertStringContainsString('category: Basic', $yaml);
+        // And still no invented fields: `fields-roles` fills those from
+        // evidence, this step does not guess.
+        self::assertStringContainsString('fields: {  }', $yaml);
+    }
+
+    public function test_fails_only_when_there_is_nothing_on_disk_to_describe(): void
     {
         $dir = sys_get_temp_dir() . '/fields-migrate-cli-' . uniqid('', true) . '/empty';
         mkdir($dir, 0777, true);
-        file_put_contents("{$dir}/empty.twig", "{#\nname: Empty\n#}\n");
+        file_put_contents("{$dir}/notes.md", "not a component\n");
 
         $output = shell_exec(sprintf('php %s %s 2>&1', escapeshellarg($this->binPath), escapeshellarg($dir)));
 
         self::assertIsString($output);
         self::assertStringContainsString('FAIL', $output);
-        self::assertStringContainsString('no acf.json or block.json', $output);
+        self::assertStringContainsString('no acf.json, block.json or empty.twig', $output);
+    }
+
+    public function test_root_sweep_covers_every_shape_the_single_form_accepts(): void
+    {
+        // The sweep used to migrate only acf.json components, silently passing
+        // over the block-only ones the CLI had accepted one at a time since
+        // 0.4.2.
+        $root = sys_get_temp_dir() . '/fields-migrate-cli-' . uniqid('', true);
+        foreach (['hero', 'divider', 'button'] as $name) {
+            mkdir("{$root}/{$name}", 0777, true);
+            file_put_contents("{$root}/{$name}/{$name}.twig", "{#\nname: \"{$name}\"\n#}\n");
+        }
+        file_put_contents("{$root}/hero/acf.json", json_encode([
+            'key' => 'group_hero',
+            'title' => 'Hero',
+            'fields' => [['key' => 'field_hero_title', 'name' => 'title', 'label' => 'T', 'type' => 'text']],
+        ], JSON_THROW_ON_ERROR));
+        file_put_contents("{$root}/divider/block.json", json_encode(['title' => 'Divider'], JSON_THROW_ON_ERROR));
+
+        $output = shell_exec(sprintf('php %s --root=%s 2>&1', escapeshellarg($this->binPath), escapeshellarg($root)));
+
+        self::assertIsString($output);
+        foreach (['hero', 'divider', 'button'] as $name) {
+            self::assertFileExists("{$root}/{$name}/{$name}.yaml", "{$name} was not migrated");
+        }
     }
 }

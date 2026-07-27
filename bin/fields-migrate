@@ -24,17 +24,28 @@ function fields_migrate_one(string $componentDir, bool $dryRun): array
     $acfPath = "{$componentDir}/acf.json";
     $blockPath = "{$componentDir}/block.json";
 
+    $twigPath = "{$componentDir}/{$componentName}.twig";
+
     // A Gutenberg block with no editor fields has a block.json and no
     // acf.json -- `divider`, `form-configurator`. Requiring acf.json locked
-    // out exactly the components definition-kit 0.4.0 made expressible, and
-    // left hand-transcribing the block residual into `wp.block` as the only
-    // way to adopt one. Only the case where NEITHER file exists is genuinely
-    // nothing to migrate.
-    if (!is_file($acfPath) && !is_file($blockPath)) {
+    // out exactly the components definition-kit 0.4.0 made expressible.
+    //
+    // A twig with NEITHER file is the next case out: `button`, `picture`,
+    // `header`, `breadcrumb` -- utility components rendered by a caller, never
+    // by the editor, so no ACF group and no block.json will ever exist for
+    // them. In one real 69-component project that is 17 components, and the
+    // two most-called in the whole theme (`picture` at 77 call sites,
+    // `button` at 31). Refusing them kept the input-contract check blind to
+    // exactly the components #14 called load-bearing.
+    //
+    // The template is the thing being described, so its presence is what makes
+    // a directory a component. Only a directory with none of the three is
+    // genuinely nothing to migrate.
+    if (!is_file($acfPath) && !is_file($blockPath) && !is_file($twigPath)) {
         return [
             'ok' => false,
             'component' => $componentName,
-            'error' => "no acf.json or block.json at {$componentDir}",
+            'error' => "no acf.json, block.json or {$componentName}.twig at {$componentDir}",
         ];
     }
 
@@ -54,7 +65,9 @@ function fields_migrate_one(string $componentDir, bool $dryRun): array
         // and no file on disk records that; inferring provenance would be a
         // guess, and a wrong `role:` is worse than an honest empty map the
         // author then fills in. The CLI says so on stdout.
-        $blockDecodedForTitle = json_decode((string) file_get_contents($blockPath), true);
+        $blockDecodedForTitle = is_file($blockPath)
+            ? json_decode((string) file_get_contents($blockPath), true)
+            : null;
         $decoded = [
             // The derived key, so AcfJsonReader sees nothing worth pinning:
             // there is no ACF group here, so the definition should not claim
@@ -66,7 +79,6 @@ function fields_migrate_one(string $componentDir, bool $dryRun): array
         ];
     }
 
-    $twigPath = "{$componentDir}/{$componentName}.twig";
     $twigSource = is_file($twigPath) ? file_get_contents($twigPath) : null;
 
     try {
@@ -146,7 +158,12 @@ if (null !== $root) {
     $dirs = glob(rtrim($root, '/') . '/*', GLOB_ONLYDIR) ?: [];
     sort($dirs);
     foreach ($dirs as $dir) {
-        if (is_file("{$dir}/acf.json")) {
+        // Everything the per-component form accepts, so a sweep and a single
+        // run agree. Before this, `--root` migrated only acf.json components
+        // and silently passed over the block-only ones the CLI had accepted
+        // one at a time since 0.4.2.
+        $name = basename($dir);
+        if (is_file("{$dir}/acf.json") || is_file("{$dir}/block.json") || is_file("{$dir}/{$name}.twig")) {
             $results[] = fields_migrate_one($dir, $dryRun);
         }
     }

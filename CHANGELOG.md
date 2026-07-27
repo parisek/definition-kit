@@ -7,6 +7,30 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 ### Added
 
+- **`fields-migrate` adopts a component that has only a twig.** `button`,
+  `picture`, `header`, `breadcrumb` — rendered by a caller, never by the editor,
+  so no ACF group and no `block.json` will ever exist for them. That is **17 of
+  mairateam's 69 components**, including the two most-called in the whole theme
+  (`picture` at 77 call sites, `button` at 31), and refusing them kept the
+  contract check blind to exactly the components #14 called load-bearing.
+
+  The template is the thing being described, so its presence is what makes a
+  directory a component; only a directory with none of the three files is
+  nothing to migrate. Nothing is guessed — the definition carries what the twig
+  front-comment already states (name, category, usage, render, description) and
+  an empty `fields:` map for `fields-roles` to fill from evidence.
+
+  A `--root` sweep now covers every shape the single-component form accepts. It
+  had migrated only acf.json components, silently passing over the block-only
+  ones the CLI has accepted one at a time since 0.4.2.
+
+- **`fields-roles --call-sites=<dir>`**, defaulting to the parent of the
+  components root. `footer` and `header` are rendered by `page/_partials/*.twig`
+  — one level up, outside the sweep — so scanning only the components directory
+  left every one of their props with no evidence. On mairateam this took the
+  blank rate from 40% to **21%**, which is the figure the plan predicted before
+  any of it had been run.
+
 - **`role: derived` covers any value built out of a declared sibling**, not only
   the framework's field-formatting layer (issue #27). The mairateam run found
   `reference-slider.php` doing `$content['title'] = wp_kses_post($content['heading']['title'])`
