@@ -5,6 +5,40 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Fixed
+
+- **`fields-roles` now sees the call sites that actually exist.** The first
+  version recognised only `{% include %}`/`{% embed %}`; a run over a real
+  69-component project found **304 `component_*()` calls and zero includes
+  between components**, so `role: parent` was proposable exactly nowhere.
+  `CallSiteIndex` now understands parisek/timber-kit's `component_*` Twig
+  function (`StarterBase::twig_component_template()`), including its `_`-for-`-`
+  slug normalisation and the `styleguide_data()|merge({…})` shape its fixtures
+  use.
+
+  `styleguide.*.twig` fixtures count as call sites: they pass exactly the props
+  a real caller passes, and for a component with no ACF layer they are often
+  the only call sites there are. An ACF field still wins over a call site, so
+  demo data cannot relabel a genuine `field` prop as `parent`.
+
+- **Sidecar evidence recognises the shapes sidecars are actually written in.**
+  Every real sidecar in the corpus came back unclassified, because the parser
+  understood only `$content['x'] = <marker>`. Now also handled: `$content['x'][]
+  = …` and `$content['x']['y'] = …`; evidence carried across a `foreach` over a
+  query result; two-variable chains (`$q = Timber::get_posts(); $p =
+  $q->pagination(); $content['pagination'] = Helpers::pagination($p)`); and
+  `Timber::get_posts` / `get_categories` as query markers.
+
+  `formatFields` stopped being a `global` marker. It is timber-kit's field
+  formatter, called on a post far more often than on options, and listing it
+  made every query-built row report as `global` — a confidently wrong answer,
+  which is worse than the blank it replaced. `'option'` alone still catches
+  `get_option()`, `get_field(…, 'option')` and `formatFields('option')`.
+
+  Measured on the same corpus: blanks fell from 17 to 5, and the proposals went
+  from 202 `field` + 1 `derived` to 203 `field`, 6 `query`, 6 `parent`,
+  1 `derived`.
+
 ### Added
 
 - **`fields-roles`, a bootstrap that proposes rather than guesses** (issue #27).

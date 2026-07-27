@@ -10,6 +10,7 @@ use Twig\Loader\ArrayLoader;
 use Twig\Node\EmbedNode;
 use Twig\Node\Expression\ArrayExpression;
 use Twig\Node\Expression\ConstantExpression;
+use Twig\Node\Expression\FilterExpression;
 use Twig\Node\Expression\FunctionExpression;
 use Twig\Node\IncludeNode;
 use Twig\Node\ModuleNode;
@@ -19,19 +20,34 @@ use Twig\TwigFunction;
 use Twig\TwigTest;
 
 /**
- * Which props each component is handed by the templates that include it
+ * Which props each component is handed by the templates that render it
  * (issue #27, phase 4) — the evidence behind a proposed `role: parent`.
  *
- * Only explicit `with { … }` keys count. An include without one passes the
- * caller's whole context, which says nothing about any particular prop; taking
- * it as evidence would let every component in a project claim every prop.
+ * Two call shapes, because real projects use both:
  *
- * A component nobody includes has no call sites, and that is information too:
+ * - `{% include "button/button.twig" with { label: … } %}`
+ * - `{{ component_button({ label: … }) }}` — parisek/timber-kit's `component_*`
+ *   Twig function (`StarterBase::twig_component_template()`), which resolves
+ *   `@component/<slug>/<slug>.twig` and merges its array argument into
+ *   `context.content`. `_` in the function name is the component's `-`.
+ *
+ * The second shape was invisible to the first version of this class, and a run
+ * over a real 69-component project found 304 of those calls and zero includes
+ * between components — so `role: parent` was proposable exactly nowhere. A
+ * convention that carries every call site in a project is not a detail.
+ *
+ * Only explicit keys count, in both shapes. A bare include passes the caller's
+ * whole context, which says nothing about any particular prop; taking it as
+ * evidence would let every component claim every prop.
+ *
+ * A component nobody renders has no call sites, and that is information too:
  * it means `parent` cannot be proposed for it, not that the prop is something
  * else.
  */
 final class CallSiteIndex
 {
+    private const COMPONENT_FUNCTION_PREFIX = 'component_';
+
     /** @var array<string,list<string>> component name => props passed to it by callers */
     private array $passed = [];
 
@@ -105,11 +121,25 @@ final class CallSiteIndex
             }
         }
 
-        if ($node instanceof FunctionExpression && 'include' === $node->getAttribute('name')) {
+        if ($node instanceof FunctionExpression) {
+            $function = (string) $node->getAttribute('name');
             $arguments = iterator_to_array($node->getNode('arguments'));
-            $target = isset($arguments[0]) ? $this->componentOf($arguments[0]) : null;
-            if (null !== $target && isset($arguments[1])) {
-                $this->record($target, $arguments[1]);
+
+            if ('include' === $function) {
+                $target = isset($arguments[0]) ? $this->componentOf($arguments[0]) : null;
+                if (null !== $target && isset($arguments[1])) {
+                    $this->record($target, $arguments[1]);
+                }
+            }
+
+            if (str_starts_with($function, self::COMPONENT_FUNCTION_PREFIX)) {
+                // `component_page_header_default({ … })` renders
+                // `page-header-default`: the function name is the slug with
+                // `-` spelled `_`, per StarterBase's own normalisation.
+                $slug = str_replace('_', '-', substr($function, strlen(self::COMPONENT_FUNCTION_PREFIX)));
+                if ('' !== $slug && isset($arguments[0])) {
+                    $this->record($slug, $arguments[0]);
+                }
             }
         }
 
@@ -145,6 +175,18 @@ final class CallSiteIndex
 
     private function record(string $component, Node $variables): void
     {
+        if ($variables instanceof FilterExpression) {
+            // `component_promo(styleguide_data()|merge({ background: 'primary' }))`
+            // — the literal keys are in the filter's arguments, and the piped
+            // value is whatever the fixture loaded. Take the literal half; the
+            // other half names no props statically.
+            foreach ($variables->getNode('arguments') as $argument) {
+                $this->record($component, $argument);
+            }
+
+            return;
+        }
+
         if (!$variables instanceof ArrayExpression) {
             return;
         }
