@@ -5,6 +5,24 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+
+- **`schemas/framework-props-baseline.yaml`** — the props the render pipeline
+  injects into every component (`content.wrapper_id`, `content.wrapper_classes`,
+  `content.is_preview`), implicitly declared everywhere and never written into a
+  definition (issue #27). Same precedent as the ACF type-defaults baseline: a
+  fact true across the whole corpus lives in one file derived from real data
+  rather than being repeated 200 times, where it would rot the moment the
+  pipeline changes.
+
+  Scoped to `content.*` deliberately. `Timber::context()` globals — `homeUrl`,
+  `header.*`, `footer.*` — live at the Twig context root and arrive by a
+  different mechanism; they are equally ambient and not the same thing, and the
+  file's header says so before somebody adds them.
+
+  `is_preview` is in the list because `BlockRenderer` sets it one line above the
+  other two with identical unconditional semantics. It was missing from the
+  first draft only because nobody read the line above.
 
 ## [0.5.1] - 2026-07-27
 ### Added

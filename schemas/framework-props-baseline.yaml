@@ -1,0 +1,27 @@
+# Framework props baseline — derived from parisek/timber-kit's render pipeline
+# (BlockRenderer.php:307-309), cross-checked against the mairateam and
+# eprukaz2025 corpora. Props the framework injects into EVERY component, and
+# which are therefore implicitly declared everywhere: they are real inputs with
+# `role: inherited`, but writing them into 200 definitions would be 600 lines of
+# noise that also rots the moment the pipeline changes.
+#
+# A prop listed here counts as declared for every component and is never
+# reported by the contract check. Nothing else grants that — this is the only
+# blanket exemption, and it exists because the claim "true for every component"
+# is verifiable at one call site rather than asserted per file.
+#
+# Scoped to `content.*` DELIBERATELY. `Timber::context()` globals (`homeUrl`,
+# `header.*`, `footer.*`) live at the Twig context root, not under `content`,
+# and reach a template through a different mechanism. They do not belong in
+# this file; adding them would conflate two things that happen to be equally
+# ambient.
+#
+# Adding an entry means asserting the pipeline injects it unconditionally.
+# `is_preview` is here because BlockRenderer sets it one line above the other
+# two with identical semantics — it was left out of the first draft purely
+# because nobody looked at the line above.
+
+content:
+  - wrapper_id
+  - wrapper_classes
+  - is_preview
