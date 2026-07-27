@@ -5,6 +5,25 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+
+- **`role: derived` covers any value built out of a declared sibling**, not only
+  the framework's field-formatting layer (issue #27). The mairateam run found
+  `reference-slider.php` doing `$content['title'] = wp_kses_post($content['heading']['title'])`
+  — a component's own PHP lifting a nested field to the root. No database, no
+  options, no caller: under the narrow definition it had no role at all, which
+  is the gap the removal of `computed` was supposed not to leave.
+
+  Who builds the value turned out not to be the interesting fact; where it comes
+  from is, and `from:` records that either way. The framework case
+  (`article-video-grid.sources` from `video`) and the lift case are the same
+  claim, and both stay checkable.
+
+  `fields-roles` proposes the lift straight from the sidecar — the assigning
+  statement names the sibling — and refuses when that sibling is undeclared or
+  when two siblings are combined, since `from:` names one origin and picking
+  either would be a guess dressed as evidence.
+
 ### Fixed
 
 - **`fields-roles` now sees the call sites that actually exist.** The first

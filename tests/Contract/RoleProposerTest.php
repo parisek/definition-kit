@@ -248,6 +248,42 @@ final class RoleProposerTest extends TestCase
         self::assertSame('video', $proposal->derivedFrom['sources']);
     }
 
+    public function testASidecarLiftingASiblingProposesDerivedFromIt(): void
+    {
+        // reference-slider: the component's own PHP takes `heading.title` up to
+        // the root. #27 removed `computed` on the grounds that no non-query
+        // case existed; the mairateam run found this one, and `derived`
+        // describes it with an origin a linter can verify.
+        $dir = $this->component('reference-slider', [
+            'reference-slider.yaml' => "name: Reference slider\nfields:\n"
+                . "  heading: { type: group, label: H, fields: { title: { type: text, label: T } } }\n",
+            'reference-slider.twig' => '{{ content.title }}',
+            'reference-slider.php' => "<?php\n\$content['title'] = wp_kses_post(\$content['heading']['title']);\n",
+            'acf.json' => $this->acfJson([['name' => 'heading', 'type' => 'group']]),
+        ]);
+
+        $proposal = (new RoleProposer())->propose($dir);
+
+        self::assertSame('derived', $proposal->roles['title']);
+        self::assertSame('heading', $proposal->derivedFrom['title']);
+    }
+
+    public function testALiftOutOfAnUndeclaredSiblingProposesNothing(): void
+    {
+        // The origin has to exist, or the `from:` written into the definition
+        // would dangle — the assertion fields-validate rejects.
+        $dir = $this->component('widget', [
+            'widget.yaml' => "name: Widget\nfields: {}\n",
+            'widget.twig' => '{{ content.title }}',
+            'widget.php' => "<?php\n\$content['title'] = \$content['heading']['title'];\n",
+        ]);
+
+        $proposal = (new RoleProposer())->propose($dir);
+
+        self::assertSame([], $proposal->roles);
+        self::assertSame(['title'], $proposal->unresolved);
+    }
+
     public function testDerivedIsNotProposedWithoutTheSiblingItWouldName(): void
     {
         // Proposing `derived` here would write a `from:` that dangles —

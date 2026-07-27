@@ -8,6 +8,11 @@
 # acf.json declares it, and no caller passes it, so none of the other five roles
 # can express where it comes from.
 #
+# This table covers only the FRAMEWORK's enrichment. A component whose own PHP
+# lifts a value out of a sibling (`$content['title'] = $content['heading']['title']`)
+# is equally `role: derived` — `fields-roles` reads that straight out of the
+# sidecar and needs no table for it.
+#
 # Used ONLY by `fields-roles` to propose `role: derived` with a `from:`, and only
 # when a sibling of the listed type is actually present. It proposes; a human
 # accepts. Nothing here suppresses anything on its own — unlike the framework

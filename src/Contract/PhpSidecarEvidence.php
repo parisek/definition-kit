@@ -25,6 +25,12 @@ namespace Parisek\DefinitionKit\Contract;
  * general dataflow analysis — enough for the shape sidecars are written in, and
  * shallow enough to stay explainable.
  *
+ * A sidecar also lifts: `$content['title'] = wp_kses_post($content['heading']['title'])`
+ * takes a nested field up to the root. That is `role: derived` with
+ * `from: heading` — the value is built out of a declared sibling, and the
+ * statement names the sibling itself, so the claim is evidenced rather than
+ * guessed.
+ *
  * It classifies conservatively. Anything it cannot attribute is left
  * unclassified, because "this PHP file assigns it" says the value is computed
  * somewhere and nothing about where from. `computed` used to be the home for
@@ -53,18 +59,20 @@ final class PhpSidecarEvidence
     private const GLOBAL_MARKERS = ['option'];
 
     /**
-     * prop name => 'query' | 'global' | null (assigned, but by nothing this can name)
+     * prop name => 'query' | 'global' | 'derived' | null (assigned, but by
+     * nothing this can name), plus the sibling each `derived` came from.
      *
-     * @return array<string,?string>
+     * @return array{roles: array<string,?string>, derivedFrom: array<string,string>}
      */
     public function evidence(string $phpPath): array
     {
         $source = is_file($phpPath) ? file_get_contents($phpPath) : false;
         if (false === $source) {
-            return [];
+            return ['roles' => [], 'derivedFrom' => []];
         }
 
         $found = [];
+        $derivedFrom = [];
         /** @var array<string,string> $variableSources variable name => 'query'|'global' */
         $variableSources = [];
 
@@ -81,6 +89,14 @@ final class PhpSidecarEvidence
 
             $prop = $statement['contextProp'];
             if (null !== $prop) {
+                if (null === $classification) {
+                    $sibling = $this->liftedSibling($statement['contextReads'], $prop);
+                    if (null !== $sibling) {
+                        $classification = 'derived';
+                        $derivedFrom[$prop] = $sibling;
+                    }
+                }
+
                 // A prop assigned twice keeps the evidence that names a
                 // source: once query-sourced, always query-sourced.
                 if (!array_key_exists($prop, $found) || (null === $found[$prop] && null !== $classification)) {
@@ -95,7 +111,27 @@ final class PhpSidecarEvidence
             }
         }
 
-        return $found;
+        return ['roles' => $found, 'derivedFrom' => $derivedFrom];
+    }
+
+    /**
+     * The sibling prop a lifting assignment reads — `heading` in
+     * `$content['title'] = wp_kses_post($content['heading']['title'])`.
+     *
+     * Exactly one other context prop must appear. A statement combining two
+     * siblings has no single origin, and `from:` names one; the honest answer
+     * there is no proposal at all.
+     *
+     * @param list<string> $contextReads
+     */
+    private function liftedSibling(array $contextReads, string $prop): ?string
+    {
+        $others = array_values(array_unique(array_filter(
+            $contextReads,
+            static fn (string $name): bool => $name !== $prop,
+        )));
+
+        return 1 === count($others) ? $others[0] : null;
     }
 
     /**
@@ -106,7 +142,7 @@ final class PhpSidecarEvidence
      * whatever the body happened to assign first.
      *
      * @param list<array{int,string,int}|string> $tokens
-     * @return list<array{text: string, contextProp: ?string, assignedVariable: ?string, loopTarget: ?string}>
+     * @return list<array{text: string, contextProp: ?string, assignedVariable: ?string, loopTarget: ?string, contextReads: list<string>}>
      */
     private function statements(array $tokens): array
     {
@@ -131,7 +167,7 @@ final class PhpSidecarEvidence
 
     /**
      * @param list<array{int,string,int}|string> $tokens one statement
-     * @return array{text: string, contextProp: ?string, assignedVariable: ?string, loopTarget: ?string}
+     * @return array{text: string, contextProp: ?string, assignedVariable: ?string, loopTarget: ?string, contextReads: list<string>}
      */
     private function describe(array $tokens): array
     {
@@ -148,6 +184,7 @@ final class PhpSidecarEvidence
             static fn (array|string $token): bool => !is_array($token) || !in_array($token[0], $noise, true),
         ));
 
+        $contextReads = $this->contextSubscripts($significant);
         $first = $significant[0] ?? null;
 
         if (is_array($first) && T_FOREACH === $first[0]) {
@@ -156,11 +193,18 @@ final class PhpSidecarEvidence
                 'contextProp' => null,
                 'assignedVariable' => null,
                 'loopTarget' => $this->loopValueTarget($significant),
+                'contextReads' => $contextReads,
             ];
         }
 
         if (!is_array($first) || T_VARIABLE !== $first[0]) {
-            return ['text' => $text, 'contextProp' => null, 'assignedVariable' => null, 'loopTarget' => null];
+            return [
+                'text' => $text,
+                'contextProp' => null,
+                'assignedVariable' => null,
+                'loopTarget' => null,
+                'contextReads' => $contextReads,
+            ];
         }
 
         // `$content['x'] = …`, and equally `$content['x'][] = …` (an append)
@@ -181,6 +225,7 @@ final class PhpSidecarEvidence
                 'contextProp' => trim($significant[2][1], "'\""),
                 'assignedVariable' => null,
                 'loopTarget' => null,
+                'contextReads' => $contextReads,
             ];
         }
 
@@ -191,10 +236,49 @@ final class PhpSidecarEvidence
                 'contextProp' => null,
                 'assignedVariable' => $first[1],
                 'loopTarget' => null,
+                'contextReads' => $contextReads,
             ];
         }
 
-        return ['text' => $text, 'contextProp' => null, 'assignedVariable' => null, 'loopTarget' => null];
+        return [
+            'text' => $text,
+            'contextProp' => null,
+            'assignedVariable' => null,
+            'loopTarget' => null,
+            'contextReads' => $contextReads,
+        ];
+    }
+
+    /**
+     * Every `$content['name']` the statement mentions, in order — read the same
+     * way the assignment target is, through the lexer rather than by matching
+     * text. Includes the assignment target itself; the caller filters it out.
+     *
+     * @param list<array{int,string,int}|string> $significant
+     * @return list<string>
+     */
+    private function contextSubscripts(array $significant): array
+    {
+        $names = [];
+
+        foreach ($significant as $index => $token) {
+            if (!is_array($token) || T_VARIABLE !== $token[0]) {
+                continue;
+            }
+            if (!in_array($token[1], self::CONTEXT_VARIABLES, true)) {
+                continue;
+            }
+            if ('[' !== ($significant[$index + 1] ?? null)) {
+                continue;
+            }
+
+            $subscript = $significant[$index + 2] ?? null;
+            if (is_array($subscript) && T_CONSTANT_ENCAPSED_STRING === $subscript[0]) {
+                $names[] = trim($subscript[1], "'\"");
+            }
+        }
+
+        return $names;
     }
 
     /**
