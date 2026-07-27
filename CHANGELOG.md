@@ -7,6 +7,24 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 ### Added
 
+- **`fields-roles` proposes at any depth, not just the root.** It considered
+  top-level reads only, so `article-video-grid.items.sources` — the framework
+  enrichment `role: derived` was invented for — was flagged by the check instead
+  of proposed by the bootstrap. The proposer now descends exactly as far as the
+  definition itself does, stopping at the first segment missing from a level the
+  definition enumerates, which is the same rule `ContractLinter` uses; the two
+  agree on where a contract ends.
+
+  Evidence does not descend with it. A sidecar assigns onto `$content` and a
+  caller hands props to the component, so neither says anything about a row of
+  one of its repeaters — reusing that evidence one level down would be a guess.
+  Nested proposals therefore come from the derived-props table, which names the
+  sibling it needs and can be checked against the row it lands in.
+
+  On mairateam: `derived` proposals 2 → 4, components flagged by the check
+  11 → 9, and one violation turned into a review item, which is the honest
+  answer for a prop nothing on disk explains.
+
 - **`fields-migrate` adopts a component that has only a twig.** `button`,
   `picture`, `header`, `breadcrumb` — rendered by a caller, never by the editor,
   so no ACF group and no `block.json` will ever exist for them. That is **17 of
