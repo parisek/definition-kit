@@ -119,7 +119,9 @@ if (null === $callSites) {
         . "      in other components' templates. Use --root=<components-root> for that.\n\n";
 }
 
-$proposer = new RoleProposer();
+// Proposing and checking must agree on what the framework supplies, so both
+// resolve the baseline the same way.
+$proposer = RoleProposer::forComponentsRoot($root ?? dirname(rtrim((string) $single, '/')));
 $writer = new FieldsYamlWriter();
 
 $proposed = 0;
@@ -157,7 +159,8 @@ foreach ($dirs as $dir) {
     }
 
     foreach ($proposal->unresolved as $prop) {
-        echo "  ? {$prop}: no evidence for any role — left for you\n";
+        $hint = $proposal->hints[$prop] ?? 'no evidence for any role';
+        echo "  ? {$prop}: {$hint} — left for you\n";
     }
 
     if ($write && $proposal->hasChanges() && null !== $proposal->definition) {

@@ -3,6 +3,7 @@
 
 declare(strict_types=1);
 
+use Parisek\DefinitionKit\Baseline\FrameworkProps;
 use Parisek\DefinitionKit\Contract\ContractLinter;
 use Parisek\DefinitionKit\Contract\ContractResult;
 use Parisek\DefinitionKit\Lint\DriftLinter;
@@ -58,7 +59,16 @@ if (null !== $root && !is_dir($root)) {
     exit(2);
 }
 
-$contractLinter = new ContractLinter();
+// The baseline that governs this components root — a project's own
+// `framework-props-baseline.yaml` when it ships one, otherwise the shipped
+// timber-kit table. What the framework supplies is a fact about the framework
+// in front of you, not about this package.
+$baselineRoot = $root ?? dirname(rtrim((string) $single, '/'));
+$baseline = FrameworkProps::discoverFor($baselineRoot);
+$contractLinter = new ContractLinter($baseline['props']);
+if (null !== $baseline['path']) {
+    echo "framework props: {$baseline['path']}\n";
+}
 
 /** @var list<ContractResult> $contractResults */
 $contractResults = [];

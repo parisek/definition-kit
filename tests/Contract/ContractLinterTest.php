@@ -164,6 +164,40 @@ final class ContractLinterTest extends TestCase
         self::assertSame(ContractResult::TYPED, $this->lint($dir)->status);
     }
 
+    public function testReadsInsideAnOpenMapAreNotEnumerated(): void
+    {
+        $dir = $this->component('picture', <<<'YAML'
+        name: Picture
+        fields:
+          image: { type: media, kind: image, label: Image, role: field }
+          link_attributes: { type: group, label: Link attributes, open: true, role: parent }
+        YAML, '<a data-lg-group="{{ content.link_attributes["data-lg-group"] }}">'
+            . '{{ content.link_attributes.target }}</a>');
+
+        self::assertSame(ContractResult::TYPED, $this->lint($dir)->status);
+    }
+
+    public function testAProjectBaselineReplacesTheShippedOne(): void
+    {
+        // tailwind-base treats `container` as a layout slot every wrapper
+        // supplies. That is a fact about its framework, not about this
+        // package, so the project states it.
+        file_put_contents("{$this->root}/framework-props-baseline.yaml", "content:\n  - container\n");
+
+        $dir = $this->component('alert', <<<'YAML'
+        name: Alert
+        fields:
+          text: { type: text, label: Text, role: field }
+        YAML, '<div class="{{ content.container }}">{{ content.text }}</div>');
+
+        self::assertSame(
+            ContractResult::TYPED,
+            ContractLinter::forComponentsRoot($this->root)->lint($dir)->status,
+        );
+        // …and without it, `container` is a finding, as the shipped baseline says.
+        self::assertSame(['container'], $this->lint($dir)->violations);
+    }
+
     public function testADefinitionWithARolelessFieldIsUntypedNotPassing(): void
     {
         $dir = $this->component('hero', <<<'YAML'

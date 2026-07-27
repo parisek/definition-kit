@@ -19,11 +19,46 @@ use Symfony\Component\Yaml\Yaml;
  * Deliberately the ONLY blanket exemption the contract check honours. Every
  * other unaccounted prop is a finding, because every other suppression would
  * be an assertion nobody can check.
+ *
+ * ## Projects override it
+ *
+ * The shipped file states what parisek/timber-kit's render pipeline injects.
+ * That is one framework's answer, and a project on a different one has a
+ * different set: tailwind-base's skeleton treats `container` as a layout slot
+ * every wrapper supplies, and its migration notes asked for it in the baseline
+ * (docs/398-unresolved-roles.md). Hardcoding another project's convention into
+ * a shipped file would make this table a negotiation; letting a project state
+ * its own keeps it a fact about the framework in front of it.
+ *
+ * `discoverFor()` looks for `framework-props-baseline.yaml` next to the
+ * components root, then one level up. A project file REPLACES the shipped one
+ * rather than merging: a baseline is the list of props the check will never
+ * report, and a half-inherited list is one nobody can read off the page.
  */
 final class FrameworkProps
 {
     /** @var array<string,list<string>> namespace => prop names */
     private array $baseline;
+
+    /**
+     * The baseline governing a components root: the project's own if it has
+     * one, otherwise the shipped timber-kit table.
+     *
+     * @return array{props: self, path: ?string}
+     */
+    public static function discoverFor(string $componentsRoot): array
+    {
+        $componentsRoot = rtrim($componentsRoot, '/');
+
+        foreach ([$componentsRoot, dirname($componentsRoot)] as $directory) {
+            $candidate = $directory . '/framework-props-baseline.yaml';
+            if (is_file($candidate)) {
+                return ['props' => new self($candidate), 'path' => $candidate];
+            }
+        }
+
+        return ['props' => new self(), 'path' => null];
+    }
 
     public function __construct(?string $path = null)
     {

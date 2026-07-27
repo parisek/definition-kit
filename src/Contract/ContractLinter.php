@@ -52,6 +52,15 @@ final class ContractLinter
     ) {
     }
 
+    /**
+     * A linter honouring the baseline that governs this components root — the
+     * project's own `framework-props-baseline.yaml` when it has one.
+     */
+    public static function forComponentsRoot(string $componentsRoot): self
+    {
+        return new self(FrameworkProps::discoverFor($componentsRoot)['props']);
+    }
+
     public function lint(string $componentDir): ContractResult
     {
         $componentDir = rtrim($componentDir, '/');
@@ -239,6 +248,12 @@ final class ContractLinter
      */
     private function childrenOf(array $field): ?array
     {
+        if (true === ($field['open'] ?? false)) {
+            // An open map's keys are not knowable in advance. What is inside
+            // belongs to whoever fills it, not to this component's contract.
+            return null;
+        }
+
         $role = $field['role'] ?? 'field';
         if ('field' !== $role) {
             // A query row, a value handed in by a caller, a derived structure:

@@ -40,6 +40,26 @@ use Twig\TwigTest;
  * whole context, which says nothing about any particular prop; taking it as
  * evidence would let every component claim every prop.
  *
+ * ## Styleguide fixtures are not call sites
+ *
+ * `styleguide.*.twig` renders a component with sample data, and in a styleguide
+ * repository that is the ONLY data source — every prop of every component is
+ * "passed by a template" there, including the ones an editor authors. Counting
+ * fixtures would therefore label a whole skeleton `parent`.
+ *
+ * Measured on mairateam: 191 props are evidenced only by fixtures against 58 by
+ * production templates. That project has an `acf.json` per component, and
+ * `field` outranks a call site, so nothing broke; a CMS-agnostic skeleton has no
+ * acf.json to outrank anything, and every one of those 191 would have been
+ * mislabelled. tailwind-base's own migration notes reached the same conclusion
+ * from the other direction (docs/398-unresolved-roles.md).
+ *
+ * The rule call sites serve is not "somebody passes it". It is what the prop
+ * IS: content an editor would author is `field` even when only a fixture
+ * supplies it here, and a prop that exists so a parent can wire a child into
+ * its composition is `parent`. Call-site evidence decides ambiguous cases; it
+ * does not decide the rule.
+ *
  * A component nobody renders has no call sites, and that is information too:
  * it means `parent` cannot be proposed for it, not that the prop is something
  * else.
@@ -48,8 +68,21 @@ final class CallSiteIndex
 {
     private const COMPONENT_FUNCTION_PREFIX = 'component_';
 
+    /** Fixtures render a component with sample data; they are not composition. */
+    private const FIXTURE_PREFIX = 'styleguide';
+
     /** @var array<string,list<string>> component name => props passed to it by callers */
     private array $passed = [];
+
+    /**
+     * The same, from `styleguide.*.twig` only. Not evidence — but knowing a
+     * prop is fixture-only is worth more to whoever reviews a blank than
+     * silence is: it says "somebody decided what this looks like, go read that
+     * fixture", and it is the exact question `field` vs `parent` turns on.
+     *
+     * @var array<string,list<string>>
+     */
+    private array $passedByFixtures = [];
 
     /**
      * @param list<string> $twigPaths every component template in the project
@@ -67,14 +100,26 @@ final class CallSiteIndex
                 continue;
             }
 
+            $this->isFixture = str_starts_with(basename($path), self::FIXTURE_PREFIX);
             $this->walk($module);
         }
+
+        $this->isFixture = false;
     }
+
+    private bool $isFixture = false;
 
     /** @return list<string> */
     public function propsPassedTo(string $component): array
     {
         return $this->passed[$component] ?? [];
+    }
+
+    /** Passed only by a `styleguide.*.twig` fixture — a hint, never evidence. */
+    public function isPassedOnlyByFixtureTo(string $component, string $prop): bool
+    {
+        return in_array($prop, $this->passedByFixtures[$component] ?? [], true)
+            && !$this->isPassedTo($component, $prop);
     }
 
     public function isPassedTo(string $component, string $prop): bool
@@ -201,6 +246,15 @@ final class CallSiteIndex
 
             $name = $key->getAttribute('value');
             if (!is_string($name)) {
+                continue;
+            }
+
+            if ($this->isFixture) {
+                $this->passedByFixtures[$component] ??= [];
+                if (!in_array($name, $this->passedByFixtures[$component], true)) {
+                    $this->passedByFixtures[$component][] = $name;
+                }
+
                 continue;
             }
 

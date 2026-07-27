@@ -20,6 +20,7 @@ final class RoleProposal
      * @param array<string,string> $derivedFrom dotted prop path => the sibling it comes from
      * @param list<string> $unresolved props read with no evidence for any role
      * @param list<string> $baselineProps props omitted because the framework injects them
+     * @param array<string,string> $hints unresolved path => what is known about it anyway
      * @param array<string,mixed>|null $definition the definition with the proposals applied
      */
     public function __construct(
@@ -28,6 +29,7 @@ final class RoleProposal
         public readonly array $derivedFrom = [],
         public readonly array $unresolved = [],
         public readonly array $baselineProps = [],
+        public readonly array $hints = [],
         public readonly ?array $definition = null,
         public readonly ?string $skipped = null,
     ) {

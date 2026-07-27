@@ -42,6 +42,12 @@ final class RoleProposer
     ) {
     }
 
+    /** Proposing and checking must agree on what the framework supplies. */
+    public static function forComponentsRoot(string $componentsRoot): self
+    {
+        return new self(FrameworkProps::discoverFor($componentsRoot)['props']);
+    }
+
     public function propose(string $componentDir, ?CallSiteIndex $callSites = null): RoleProposal
     {
         $componentDir = rtrim($componentDir, '/');
@@ -71,6 +77,7 @@ final class RoleProposer
         $nestedDerivedFrom = [];
         $unresolved = [];
         $baselineProps = [];
+        $hints = [];
 
         // 1. Fields already declared but carrying no role.
         foreach ($fields as $fieldName => $field) {
@@ -92,6 +99,7 @@ final class RoleProposer
             );
             if (null === $role) {
                 $unresolved[] = $fieldName;
+                $this->hint($hints, $fieldName, $fieldName, $callSites, $name);
                 continue;
             }
 
@@ -121,6 +129,7 @@ final class RoleProposer
 
             if (null === $role) {
                 $unresolved[] = $path;
+                $this->hint($hints, $path, $prop, $isRoot ? $callSites : null, $name);
                 continue;
             }
 
@@ -139,6 +148,7 @@ final class RoleProposer
             $derivedFrom,
             array_values(array_unique($unresolved)),
             $baselineProps,
+            $hints,
             $this->apply($definition, $roles, $derivedFrom),
         );
     }
@@ -263,6 +273,28 @@ final class RoleProposer
     }
 
     /**
+     * What is known about a prop no role could be proposed for.
+     *
+     * A fixture passing it is not evidence — in a styleguide repository every
+     * prop has a fixture — but it is exactly the question `field` vs `parent`
+     * turns on, and pointing at the fixture beats leaving a bare blank.
+     *
+     * @param array<string,string> $hints
+     */
+    private function hint(
+        array &$hints,
+        string $path,
+        string $prop,
+        ?CallSiteIndex $callSites,
+        string $component,
+    ): void {
+        if (null !== $callSites && $callSites->isPassedOnlyByFixtureTo($component, $prop)) {
+            $hints[$path] = 'passed by a styleguide fixture only — content an editor authors is `field`, '
+                . 'wiring a parent supplies is `parent`';
+        }
+    }
+
+    /**
      * The reads the definition does not account for, each mapped to the
      * `fields:` map it would be declared in.
      *
@@ -331,6 +363,12 @@ final class RoleProposer
      */
     private function enumeratedChildren(array $field): ?array
     {
+        if (true === ($field['open'] ?? false)) {
+            // An open map's keys are not knowable in advance. What is inside
+            // belongs to whoever fills it, not to this component's contract.
+            return null;
+        }
+
         if ('field' !== ($field['role'] ?? 'field')) {
             return null;
         }
