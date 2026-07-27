@@ -23,6 +23,7 @@ use Symfony\Component\Yaml\Yaml;
  * | already declared, with an ACF field behind it          | `field`         |
  * | assigned by the component's own `.php`, query involved | `query`         |
  * | assigned from options / `formatFields('option')`       | `global`        |
+ * | lifted by the sidecar out of a declared sibling         | `derived` + `from:` |
  * | in the derived-props table, with the sibling present   | `derived` + `from:` |
  * | in the framework baseline                              | omitted entirely |
  * | read, and handed in by a call site                     | `parent`        |
@@ -60,7 +61,9 @@ final class RoleProposer
         $fields = isset($definition['fields']) && is_array($definition['fields']) ? $definition['fields'] : [];
 
         $acfNames = $this->acfBackedNames("{$componentDir}/acf.json");
-        $sidecar = $this->sidecarEvidence->evidence("{$componentDir}/{$name}.php");
+        $sidecarEvidence = $this->sidecarEvidence->evidence("{$componentDir}/{$name}.php");
+        $sidecar = $sidecarEvidence['roles'];
+        $sidecarDerivedFrom = $sidecarEvidence['derivedFrom'];
         $reads = (new TwigPropExtractor())->extractFile($twigPath);
 
         $roles = [];
@@ -81,6 +84,7 @@ final class RoleProposer
                 $fields,
                 $acfNames,
                 $sidecar,
+                $sidecarDerivedFrom,
                 $callSites,
                 $name,
                 $derivedFrom,
@@ -104,7 +108,15 @@ final class RoleProposer
                 continue;
             }
 
-            $role = $this->roleForUndeclaredProp($prop, $fields, $sidecar, $callSites, $name, $derivedFrom);
+            $role = $this->roleForUndeclaredProp(
+                $prop,
+                $fields,
+                $sidecar,
+                $sidecarDerivedFrom,
+                $callSites,
+                $name,
+                $derivedFrom,
+            );
             if (null === $role) {
                 $unresolved[] = $prop;
                 continue;
@@ -130,6 +142,7 @@ final class RoleProposer
      * @param array<string,mixed> $siblings
      * @param list<string> $acfNames
      * @param array<string,?string> $sidecar
+     * @param array<string,string> $sidecarDerivedFrom
      * @param array<string,string> $derivedFrom
      */
     private function roleForDeclaredField(
@@ -138,6 +151,7 @@ final class RoleProposer
         array $siblings,
         array $acfNames,
         array $sidecar,
+        array $sidecarDerivedFrom,
         ?CallSiteIndex $callSites,
         string $component,
         array &$derivedFrom,
@@ -146,7 +160,7 @@ final class RoleProposer
             return 'field';
         }
 
-        $fromSidecar = $sidecar[$name] ?? null;
+        $fromSidecar = $this->fromSidecar($name, $sidecar, $sidecarDerivedFrom, $siblings, $derivedFrom);
         if (null !== $fromSidecar) {
             return $fromSidecar;
         }
@@ -176,17 +190,19 @@ final class RoleProposer
     /**
      * @param array<string,mixed> $fields
      * @param array<string,?string> $sidecar
+     * @param array<string,string> $sidecarDerivedFrom
      * @param array<string,string> $derivedFrom
      */
     private function roleForUndeclaredProp(
         string $prop,
         array $fields,
         array $sidecar,
+        array $sidecarDerivedFrom,
         ?CallSiteIndex $callSites,
         string $component,
         array &$derivedFrom,
     ): ?string {
-        $fromSidecar = $sidecar[$prop] ?? null;
+        $fromSidecar = $this->fromSidecar($prop, $sidecar, $sidecarDerivedFrom, $fields, $derivedFrom);
         if (null !== $fromSidecar) {
             return $fromSidecar;
         }
@@ -203,6 +219,41 @@ final class RoleProposer
         }
 
         return null;
+    }
+
+    /**
+     * What the sidecar says, including a lift out of a declared sibling.
+     *
+     * A `derived` proposal is dropped when the sibling it names is not
+     * declared: `from:` must resolve, and writing one that dangles is the
+     * assertion `fields-validate` exists to reject.
+     *
+     * @param array<string,?string> $sidecar
+     * @param array<string,string> $sidecarDerivedFrom
+     * @param array<string,mixed> $siblings
+     * @param array<string,string> $derivedFrom
+     */
+    private function fromSidecar(
+        string $prop,
+        array $sidecar,
+        array $sidecarDerivedFrom,
+        array $siblings,
+        array &$derivedFrom,
+    ): ?string {
+        $role = $sidecar[$prop] ?? null;
+
+        if ('derived' === $role) {
+            $origin = $sidecarDerivedFrom[$prop] ?? null;
+            if (null === $origin || !isset($siblings[$origin])) {
+                return null;
+            }
+
+            $derivedFrom[$prop] = $origin;
+
+            return 'derived';
+        }
+
+        return $role;
     }
 
     /**
