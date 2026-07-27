@@ -5,8 +5,6 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
-
-## [0.4.2] - 2026-07-26
 ### Added
 
 - **`mcp:` and `dev:` at component root, and the whole `description:`/`mcp:`/`dev:`
@@ -21,6 +19,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   defined as bare `{"type": "string"}` while every neighbouring key carried a
   paragraph, which is precisely why its audience read as ambiguous. It is the
   editor's copy and projects into `block.json`.
+
+
+## [0.4.2] - 2026-07-26
+### Added
 
 - `fields-migrate` can now adopt a Gutenberg block that has no ACF fields —
   a component with a `block.json` and no `acf.json`. It previously refused
