@@ -40,8 +40,18 @@ function fields_lint_one(string $componentDir): array
 $args = array_slice($argv, 1);
 $root = null;
 $single = null;
+// Drift is a CMS-projection check: it compares a definition against the
+// acf.json/block.json generated from it. A CMS-agnostic skeleton has neither —
+// tailwind-base generates its projections downstream — so every component
+// reports "acf.json missing" and the input-contract half, which is perfectly
+// meaningful there, is unusable as a gate underneath the noise.
+$contractOnly = false;
 
 foreach ($args as $arg) {
+    if ('--contract-only' === $arg) {
+        $contractOnly = true;
+        continue;
+    }
     if (str_starts_with($arg, '--root=')) {
         $root = substr($arg, 7);
         continue;
@@ -50,7 +60,11 @@ foreach ($args as $arg) {
 }
 
 if (null === $root && null === $single) {
-    fwrite(STDERR, "usage: fields-lint <component-dir> | fields-lint --root=<components-root>\n");
+    fwrite(
+        STDERR,
+        "usage: fields-lint [--contract-only] <component-dir>\n"
+        . "       fields-lint [--contract-only] --root=<components-root>\n",
+    );
     exit(2);
 }
 
@@ -78,11 +92,15 @@ if (null !== $root) {
     $dirs = glob(rtrim($root, '/') . '/*', GLOB_ONLYDIR) ?: [];
     sort($dirs);
     foreach ($dirs as $dir) {
-        $results[] = fields_lint_one($dir);
+        if (!$contractOnly) {
+            $results[] = fields_lint_one($dir);
+        }
         $contractResults[] = $contractLinter->lint($dir);
     }
 } else {
-    $results[] = fields_lint_one($single);
+    if (!$contractOnly) {
+        $results[] = fields_lint_one($single);
+    }
     $contractResults[] = $contractLinter->lint($single);
 }
 
@@ -171,6 +189,6 @@ echo sprintf(
     $unanalysed,
 );
 
-echo sprintf("%d component(s), %d failed\n", count($results), $failures);
+echo sprintf("%d component(s), %d failed\n", count($contractResults), $failures);
 
 exit($failures > 0 ? 1 : 0);

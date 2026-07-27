@@ -56,6 +56,46 @@ final class FieldsLintCliTest extends TestCase
         self::assertStringContainsString('OK   demo-card', implode("\n", $output));
     }
 
+    public function test_contract_only_skips_the_projection_check(): void
+    {
+        // A CMS-agnostic skeleton has no acf.json — tailwind-base generates
+        // its projections downstream — so every component reports "acf.json
+        // missing" and buries the input-contract half, which is perfectly
+        // meaningful there.
+        $dir = "{$this->root}/divider";
+        mkdir($dir, 0777, true);
+        file_put_contents("{$dir}/divider.yaml", Yaml::dump([
+            'name' => 'Divider',
+            'fields' => [
+                // A projecting field, so the projection half has something to
+                // miss. (A definition that projects nothing needs no acf.json
+                // and passes drift on its own.)
+                'title' => ['type' => 'text', 'label' => 'Title', 'role' => 'field'],
+                'inner' => ['role' => 'parent'],
+            ],
+        ], 10, 2));
+        file_put_contents("{$dir}/divider.twig", '{{ content.title }}{{ content.inner }}');
+
+        $output = [];
+        $exitCode = null;
+        exec(escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg($this->bin) . ' --contract-only '
+            . escapeshellarg($dir) . ' 2>&1', $output, $exitCode);
+
+        $text = implode("\n", $output);
+        self::assertSame(0, $exitCode, $text);
+        self::assertStringNotContainsString('acf.json missing', $text);
+        self::assertStringContainsString('OK        divider', $text);
+
+        // Without the flag the same component fails on the projection half —
+        // the flag suppresses a check, it does not change one.
+        $output = [];
+        exec(escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg($this->bin) . ' '
+            . escapeshellarg($dir) . ' 2>&1', $output, $exitCode);
+
+        self::assertSame(1, $exitCode);
+        self::assertStringContainsString('acf.json missing', implode("\n", $output));
+    }
+
     public function test_single_drifted_component_exits_one_and_prints_drift(): void
     {
         $this->makeCleanComponent('demo-card');
