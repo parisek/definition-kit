@@ -71,7 +71,7 @@ final class ContractLinter
         $fields = isset($definition['fields']) && is_array($definition['fields']) ? $definition['fields'] : [];
 
         $untypedReason = $this->untypedReason($fields);
-        if (null !== $untypedReason) {
+        if (null !== $untypedReason && [] !== $fields) {
             return new ContractResult($name, ContractResult::UNTYPED, reason: $untypedReason);
         }
 
@@ -93,6 +93,17 @@ final class ContractLinter
             if (!$this->isAccountedFor($read, $fields)) {
                 $violations[] = $read;
             }
+        }
+
+        if ([] === $fields) {
+            // `fields: {}` and a template that reads nothing but framework
+            // props is a complete contract, not an unstated one — a component
+            // genuinely has no inputs. It is only untyped when the twig reads
+            // something the empty map does not account for, which is what
+            // "nobody has stated this yet" actually looks like.
+            return [] === $violations
+                ? new ContractResult($name, ContractResult::TYPED, notes: $reads->notes)
+                : new ContractResult($name, ContractResult::UNTYPED, notes: $reads->notes, reason: (string) $untypedReason);
         }
 
         // The remaining notes can only HIDE reads, never invent them — an
