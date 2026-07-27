@@ -9,6 +9,19 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [0.4.2] - 2026-07-26
 ### Added
 
+- **`mcp:` and `dev:` at component root, and the whole `description:`/`mcp:`/`dev:`
+  triad on flexible-content layouts.** The three-audience convention already
+  existed at field level — `description:` for the editor (it becomes the ACF
+  `instructions`), `mcp:` for an AI agent, `dev:` for the developer — but the
+  component root offered only `description:` and layouts offered nothing at all.
+  Because the root schema is `additionalProperties: false`, authoring `mcp:` on a
+  component was a hard validation error rather than an ignored key.
+
+  Root `description:` also gained the schema documentation it never had. It was
+  defined as bare `{"type": "string"}` while every neighbouring key carried a
+  paragraph, which is precisely why its audience read as ambiguous. It is the
+  editor's copy and projects into `block.json`.
+
 - `fields-migrate` can now adopt a Gutenberg block that has no ACF fields —
   a component with a `block.json` and no `acf.json`. It previously refused
   outright, which locked out exactly the components 0.4.0 had just made

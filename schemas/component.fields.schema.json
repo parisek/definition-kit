@@ -75,7 +75,16 @@
             "minLength": 1
         },
         "description": {
-            "type": "string"
+            "type": "string",
+            "description": "What this component is, written for the EDITOR — it projects into block.json's `description` and is what a human reads in the Gutenberg inserter. One sentence, plain language, no implementation detail. Deliberately not the agent's copy: an AI agent reads `mcp:`, a developer reads `dev:`. The same triad exists at component, layout and field level, so the audience of a line is readable from its key instead of guessed from its wording."
+        },
+        "mcp": {
+            "$ref": "#/$defs/multivalueAnnotation",
+            "description": "Guidance for an AI agent choosing and filling this component, surfaced through get-block-catalog. Write decision rules and constraints, not descriptions: not \"hero is the opening block\" but \"at most once per page, always first; use section-intro for mid-page sections\". Cover when to reach for this component, when NOT to (naming the sibling that fits instead), and its visual weight — full-bleed and loud versus small and supplementary — the one thing that cannot be read out of the field list. Never restate what the consuming plugin's per-type defaults already say; those are composed after these lines, so a redundant entry only dilutes better guidance."
+        },
+        "dev": {
+            "$ref": "#/$defs/multivalueAnnotation",
+            "description": "Notes for the DEVELOPER working on this component — implementation constraints, gotchas, why something is the way it is. Stays in the YAML: it reaches neither the editor's UI nor the agent's catalog."
         },
         "weight": {
             "type": "integer"
@@ -443,6 +452,18 @@
                 },
                 "fields": {
                     "$ref": "#/$defs/fieldMap"
+                },
+                "description": {
+                    "type": "string",
+                    "description": "What this layout variant is, for the EDITOR. Same audience split as at component level."
+                },
+                "mcp": {
+                    "$ref": "#/$defs/multivalueAnnotation",
+                    "description": "Guidance for an AI agent choosing between sibling layouts of the same flexible-content field. The same decision as choosing between components, one level down: say when to pick THIS variant rather than its siblings, and name the sibling that fits the case you are excluding."
+                },
+                "dev": {
+                    "$ref": "#/$defs/multivalueAnnotation",
+                    "description": "Notes for the DEVELOPER about this layout variant. Stays in the YAML."
                 }
             }
         },

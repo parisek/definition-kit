@@ -76,4 +76,62 @@ final class ComponentDefinitionSchemaTest extends TestCase
         $result = $this->validateDefinition(['render' => 'inline']);
         self::assertFalse($result->valid, 'an unknown render mode must fail loudly, not default silently');
     }
+
+    public function testRootAcceptsTheAgentAndDeveloperAnnotations(): void
+    {
+        // The triad already existed at field level; before #141 the root had
+        // only `description:`, and additionalProperties:false made `mcp:` a
+        // hard validation error rather than an ignored key.
+        $result = $this->validateDefinition([
+            'description' => 'A large opening block.',
+            'mcp' => ['At most once per page, always first.', 'Use section-intro for mid-page sections.'],
+            'dev' => 'Shares its spacing scale with hero-about.',
+        ]);
+
+        self::assertTrue($result->valid, print_r($result->errors, true));
+    }
+
+    public function testRootAnnotationsAcceptASingleStringToo(): void
+    {
+        // multivalueAnnotation is string-or-list; the field level already
+        // relies on that and the root must not diverge.
+        $result = $this->validateDefinition(['mcp' => 'At most once per page.']);
+
+        self::assertTrue($result->valid, print_r($result->errors, true));
+    }
+
+    public function testRootAnnotationsRejectAnEmptyEntry(): void
+    {
+        // An empty line would reach the agent as a blank instruction.
+        $result = $this->validateDefinition(['mcp' => ['']]);
+
+        self::assertFalse($result->valid, 'a blank annotation line must fail rather than reach the catalog');
+    }
+
+    public function testLayoutAcceptsTheWholeTriad(): void
+    {
+        // Choosing between sibling layouts is the same decision as choosing
+        // between components, one level down — and had no annotation at all.
+        $result = $this->validateDefinition([
+            'fields' => [
+                'sections' => [
+                    'type' => 'flexible_content',
+                    'label' => 'Sections',
+                    'layouts' => [
+                        'quote' => [
+                            'label' => 'Quote',
+                            'description' => 'A pulled quote.',
+                            'mcp' => 'Use for a single short attributed quote; for several, use the testimonial-grid layout.',
+                            'dev' => 'Renders through the shared blockquote partial.',
+                            'fields' => [
+                                'text' => ['type' => 'richtext', 'label' => 'Text'],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ]);
+
+        self::assertTrue($result->valid, print_r($result->errors, true));
+    }
 }
