@@ -6,6 +6,7 @@ declare(strict_types=1);
 use Parisek\DefinitionKit\Generator\FieldsGenerator;
 use Parisek\DefinitionKit\Generator\GenerationValidationException;
 use Parisek\DefinitionKit\Lint\DerivedFromLinter;
+use Parisek\DefinitionKit\Lint\ForwardedShapeLinter;
 use Parisek\DefinitionKit\Lint\KindLinter;
 use Parisek\DefinitionKit\Lint\TranslatableInertLinter;
 use Parisek\DefinitionKit\Schema\FieldsSchemaValidator;
@@ -28,6 +29,7 @@ $validator = new FieldsSchemaValidator();
 $kindLinter = new KindLinter();
 $translatableInertLinter = new TranslatableInertLinter();
 $derivedFromLinter = new DerivedFromLinter();
+$forwardedShapeLinter = new ForwardedShapeLinter();
 $failed = false;
 foreach ($paths as $path) {
     $result = $validator->validateFile($path);
@@ -48,6 +50,7 @@ foreach ($paths as $path) {
         ...$kindLinter->lint($path, $definition),
         ...$translatableInertLinter->lint($path, $definition),
         ...$derivedFromLinter->lint($path, $definition),
+        ...$forwardedShapeLinter->lint($path, $definition),
     ];
 
     $errors = array_filter($findings, static fn (array $f): bool => 'error' === $f['severity']);

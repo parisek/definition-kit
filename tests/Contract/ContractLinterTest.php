@@ -198,6 +198,71 @@ final class ContractLinterTest extends TestCase
         self::assertSame(['container'], $this->lint($dir)->violations);
     }
 
+    public function testAForwardedPropTakesItsShapeFromTheComponentItGoesTo(): void
+    {
+        $this->component('header-menu', <<<'YAML'
+        name: Header menu
+        fields:
+          items:
+            type: repeater
+            label: Items
+            role: parent
+            fields:
+              title: { type: text, label: Title }
+        YAML, '{% for item in content.items %}{{ item.title }}{% endfor %}');
+
+        $dir = $this->component('header', <<<'YAML'
+        name: Header
+        fields:
+          menu: { type: repeater, label: Menu, role: parent, of: component:header-menu#items }
+        YAML, '{% for item in content.menu %}{{ item.title }}{% endfor %}');
+
+        self::assertSame(ContractResult::TYPED, $this->lint($dir)->status);
+    }
+
+    public function testAForwardedPropIsCheckedAgainstTheTargetsFields(): void
+    {
+        // The point of the reference over a transcript: the parent cannot
+        // read a field the child does not have, and nobody had to keep two
+        // copies in step to find that out.
+        $this->component('header-menu', <<<'YAML'
+        name: Header menu
+        fields:
+          items:
+            type: repeater
+            label: Items
+            role: parent
+            fields:
+              title: { type: text, label: Title }
+        YAML, '{% for item in content.items %}{{ item.title }}{% endfor %}');
+
+        $dir = $this->component('header', <<<'YAML'
+        name: Header
+        fields:
+          menu: { type: repeater, label: Menu, role: parent, of: component:header-menu#items }
+        YAML, '{% for item in content.menu %}{{ item.icon }}{% endfor %}');
+
+        self::assertSame(['menu.icon'], $this->lint($dir)->violations);
+    }
+
+    public function testADanglingForwardIsReportedRatherThanSilentlyOpaque(): void
+    {
+        // An unreachable shape has to be treated as opaque — there is nothing
+        // to check reads against. Doing that silently is how a component reads
+        // fifty undeclared props and still reports clean, so it comes back as
+        // a note. (`fields-validate` reports the dangling target itself.)
+        $dir = $this->component('header', <<<'YAML'
+        name: Header
+        fields:
+          menu: { type: repeater, label: Menu, role: parent, of: component:nope#items }
+        YAML, '{% for item in content.menu %}{{ item.title }}{% endfor %}');
+
+        $result = $this->lint($dir);
+
+        self::assertSame([], $result->violations);
+        self::assertSame([ContractLinter::NOTE_UNRESOLVED_FORWARD], $result->noteKinds());
+    }
+
     public function testADefinitionWithARolelessFieldIsUntypedNotPassing(): void
     {
         $dir = $this->component('hero', <<<'YAML'

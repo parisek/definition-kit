@@ -37,6 +37,12 @@ final class ContractResult
     ) {
     }
 
+    /** @return list<string> */
+    public function noteKinds(): array
+    {
+        return array_values(array_unique(array_column($this->notes, 'kind')));
+    }
+
     public function isFailure(): bool
     {
         return self::VIOLATIONS === $this->status;

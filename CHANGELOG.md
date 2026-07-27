@@ -7,6 +7,38 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 ### Added
 
+- **`of: component:<slug>[#<field>]`** — a prop whose shape is another
+  component's input, declared once where it belongs (issue #27).
+
+  `header.twig` hands `menu` straight to `header-menu` and never looks inside
+  it, but a `repeater` had to enumerate `fields:`, so `header.yaml` transcribed
+  the child's item shape. The transcript drifted: it was missing
+  `attributes.target` and the whole submenu group until review caught it.
+  tailwind-base has four such pairs across 25 components — `header.menu` ≡
+  `header-menu.items`, `header.language_switcher` ≡
+  `header-language-switcher.items`, `article-list.pagination` ≡
+  `pagination.items` (seven sub-fields), `page-header-default.breadcrumb` ≡
+  `breadcrumb.items`.
+
+  `of:` already answers "what does this point at" with a `<kind>:<name>`
+  vocabulary (`post:article`, `term:category`, `geo`), so a component is a
+  fourth kind of target rather than a new key. The contract check reads the
+  target's fields, which is what the reference buys over a transcript: adding a
+  field to the child immediately reaches every parent that forwards to it, and
+  a parent cannot read a field the child does not have.
+
+  A field carrying a component target declares no `fields:` of its own — the
+  schema rejects both together, since a borrowed shape with a local copy beside
+  it is the transcript again. `fields-validate` fails a target that does not
+  resolve, naming the two cases apart (no such component / that component does
+  not declare that field — the second is what a rename looks like). An
+  unresolved target leaves the prop opaque to the check, which reports it as a
+  note rather than passing quietly.
+
+  Cheap because a forwarded prop is always non-projecting: nobody edits a value
+  the parent passes through, so `acf.json` generation never sees one and only
+  the check had to learn the reference.
+
 - **`fields-lint --contract-only`** runs the input-contract check without the
   CMS-projection drift check. Drift compares a definition against the
   `acf.json`/`block.json` generated from it; a CMS-agnostic skeleton has neither

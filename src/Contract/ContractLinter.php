@@ -47,6 +47,8 @@ use Symfony\Component\Yaml\Yaml;
  */
 final class ContractLinter
 {
+    public const NOTE_UNRESOLVED_FORWARD = 'unresolved-forwarded-shape';
+
     public function __construct(
         private readonly FrameworkProps $frameworkProps = new FrameworkProps(),
     ) {
@@ -64,6 +66,7 @@ final class ContractLinter
     public function lint(string $componentDir): ContractResult
     {
         $componentDir = rtrim($componentDir, '/');
+        $shapes = ComponentShapeResolver::forComponentDir($componentDir);
         $name = basename($componentDir);
         $yamlPath = "{$componentDir}/{$name}.yaml";
         $twigPath = "{$componentDir}/{$name}.twig";
@@ -97,12 +100,15 @@ final class ContractLinter
             }
         }
 
+        $shapeNotes = [];
         $violations = [];
         foreach ($reads->reads as $read) {
-            if (!$this->isAccountedFor($read, $fields)) {
+            if (!$this->isAccountedFor($read, $fields, $shapes, $shapeNotes)) {
                 $violations[] = $read;
             }
         }
+
+        $notes = [...$reads->notes, ...$shapeNotes];
 
         if ([] === $fields) {
             // `fields: {}` and a template that reads nothing but framework
@@ -111,8 +117,8 @@ final class ContractLinter
             // something the empty map does not account for, which is what
             // "nobody has stated this yet" actually looks like.
             return [] === $violations
-                ? new ContractResult($name, ContractResult::TYPED, notes: $reads->notes)
-                : new ContractResult($name, ContractResult::UNTYPED, notes: $reads->notes, reason: (string) $untypedReason);
+                ? new ContractResult($name, ContractResult::TYPED, notes: $notes)
+                : new ContractResult($name, ContractResult::UNTYPED, notes: $notes, reason: (string) $untypedReason);
         }
 
         // The remaining notes can only HIDE reads, never invent them — an
@@ -124,7 +130,7 @@ final class ContractLinter
             $name,
             [] === $violations ? ContractResult::TYPED : ContractResult::VIOLATIONS,
             $violations,
-            $reads->notes,
+            $notes,
         );
     }
 
@@ -200,7 +206,11 @@ final class ContractLinter
     /**
      * @param array<string,mixed> $fields
      */
-    private function isAccountedFor(string $read, array $fields): bool
+    /**
+     * @param array<string,mixed> $fields
+     * @param list<array{kind: string, detail: string}> $notes collected as a side effect
+     */
+    private function isAccountedFor(string $read, array $fields, ComponentShapeResolver $shapes, array &$notes): bool
     {
         $segments = explode('.', $read);
 
@@ -225,7 +235,7 @@ final class ContractLinter
                 return true;
             }
 
-            $children = $this->childrenOf($field);
+            $children = $this->childrenOf($field, $shapes, $notes);
             if (null === $children) {
                 // A declared leaf, or a field whose structure the definition
                 // never claimed to enumerate. Everything below it belongs to
@@ -246,8 +256,33 @@ final class ContractLinter
      * @param array<string,mixed> $field
      * @return array<string,mixed>|null
      */
-    private function childrenOf(array $field): ?array
+    /**
+     * @param array<string,mixed> $field
+     * @param list<array{kind: string, detail: string}> $notes
+     * @return array<string,mixed>|null
+     */
+    private function childrenOf(array $field, ComponentShapeResolver $shapes, array &$notes): ?array
     {
+        if (ComponentShapeResolver::isComponentTarget($field['of'] ?? null)) {
+            // The shape lives in the component this prop is forwarded to, so
+            // the check reads it from there. This is what makes the reference
+            // worth having over a transcript: adding a field to the child now
+            // reaches every parent that forwards to it.
+            $resolved = $shapes->resolve((string) $field['of']);
+
+            if (null === $resolved['fields']) {
+                // Unreachable, so everything below it has to be treated as
+                // opaque — but silently doing that is how a component reads
+                // fifty undeclared props and still reports clean. Say it.
+                $notes[] = [
+                    'kind' => self::NOTE_UNRESOLVED_FORWARD,
+                    'detail' => (string) $resolved['error'],
+                ];
+            }
+
+            return $resolved['fields'];
+        }
+
         if (true === ($field['open'] ?? false)) {
             // An open map's keys are not knowable in advance. What is inside
             // belongs to whoever fills it, not to this component's contract.
