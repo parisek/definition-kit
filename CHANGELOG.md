@@ -5,6 +5,14 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+
+- **`fields-lint --contract-only`** runs the input-contract check without the
+  CMS-projection drift check. Drift compares a definition against the
+  `acf.json`/`block.json` generated from it; a CMS-agnostic skeleton has neither
+  — tailwind-base generates its projections downstream — so every component
+  reported "acf.json missing" and buried the contract half, which is perfectly
+  meaningful there. The flag suppresses a check; it does not change one.
 
 ## [0.6.0] - 2026-07-27
 ### Added
