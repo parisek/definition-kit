@@ -127,6 +127,9 @@
         "multivalueAnnotation": {
             "oneOf": [
                 {
+                    "type": "null"
+                },
+                {
                     "type": "string",
                     "minLength": 1
                 },
@@ -138,7 +141,8 @@
                     },
                     "minItems": 1
                 }
-            ]
+            ],
+            "description": "Either guidance, or an explicit decision that none is needed. A bare key (`mcp:`, parsing as null) means DELIBERATELY NONE — tooling that reports un-annotated components must stay silent about it, which an absent key cannot express. An empty string and an empty array stay invalid on purpose: they are almost always a half-finished edit, and allowing them would give one decision three spellings."
         },
         "visibleWhen": {
             "type": "object",

@@ -5,6 +5,19 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+
+- **A bare `mcp:` / `dev:` now validates and means "deliberately none".** 0.5.0
+  gave a component two states — the key is absent, or it carries guidance — so
+  a lint reporting un-annotated components had no way to stop reporting the ones
+  where somebody had already decided none was needed. That leaves either a check
+  that cries wolf until it is ignored, or filler text written purely to silence
+  it. Three states are now distinguishable: key absent (not annotated yet), bare
+  key (decided, none needed), key with content (annotated).
+
+  An empty string and an empty array stay invalid on purpose. Both are almost
+  always a half-finished edit, and accepting them would give one decision three
+  spellings.
 
 ## [0.5.0] - 2026-07-27
 ### Added

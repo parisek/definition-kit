@@ -134,4 +134,37 @@ final class ComponentDefinitionSchemaTest extends TestCase
 
         self::assertTrue($result->valid, print_r($result->errors, true));
     }
+
+    public function testAnnotationsAcceptAnExplicitNullMeaningDeliberatelyNone(): void
+    {
+        // A bare `mcp:` in YAML parses as null. Absence cannot express
+        // "decided, none needed" — without this a lint reporting un-annotated
+        // components has no way to ever stop reporting the ones somebody
+        // already ruled on.
+        foreach (['mcp', 'dev'] as $key) {
+            $result = $this->validateDefinition([$key => null]);
+            self::assertTrue($result->valid, "{$key}: null must validate: " . print_r($result->errors, true));
+        }
+    }
+
+    public function testAnnotationsStillRejectAnEmptyStringAndAnEmptyList(): void
+    {
+        // Deliberately narrower than "any falsy value": these two are almost
+        // always a half-finished edit, and allowing them would give one
+        // decision three spellings.
+        self::assertFalse($this->validateDefinition(['mcp' => ''])->valid, 'an empty string is not a decision');
+        self::assertFalse($this->validateDefinition(['mcp' => []])->valid, 'an empty list is not a decision');
+    }
+
+    public function testAFieldLevelAnnotationAcceptsNullToo(): void
+    {
+        // The three states must read the same at every level.
+        $result = $this->validateDefinition([
+            'fields' => [
+                'title' => ['type' => 'text', 'label' => 'Title', 'mcp' => null],
+            ],
+        ]);
+
+        self::assertTrue($result->valid, print_r($result->errors, true));
+    }
 }
