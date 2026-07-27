@@ -22,7 +22,8 @@
     "require": {
         "php": "^8.3",
         "opis/json-schema": "^2.3",
-        "symfony/yaml": "^6.4 || ^7.0"
+        "symfony/yaml": "^6.4 || ^7.0",
+        "twig/twig": "^3.10"
     },
     "require-dev": {
         "ergebnis/composer-normalize": "^2.0",
