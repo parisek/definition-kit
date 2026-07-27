@@ -7,6 +7,32 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 ### Added
 
+- **A Twig prop extractor** (`src/Contract/TwigPropExtractor.php`) — what a
+  component's template actually reads off `content`, using Twig's own lexer and
+  parser (issue #27). `twig/twig` becomes a runtime dependency: every project
+  consuming this package already runs Twig, so it was installed everywhere and
+  merely undeclared here.
+
+  Regex extraction was the cheap alternative and was rejected. This codebase
+  took three separate silent bugs in one day from regex-parsing YAML — a far
+  simpler grammar — and each shipped past review because the failing shape is
+  one nobody writes by hand.
+
+  It resolves direct reads, loop rebinding (`{% for item in content.items %}`
+  makes `item.value` a read of `items.value`), `{% set %}` aliasing, and one
+  level of `{% include %}` / `{% embed %}` / `include()`. Everything else comes
+  back as a *note* rather than silence: a second level of include nesting,
+  `attribute(content, key)`, a template naming its include by an expression, and
+  a template this environment cannot parse. A missed read is worse than an
+  unresolved one — it makes an incomplete definition look complete — so the
+  limits are reported and the check downstream treats a noted component as
+  unanalysed rather than clean.
+
+  An include carrying `only` stops at the boundary and is *not* reported. What
+  was handed over is a read of the calling component; what the child does with
+  it belongs to the child's contract. That is the semantics, not an
+  approximation.
+
 - **`schemas/framework-props-baseline.yaml`** — the props the render pipeline
   injects into every component (`content.wrapper_id`, `content.wrapper_classes`,
   `content.is_preview`), implicitly declared everywhere and never written into a
