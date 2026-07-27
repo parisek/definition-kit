@@ -59,10 +59,14 @@ sort($dirs);
 // `role: parent` is only proposable with call sites to point at, and those
 // live in OTHER components' templates. A single-component run has none, so it
 // says so rather than silently proposing less.
+// Every twig in every component directory, not just each component's own
+// template: `styleguide.*.twig` fixtures pass exactly the props a real caller
+// passes, and for a component with no ACF layer at all they are often the only
+// call sites that exist. An ACF field still wins over a call site, so demo data
+// cannot relabel a genuine `field` prop.
 $twigs = [];
 foreach ($dirs as $dir) {
-    $twig = $dir . '/' . basename($dir) . '.twig';
-    if (is_file($twig)) {
+    foreach (glob($dir . '/*.twig') ?: [] as $twig) {
         $twigs[] = $twig;
     }
 }

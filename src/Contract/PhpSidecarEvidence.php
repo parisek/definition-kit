@@ -39,9 +39,18 @@ final class PhpSidecarEvidence
     private const QUERY_MARKERS = [
         'WP_Query', 'get_posts', 'get_children', 'get_terms', 'get_term',
         'wp_get_recent_posts', 'get_the_terms', 'get_post', 'get_pages',
+        // Timber's own accessors — `Timber::get_posts()` is what a timber-kit
+        // sidecar actually calls, and matching only the bare WordPress
+        // functions left every real query-backed prop unclassified.
+        'get_categories', 'get_category_link',
     ];
 
-    private const GLOBAL_MARKERS = ['option', 'formatFields', 'get_option', 'theme_option'];
+    // `option` covers `get_option()`, `get_field(…, 'option')` and
+    // `Helpers::formatFields('option')` in one token. `formatFields` on its own
+    // deliberately does NOT appear here: it is timber-kit's field formatter,
+    // called on a post far more often than on options, and listing it made
+    // every query-built row in a real sidecar come back as `global`.
+    private const GLOBAL_MARKERS = ['option'];
 
     /**
      * prop name => 'query' | 'global' | null (assigned, but by nothing this can name)
@@ -61,6 +70,14 @@ final class PhpSidecarEvidence
 
         foreach ($this->statements(token_get_all($source)) as $statement) {
             $classification = $this->classify($statement['text'], $variableSources);
+
+            // `foreach ($post_query as $post)` carries the evidence across the
+            // loop: rows of a query result are query-sourced, and a sidecar
+            // that builds `$content['items']` inside such a loop is the shape
+            // real ones are written in.
+            if (null !== $statement['loopTarget'] && null !== $classification) {
+                $variableSources[$statement['loopTarget']] = $classification;
+            }
 
             $prop = $statement['contextProp'];
             if (null !== $prop) {
@@ -82,8 +99,14 @@ final class PhpSidecarEvidence
     }
 
     /**
+     * Statements, split on `;` and on block braces.
+     *
+     * Braces matter because a `foreach (…) {` header ends in no semicolon: glued
+     * to the statement after it, the loop's own evidence would be attributed to
+     * whatever the body happened to assign first.
+     *
      * @param list<array{int,string,int}|string> $tokens
-     * @return list<array{text: string, contextProp: ?string, assignedVariable: ?string}>
+     * @return list<array{text: string, contextProp: ?string, assignedVariable: ?string, loopTarget: ?string}>
      */
     private function statements(array $tokens): array
     {
@@ -91,7 +114,7 @@ final class PhpSidecarEvidence
         $current = [];
 
         foreach ($tokens as $token) {
-            if (';' === $token) {
+            if (';' === $token || '{' === $token || '}' === $token) {
                 $statements[] = $this->describe($current);
                 $current = [];
                 continue;
@@ -108,7 +131,7 @@ final class PhpSidecarEvidence
 
     /**
      * @param list<array{int,string,int}|string> $tokens one statement
-     * @return array{text: string, contextProp: ?string, assignedVariable: ?string}
+     * @return array{text: string, contextProp: ?string, assignedVariable: ?string, loopTarget: ?string}
      */
     private function describe(array $tokens): array
     {
@@ -126,32 +149,102 @@ final class PhpSidecarEvidence
         ));
 
         $first = $significant[0] ?? null;
-        if (!is_array($first) || T_VARIABLE !== $first[0]) {
-            return ['text' => $text, 'contextProp' => null, 'assignedVariable' => null];
+
+        if (is_array($first) && T_FOREACH === $first[0]) {
+            return [
+                'text' => $text,
+                'contextProp' => null,
+                'assignedVariable' => null,
+                'loopTarget' => $this->loopValueTarget($significant),
+            ];
         }
 
-        // `$content['x'] = …`
+        if (!is_array($first) || T_VARIABLE !== $first[0]) {
+            return ['text' => $text, 'contextProp' => null, 'assignedVariable' => null, 'loopTarget' => null];
+        }
+
+        // `$content['x'] = …`, and equally `$content['x'][] = …` (an append)
+        // and `$content['x']['y'] = …` (a nested write). All three assign to
+        // the prop `x`; only the first was recognised until a real sidecar
+        // built its list with `$content['categories'][] = …` and the prop
+        // vanished from the evidence entirely.
         if (
             in_array($first[1], self::CONTEXT_VARIABLES, true)
             && '[' === ($significant[1] ?? null)
             && is_array($significant[2] ?? null)
             && T_CONSTANT_ENCAPSED_STRING === $significant[2][0]
             && ']' === ($significant[3] ?? null)
-            && '=' === ($significant[4] ?? null)
+            && $this->assignsAfterSubscripts($significant, 4)
         ) {
             return [
                 'text' => $text,
                 'contextProp' => trim($significant[2][1], "'\""),
                 'assignedVariable' => null,
+                'loopTarget' => null,
             ];
         }
 
         // `$query = …`
         if ('=' === ($significant[1] ?? null)) {
-            return ['text' => $text, 'contextProp' => null, 'assignedVariable' => $first[1]];
+            return [
+                'text' => $text,
+                'contextProp' => null,
+                'assignedVariable' => $first[1],
+                'loopTarget' => null,
+            ];
         }
 
-        return ['text' => $text, 'contextProp' => null, 'assignedVariable' => null];
+        return ['text' => $text, 'contextProp' => null, 'assignedVariable' => null, 'loopTarget' => null];
+    }
+
+    /**
+     * The value variable a `foreach` binds — `$post` in
+     * `foreach ($query as $post)`, and in `foreach ($x as $k => $v)` the `$v`.
+     *
+     * @param list<array{int,string,int}|string> $significant
+     */
+    private function loopValueTarget(array $significant): ?string
+    {
+        $variables = [];
+        $sawAs = false;
+
+        foreach ($significant as $token) {
+            if (is_array($token) && T_AS === $token[0]) {
+                $sawAs = true;
+                continue;
+            }
+            if ($sawAs && is_array($token) && T_VARIABLE === $token[0]) {
+                $variables[] = $token[1];
+            }
+        }
+
+        return [] === $variables ? null : (string) end($variables);
+    }
+
+    /**
+     * Skips any further `[…]` subscripts and answers whether an `=` follows.
+     *
+     * @param list<array{int,string,int}|string> $significant
+     */
+    private function assignsAfterSubscripts(array $significant, int $cursor): bool
+    {
+        while ('[' === ($significant[$cursor] ?? null)) {
+            $depth = 0;
+            while (isset($significant[$cursor])) {
+                if ('[' === $significant[$cursor]) {
+                    $depth++;
+                } elseif (']' === $significant[$cursor]) {
+                    $depth--;
+                    if (0 === $depth) {
+                        $cursor++;
+                        break;
+                    }
+                }
+                $cursor++;
+            }
+        }
+
+        return '=' === ($significant[$cursor] ?? null);
     }
 
     /** @param array<string,string> $variableSources */

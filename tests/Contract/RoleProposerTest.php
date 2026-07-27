@@ -51,6 +51,8 @@ final class RoleProposerTest extends TestCase
 
     private function callSites(): CallSiteIndex
     {
+        // Every twig in every component directory, styleguide fixtures
+        // included — same set `bin/fields-roles` builds.
         return new CallSiteIndex(glob("{$this->root}/*/*.twig") ?: []);
     }
 
@@ -142,6 +144,59 @@ final class RoleProposerTest extends TestCase
         $proposal = (new RoleProposer())->propose("{$this->root}/divider", $this->callSites());
 
         self::assertSame(['inner' => 'parent'], $proposal->roles);
+    }
+
+    public function testAComponentFunctionCallIsACallSite(): void
+    {
+        // timber-kit's `component_*` Twig function. A run over a real
+        // 69-component project found 304 of these and zero includes between
+        // components, so `role: parent` was proposable exactly nowhere until
+        // this shape was recognised.
+        $this->component('button', [
+            'button.yaml' => "name: Button\nfields: {}\n",
+            'button.twig' => '{{ content.label }}',
+        ]);
+        $this->component('hero', [
+            'hero.yaml' => "name: Hero\nfields: {}\n",
+            'hero.twig' => "{{ component_button({ label: 'Více' }) }}",
+        ]);
+
+        $proposal = (new RoleProposer())->propose("{$this->root}/button", $this->callSites());
+
+        self::assertSame(['label' => 'parent'], $proposal->roles);
+    }
+
+    public function testAComponentFunctionUnderscoreIsTheComponentsHyphen(): void
+    {
+        $this->component('page-header-default', [
+            'page-header-default.yaml' => "name: PHD\nfields: {}\n",
+            'page-header-default.twig' => '{{ content.claim }}',
+        ]);
+        $this->component('hero', [
+            'hero.yaml' => "name: Hero\nfields: {}\n",
+            'hero.twig' => "{{ component_page_header_default({ claim: 'x' }) }}",
+        ]);
+
+        $proposal = (new RoleProposer())->propose("{$this->root}/page-header-default", $this->callSites());
+
+        self::assertSame(['claim' => 'parent'], $proposal->roles);
+    }
+
+    public function testAnAcfFieldStillWinsOverACallSite(): void
+    {
+        // A styleguide fixture passes `title` to a component whose `title` is a
+        // genuine ACF field. Consulting call sites first would relabel real
+        // `field` props as `parent` across a whole project.
+        $this->component('promo', [
+            'promo.yaml' => "name: Promo\nfields:\n  title: { type: text, label: T }\n",
+            'promo.twig' => '{{ content.title }}',
+            'styleguide.primary.twig' => "{{ component_promo({ title: 'Demo' }) }}",
+            'acf.json' => $this->acfJson([['name' => 'title', 'type' => 'text']]),
+        ]);
+
+        $proposal = (new RoleProposer())->propose("{$this->root}/promo", $this->callSites());
+
+        self::assertSame(['title' => 'field'], $proposal->roles);
     }
 
     public function testAnIncludeWithoutExplicitVariablesIsNotEvidence(): void

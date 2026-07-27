@@ -75,7 +75,16 @@ final class RoleProposer
                 continue;
             }
 
-            $role = $this->roleForDeclaredField($fieldName, $field, $fields, $acfNames, $sidecar, $derivedFrom);
+            $role = $this->roleForDeclaredField(
+                $fieldName,
+                $field,
+                $fields,
+                $acfNames,
+                $sidecar,
+                $callSites,
+                $name,
+                $derivedFrom,
+            );
             if (null === $role) {
                 $unresolved[] = $fieldName;
                 continue;
@@ -129,6 +138,8 @@ final class RoleProposer
         array $siblings,
         array $acfNames,
         array $sidecar,
+        ?CallSiteIndex $callSites,
+        string $component,
         array &$derivedFrom,
     ): ?string {
         if (in_array($name, $acfNames, true)) {
@@ -145,6 +156,15 @@ final class RoleProposer
             $derivedFrom[$name] = $origin;
 
             return 'derived';
+        }
+
+        // Evidence order matters here: an ACF field wins over a call site.
+        // Callers hand values to editor-backed props all the time (a styleguide
+        // fixture passes `title` to a component whose `title` is a real ACF
+        // field), so consulting call sites first would relabel genuine `field`
+        // props as `parent` across a whole project.
+        if (null !== $callSites && $callSites->isPassedTo($component, $name)) {
+            return 'parent';
         }
 
         // Declared, but nothing on disk says where the value comes from. The
