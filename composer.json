@@ -46,6 +46,7 @@
         "bin/fields-generate",
         "bin/fields-lint",
         "bin/fields-migrate",
+        "bin/fields-roles",
         "bin/fields-validate"
     ],
     "config": {

@@ -195,10 +195,7 @@
         },
         "field": {
             "type": "object",
-            "required": [
-                "type",
-                "label"
-            ],
+            "required": [],
             "additionalProperties": false,
             "properties": {
                 "type": {
@@ -365,6 +362,36 @@
                 }
             },
             "allOf": [
+                {
+                    "$comment": "`type` and `label` describe an ACF field: the widget the editor gets and the caption above it. A prop that projects into acf.json therefore needs both, and one that does not — `role: parent`, `query`, `global`, `inherited`, `derived` — needs neither. Demanding them anyway would mean writing an editor label for a value no editor ever sees, which is noise an author has to delete before the definition reads true. Absent `role:` means `field`, so every definition written before #27 is unaffected.",
+                    "if": {
+                        "anyOf": [
+                            {
+                                "not": {
+                                    "required": [
+                                        "role"
+                                    ]
+                                }
+                            },
+                            {
+                                "properties": {
+                                    "role": {
+                                        "const": "field"
+                                    }
+                                },
+                                "required": [
+                                    "role"
+                                ]
+                            }
+                        ]
+                    },
+                    "then": {
+                        "required": [
+                            "type",
+                            "label"
+                        ]
+                    }
+                },
                 {
                     "if": {
                         "properties": {

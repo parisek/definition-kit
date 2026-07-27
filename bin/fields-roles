@@ -1,0 +1,148 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use Parisek\DefinitionKit\Contract\CallSiteIndex;
+use Parisek\DefinitionKit\Contract\RoleProposal;
+use Parisek\DefinitionKit\Contract\RoleProposer;
+use Parisek\DefinitionKit\Migration\FieldsYamlWriter;
+
+foreach ([__DIR__ . '/../vendor/autoload.php', __DIR__ . '/../../../autoload.php'] as $autoload) {
+    if (is_file($autoload)) {
+        require $autoload;
+        break;
+    }
+}
+
+// Bootstrap `role:` across a project from evidence (issue #27, phase 4).
+//
+// Prints proposals by default and writes nothing. `--write` applies them.
+// Whatever it cannot evidence is left blank and listed, and the blank rate is
+// printed at the end of every run — roughly one prop in five on a real project.
+// That is a designed property of proposing-rather-than-guessing, and printing
+// it is how it stays expected instead of being discovered halfway through a
+// review.
+
+$args = array_slice($argv, 1);
+$root = null;
+$single = null;
+$write = false;
+
+foreach ($args as $arg) {
+    if ('--write' === $arg) {
+        $write = true;
+        continue;
+    }
+    if (str_starts_with($arg, '--root=')) {
+        $root = substr($arg, 7);
+        continue;
+    }
+    $single = $arg;
+}
+
+if (null === $root && null === $single) {
+    fwrite(STDERR, "usage: fields-roles [--write] <component-dir> | fields-roles [--write] --root=<components-root>\n");
+    exit(2);
+}
+
+if (null !== $root && !is_dir($root)) {
+    fwrite(STDERR, "not a directory: {$root}\n");
+    exit(2);
+}
+
+$dirs = null !== $root
+    ? (glob(rtrim($root, '/') . '/*', GLOB_ONLYDIR) ?: [])
+    : [rtrim($single, '/')];
+sort($dirs);
+
+// `role: parent` is only proposable with call sites to point at, and those
+// live in OTHER components' templates. A single-component run has none, so it
+// says so rather than silently proposing less.
+$twigs = [];
+foreach ($dirs as $dir) {
+    $twig = $dir . '/' . basename($dir) . '.twig';
+    if (is_file($twig)) {
+        $twigs[] = $twig;
+    }
+}
+$callSites = null !== $root ? new CallSiteIndex($twigs) : null;
+
+if (null === $callSites) {
+    echo "note: single-component run — `role: parent` cannot be proposed without the call sites\n"
+        . "      in other components' templates. Use --root=<components-root> for that.\n\n";
+}
+
+$proposer = new RoleProposer();
+$writer = new FieldsYamlWriter();
+
+$proposed = 0;
+$blank = 0;
+$skipped = 0;
+$written = 0;
+$failed = 0;
+
+foreach ($dirs as $dir) {
+    $proposal = $proposer->propose($dir, $callSites);
+
+    if (null !== $proposal->skipped) {
+        $skipped++;
+        echo "SKIP {$proposal->component}: {$proposal->skipped}\n";
+        continue;
+    }
+
+    $proposed += $proposal->proposedCount();
+    $blank += count($proposal->unresolved);
+
+    if (!$proposal->hasChanges() && [] === $proposal->unresolved) {
+        echo "OK   {$proposal->component}: every prop already carries a role\n";
+        continue;
+    }
+
+    echo "{$proposal->component}\n";
+
+    foreach ($proposal->roles as $prop => $role) {
+        $from = isset($proposal->derivedFrom[$prop]) ? " (from: {$proposal->derivedFrom[$prop]})" : '';
+        echo "  + {$prop}: role: {$role}{$from}\n";
+    }
+
+    foreach ($proposal->baselineProps as $prop) {
+        echo "  · {$prop}: injected by the framework — deliberately not declared\n";
+    }
+
+    foreach ($proposal->unresolved as $prop) {
+        echo "  ? {$prop}: no evidence for any role — left for you\n";
+    }
+
+    if ($write && $proposal->hasChanges() && null !== $proposal->definition) {
+        $path = $dir . '/' . $proposal->component . '.yaml';
+        try {
+            $writer->write($proposal->definition, $path);
+            $written++;
+            echo "  written: {$path}\n";
+        } catch (\Throwable $e) {
+            $failed++;
+            echo "  FAILED to write {$path}: {$e->getMessage()}\n";
+        }
+    }
+}
+
+$considered = $proposed + $blank;
+$rate = $considered > 0 ? round(100 * $blank / $considered) : 0;
+
+echo sprintf(
+    "\n%d component(s): %d role(s) proposed, %d left blank (%d%%), %d skipped\n",
+    count($dirs),
+    $proposed,
+    $blank,
+    $rate,
+    $skipped,
+);
+
+if (!$write) {
+    echo "nothing written — re-run with --write to apply\n";
+} else {
+    echo sprintf("%d file(s) written, %d failed\n", $written, $failed);
+}
+
+exit($failed > 0 ? 1 : 0);

@@ -1,0 +1,26 @@
+# Framework-derived props — enrichment the field-formatting layer builds out of
+# a SIBLING field, keyed by the prop it produces and the abstract type of the
+# field it is produced from (issue #27).
+#
+# Derived from the one measured case: parisek/timber-kit's Helpers.php builds
+# `sources` — the AV1 -> H.264 -> full cascade — from a row's `video` field, and
+# `article-video-grid` reads it. The component has no `.php`, nothing in its
+# acf.json declares it, and no caller passes it, so none of the other five roles
+# can express where it comes from.
+#
+# Used ONLY by `fields-roles` to propose `role: derived` with a `from:`, and only
+# when a sibling of the listed type is actually present. It proposes; a human
+# accepts. Nothing here suppresses anything on its own — unlike the framework
+# props baseline, which is a blanket exemption, this table can at most put a
+# checkable claim into a definition.
+#
+# Deliberately NOT extended to ACF return shapes (`link.url`, `image.srcset`).
+# Those are the shape of a declared field's own value, not separate props, and
+# the contract check already stops at a declared leaf for exactly that reason.
+
+sources:
+  from_type: media
+  note: >-
+    The video source cascade. Present only for a row that carries a video, which
+    is why this is a field-level `derived`, not something the `media` type
+    always returns.

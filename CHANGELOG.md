@@ -7,6 +7,37 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 ### Added
 
+- **`fields-roles`, a bootstrap that proposes rather than guesses** (issue #27).
+  Roles for 200 components cannot be hand-written, and a tool that guesses at
+  them is worse than none: a wrong `role:` is a false claim about where a value
+  comes from, and the check would then be verifying fiction.
+
+  It proposes `field` for a prop with an actual ACF field behind it (read from
+  the sibling acf.json — being in the YAML is not evidence, which is the very
+  distinction `role:` records), `query` or `global` from what the component's
+  `.php` sidecar assigns, `derived` when the derived-props table explains it AND
+  the sibling it would name is present, `parent` when a call site hands it in,
+  and omits framework-injected props entirely. Everything else is **left blank
+  and listed**, and the blank rate — roughly one prop in five on a real project
+  — is printed at the end of every run, so it is expected rather than
+  discovered halfway through a review.
+
+  Nothing is written without `--write`. Sidecars are read with PHP's own lexer
+  and call sites with Twig's own parser, same doctrine as the prop extractor.
+  Only an explicit `with { … }` counts as a call site: a bare include hands over
+  the whole context, and counting that would let every component claim every
+  prop as `parent`.
+
+### Changed
+
+- **`type:` and `label:` are required only of a field that projects into
+  acf.json.** They describe an ACF field — the widget and the caption above it —
+  and a `role: parent` / `query` / `global` / `inherited` / `derived` prop has
+  neither. Requiring them anyway would mean writing an editor label for a value
+  no editor ever sees, which an author then has to delete before the definition
+  reads true. Absent `role:` still means `field`, so every definition written
+  before this is unaffected.
+
 - **`fields-lint` now checks a component's input contract** — a prop the twig
   reads that no role accounts for, and that the framework baseline does not
   supply, is reported by name (issue #27). #26 planned this as a linter with a

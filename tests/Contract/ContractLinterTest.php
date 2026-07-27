@@ -208,6 +208,17 @@ final class ContractLinterTest extends TestCase
         self::assertStringContainsString('role: parent', (string) $result->reason);
     }
 
+    public function testAComponentThatGenuinelyHasNoInputsIsTypedNotUntyped(): void
+    {
+        // `fields: {}` plus a template reading nothing but framework props is
+        // a complete contract, not an unstated one. Without this a purely
+        // static component could never become typed — there would be nothing
+        // it could declare to get there.
+        $dir = $this->component('rule', "name: Rule\nfields: {}\n", '<hr id="{{ content.wrapper_id }}">');
+
+        self::assertSame(ContractResult::TYPED, $this->lint($dir)->status);
+    }
+
     public function testADividerThatDeclaresItsParentPropsBecomesTyped(): void
     {
         $dir = $this->component('divider', <<<'YAML'
