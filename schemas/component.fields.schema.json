@@ -337,6 +337,10 @@
                         "type": "string"
                     }
                 },
+                "open": {
+                    "type": "boolean",
+                    "description": "This field is an open map whose keys are not knowable in advance — `picture.link_attributes`, an arbitrary attribute bag merged onto the `<a>`. A `group`/`repeater` normally has to enumerate `fields:`, which forces an author to either invent representative leaves or drop a real input from the contract; tailwind-base did the former and documented the leaves as approximations (docs/398-unresolved-roles.md). `open: true` states the openness instead, and the contract check stops descending at it — what is inside belongs to whoever fills the map. It does not excuse the field itself from carrying a role."
+                },
                 "resolved_from": {
                     "type": "array",
                     "items": {
@@ -410,17 +414,34 @@
                     }
                 },
                 {
+                    "$comment": "An open map declares no `fields:` — there are none to declare. Every other group/repeater must, since a container with nothing in it describes nothing.",
                     "if": {
-                        "properties": {
-                            "type": {
-                                "enum": [
-                                    "group",
-                                    "repeater"
+                        "allOf": [
+                            {
+                                "properties": {
+                                    "type": {
+                                        "enum": [
+                                            "group",
+                                            "repeater"
+                                        ]
+                                    }
+                                },
+                                "required": [
+                                    "type"
                                 ]
+                            },
+                            {
+                                "not": {
+                                    "properties": {
+                                        "open": {
+                                            "const": true
+                                        }
+                                    },
+                                    "required": [
+                                        "open"
+                                    ]
+                                }
                             }
-                        },
-                        "required": [
-                            "type"
                         ]
                     },
                     "then": {

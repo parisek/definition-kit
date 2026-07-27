@@ -613,6 +613,39 @@ final class FieldsSchemaValidatorTest extends TestCase
         }
     }
 
+    // --- open maps (issue #27, tailwind-base feedback) --------------------
+
+    public function test_an_open_group_needs_no_fields(): void
+    {
+        // `picture.link_attributes` — an arbitrary attribute bag merged onto
+        // the `<a>`. Enumerating it forces an author to invent representative
+        // leaves and document them as approximations, which is what
+        // tailwind-base had to do.
+        $tree = Yaml::parse(<<<'YAML'
+        name: X
+        fields:
+          link_attributes:
+            type: group
+            label: Link attributes
+            open: true
+            role: parent
+        YAML, Yaml::PARSE_OBJECT_FOR_MAP);
+
+        $result = (new FieldsSchemaValidator())->validateData($tree);
+        self::assertTrue($result->valid, print_r($result->errors, true));
+    }
+
+    public function test_a_group_that_is_not_open_still_needs_fields(): void
+    {
+        $tree = Yaml::parse(<<<'YAML'
+        name: X
+        fields:
+          heading: { type: group, label: Heading }
+        YAML, Yaml::PARSE_OBJECT_FOR_MAP);
+
+        self::assertFalse((new FieldsSchemaValidator())->validateData($tree)->valid);
+    }
+
     public function test_existing_dávka_1_fixtures_still_validate(): void
     {
         foreach (['valid-flat', 'valid-nested', 'valid-empty-wp'] as $name) {

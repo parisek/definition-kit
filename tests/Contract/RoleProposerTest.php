@@ -184,19 +184,42 @@ final class RoleProposerTest extends TestCase
 
     public function testAnAcfFieldStillWinsOverACallSite(): void
     {
-        // A styleguide fixture passes `title` to a component whose `title` is a
-        // genuine ACF field. Consulting call sites first would relabel real
-        // `field` props as `parent` across a whole project.
+        // A production template passes `title` to a component whose `title` is
+        // a genuine ACF field — an editor authors it, and the caller happens to
+        // override it. Consulting call sites first would relabel real `field`
+        // props as `parent` across a whole project.
         $this->component('promo', [
             'promo.yaml' => "name: Promo\nfields:\n  title: { type: text, label: T }\n",
             'promo.twig' => '{{ content.title }}',
-            'styleguide.primary.twig' => "{{ component_promo({ title: 'Demo' }) }}",
             'acf.json' => $this->acfJson([['name' => 'title', 'type' => 'text']]),
+        ]);
+        $this->component('page-home', [
+            'page-home.yaml' => "name: Home\nfields: {}\n",
+            'page-home.twig' => "{{ component_promo({ title: 'Override' }) }}",
         ]);
 
         $proposal = (new RoleProposer())->propose("{$this->root}/promo", $this->callSites());
 
         self::assertSame(['title' => 'field'], $proposal->roles);
+    }
+
+    public function testAStyleguideFixtureIsNotACallSite(): void
+    {
+        // In a styleguide repository fixtures are the only data source, so
+        // every prop of every component is "passed by a template" — including
+        // the ones an editor authors. Counting them would label a whole
+        // skeleton `parent`. (tailwind-base docs/398-unresolved-roles.md; on
+        // mairateam, 191 props are fixture-only against 58 from production.)
+        $this->component('promo', [
+            'promo.yaml' => "name: Promo\nfields: {}\n",
+            'promo.twig' => '{{ content.title }}',
+            'styleguide.primary.twig' => "{{ component_promo({ title: 'Demo' }) }}",
+        ]);
+
+        $proposal = (new RoleProposer())->propose("{$this->root}/promo", $this->callSites());
+
+        self::assertSame([], $proposal->roles);
+        self::assertSame(['title'], $proposal->unresolved);
     }
 
     public function testAnIncludeWithoutExplicitVariablesIsNotEvidence(): void

@@ -7,6 +7,46 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 ### Added
 
+- **A project can state its own framework props baseline.** `fields-lint` and
+  `fields-roles` look for `framework-props-baseline.yaml` next to the components
+  root, then one level up, and fall back to the shipped timber-kit table. What a
+  framework injects is a fact about the framework in front of you: tailwind-base
+  treats `container` as a layout slot every wrapper supplies, and asked for it in
+  the baseline (its `docs/398-unresolved-roles.md`). Hardcoding one project's
+  convention into a shipped file would turn this table into a negotiation.
+
+  A project file **replaces** the shipped one rather than merging. A baseline is
+  the list of props the check will never report, and a half-inherited list is
+  one nobody can read off the page.
+
+- **`open: true`** on a `group`/`repeater` declares a map whose keys are not
+  knowable in advance — `picture.link_attributes`, an arbitrary attribute bag
+  merged onto the `<a>`. Such a field previously had to enumerate `fields:`, so
+  an author either invented representative leaves and documented them as
+  approximations, or dropped a real input from the contract. The contract check
+  stops descending at an open map: what is inside belongs to whoever fills it.
+  It does not excuse the field from carrying a role.
+
+### Fixed
+
+- **`styleguide.*.twig` fixtures no longer count as call-site evidence.** In a
+  styleguide repository fixtures are the only data source, so *every* prop of
+  *every* component is "passed by a template" there — including the ones an
+  editor authors. On mairateam 191 props are fixture-only against 58 from
+  production templates; that project has an `acf.json` per component and `field`
+  outranks a call site, so nothing broke, but a CMS-agnostic skeleton has
+  nothing to outrank anything and all 191 would have been mislabelled `parent`.
+
+  The rule call sites serve is not "somebody passes it" but what the prop *is*:
+  content an editor would author is `field` even when only a fixture supplies
+  it, and a prop that exists so a parent can wire a child into its composition
+  is `parent`. Call-site evidence decides ambiguous cases; it does not decide
+  the rule.
+
+  A fixture-passed prop is still reported — as a *hint* on the blank rather than
+  as a proposal, naming the question a reviewer has to answer. 12 of mairateam's
+  28 blanks now carry one.
+
 - **`fields-roles` proposes at any depth, not just the root.** It considered
   top-level reads only, so `article-video-grid.items.sources` — the framework
   enrichment `role: derived` was invented for — was flagged by the check instead
