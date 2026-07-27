@@ -28,6 +28,7 @@ $args = array_slice($argv, 1);
 $root = null;
 $single = null;
 $write = false;
+$callSiteRoot = null;
 
 foreach ($args as $arg) {
     if ('--write' === $arg) {
@@ -38,17 +39,52 @@ foreach ($args as $arg) {
         $root = substr($arg, 7);
         continue;
     }
+    if (str_starts_with($arg, '--call-sites=')) {
+        $callSiteRoot = substr($arg, 13);
+        continue;
+    }
     $single = $arg;
 }
 
 if (null === $root && null === $single) {
-    fwrite(STDERR, "usage: fields-roles [--write] <component-dir> | fields-roles [--write] --root=<components-root>\n");
+    fwrite(
+        STDERR,
+        "usage: fields-roles [--write] <component-dir>\n"
+        . "       fields-roles [--write] [--call-sites=<dir>] --root=<components-root>\n",
+    );
     exit(2);
 }
 
 if (null !== $root && !is_dir($root)) {
     fwrite(STDERR, "not a directory: {$root}\n");
     exit(2);
+}
+
+/** @return list<string> */
+function fields_roles_twigs(string $dir): array
+{
+    if (!is_dir($dir)) {
+        return [];
+    }
+
+    $found = [];
+    $iterator = new RecursiveIteratorIterator(
+        new RecursiveCallbackFilterIterator(
+            new RecursiveDirectoryIterator($dir, FilesystemIterator::SKIP_DOTS),
+            static fn (SplFileInfo $file): bool => !$file->isDir()
+                || !in_array($file->getFilename(), ['node_modules', 'vendor', '.git'], true),
+        ),
+    );
+
+    foreach ($iterator as $file) {
+        if ($file instanceof SplFileInfo && 'twig' === $file->getExtension()) {
+            $found[] = $file->getPathname();
+        }
+    }
+
+    sort($found);
+
+    return $found;
 }
 
 $dirs = null !== $root
@@ -59,16 +95,22 @@ sort($dirs);
 // `role: parent` is only proposable with call sites to point at, and those
 // live in OTHER components' templates. A single-component run has none, so it
 // says so rather than silently proposing less.
-// Every twig in every component directory, not just each component's own
-// template: `styleguide.*.twig` fixtures pass exactly the props a real caller
-// passes, and for a component with no ACF layer at all they are often the only
-// call sites that exist. An ACF field still wins over a call site, so demo data
+// Call sites are not confined to the components directory. `footer` and
+// `header` in a real theme are rendered by `page/_partials/*.twig`, one level
+// up and outside the sweep -- scanning only the components root left every one
+// of their props with no evidence. The default is therefore the PARENT of the
+// components root, walked recursively, which is the theme's template tree in
+// the layouts this package targets. `--call-sites=` overrides it.
+//
+// `styleguide.*.twig` fixtures count too: they pass exactly the props a real
+// caller passes, and for a component with no ACF layer they are often the only
+// call sites there are. An ACF field still wins over a call site, so demo data
 // cannot relabel a genuine `field` prop.
 $twigs = [];
-foreach ($dirs as $dir) {
-    foreach (glob($dir . '/*.twig') ?: [] as $twig) {
-        $twigs[] = $twig;
-    }
+if (null !== $root) {
+    $searchRoot = $callSiteRoot ?? dirname(rtrim($root, '/'));
+    $twigs = fields_roles_twigs($searchRoot);
+    echo sprintf("call sites: %d template(s) under %s\n\n", count($twigs), $searchRoot);
 }
 $callSites = null !== $root ? new CallSiteIndex($twigs) : null;
 
