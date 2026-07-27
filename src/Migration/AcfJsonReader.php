@@ -20,7 +20,7 @@ final class AcfJsonReader
         'maxlength', 'min', 'max', 'step', 'accept', 'max_size',
         'min_width', 'max_width', 'min_height', 'max_height',
         'kind', 'shape', 'multiline', 'of', 'multiple', 'options',
-        'add_label', 'placeholder', 'visible_when', 'fields', 'layouts', 'role', 'key', 'wp',
+        'add_label', 'placeholder', 'visible_when', 'fields', 'layouts', 'role', 'from', 'key', 'wp',
     ];
 
     /** Structural boilerplate dropped unconditionally, never lifted, never in wp:. */

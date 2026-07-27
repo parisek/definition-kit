@@ -542,6 +542,77 @@ final class FieldsSchemaValidatorTest extends TestCase
         self::assertTrue($result->valid, print_r($result->errors, true));
     }
 
+    // --- the completed role vocabulary (issue #27) -----------------------
+
+    public function test_every_role_in_the_completed_vocabulary_validates(): void
+    {
+        foreach (['field', 'query', 'global', 'parent', 'inherited'] as $role) {
+            $tree = Yaml::parse(<<<YAML
+            name: X
+            fields:
+              title: { type: text, label: L, role: {$role} }
+            YAML, Yaml::PARSE_OBJECT_FOR_MAP);
+
+            $result = (new FieldsSchemaValidator())->validateData($tree);
+            self::assertTrue($result->valid, "role: {$role}: " . print_r($result->errors, true));
+        }
+    }
+
+    public function test_role_computed_no_longer_validates(): void
+    {
+        $tree = Yaml::parse(<<<YAML
+        name: X
+        fields:
+          title: { type: text, label: L, role: computed }
+        YAML, Yaml::PARSE_OBJECT_FOR_MAP);
+
+        self::assertFalse((new FieldsSchemaValidator())->validateData($tree)->valid);
+    }
+
+    public function test_role_derived_with_from_validates(): void
+    {
+        $tree = Yaml::parse(<<<YAML
+        name: X
+        fields:
+          video: { type: media, label: Video }
+          sources: { type: text, label: Sources, role: derived, from: video }
+        YAML, Yaml::PARSE_OBJECT_FOR_MAP);
+
+        $result = (new FieldsSchemaValidator())->validateData($tree);
+        self::assertTrue($result->valid, print_r($result->errors, true));
+    }
+
+    public function test_role_derived_without_from_is_rejected(): void
+    {
+        // Without `from:` the role says only "something else made this",
+        // which is the unverifiable shrug the role exists to replace.
+        $tree = Yaml::parse(<<<YAML
+        name: X
+        fields:
+          sources: { type: text, label: Sources, role: derived }
+        YAML, Yaml::PARSE_OBJECT_FOR_MAP);
+
+        self::assertFalse((new FieldsSchemaValidator())->validateData($tree)->valid);
+    }
+
+    public function test_from_without_role_derived_is_rejected(): void
+    {
+        foreach ([null, 'field', 'query'] as $role) {
+            $roleLine = null === $role ? '' : ", role: {$role}";
+            $tree = Yaml::parse(<<<YAML
+            name: X
+            fields:
+              video: { type: media, label: Video }
+              sources: { type: text, label: Sources, from: video{$roleLine} }
+            YAML, Yaml::PARSE_OBJECT_FOR_MAP);
+
+            self::assertFalse(
+                (new FieldsSchemaValidator())->validateData($tree)->valid,
+                sprintf('`from:` under role %s was expected to fail.', $role ?? '(absent)'),
+            );
+        }
+    }
+
     public function test_existing_dávka_1_fixtures_still_validate(): void
     {
         foreach (['valid-flat', 'valid-nested', 'valid-empty-wp'] as $name) {
