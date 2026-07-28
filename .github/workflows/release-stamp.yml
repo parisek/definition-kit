@@ -44,11 +44,14 @@ jobs:
             echo "::error::CHANGELOG.md has no [Unreleased] section"
             exit 1
           fi
+          # The anchor comment is not content — a section holding only it has
+          # nothing to release, and stamping would produce a version with empty
+          # notes.
           CONTENT=$(awk '
             /^## \[Unreleased\]/{flag=1; next}
             /^## \[/{flag=0}
             flag
-          ' CHANGELOG.md | grep -v '^[[:space:]]*$' | head -1)
+          ' CHANGELOG.md | grep -v '^[[:space:]]*$' | grep -v '^[[:space:]]*<!--' | grep -v -- '-->[[:space:]]*$' | head -1)
           if [ -z "$CONTENT" ]; then
             echo "::error::[Unreleased] section is empty — nothing to release"
             exit 1
