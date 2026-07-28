@@ -362,16 +362,21 @@ final class ContractLinter
             return null;
         }
 
-        $role = $field['role'] ?? 'field';
-        if ('field' !== $role) {
-            // A query row, a value handed in by a caller, a derived structure:
-            // the role says where the whole thing comes from, and its shape is
-            // that source's business.
-            return null;
+        if (isset($field['fields']) && is_array($field['fields'])) {
+            // Declared children are checked whatever the role. An author who
+            // enumerates the shape of a `parent` or `query` prop is claiming
+            // it, and a claim nobody verifies is the thing this check exists
+            // to remove — 18 such declarations across two real projects were
+            // being ignored, including every menu shape in this theme.
+            return $field['fields'];
         }
 
-        if (isset($field['fields']) && is_array($field['fields'])) {
-            return $field['fields'];
+        if ('field' !== ($field['role'] ?? 'field')) {
+            // Nothing is declared, and the role says the value comes from
+            // somewhere this definition does not describe: a query row, a
+            // value handed in by a caller, a derived structure. Its shape is
+            // that source's business.
+            return null;
         }
 
         if (isset($field['layouts']) && is_array($field['layouts'])) {

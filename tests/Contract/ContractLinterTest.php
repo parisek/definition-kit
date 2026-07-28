@@ -153,6 +153,47 @@ final class ContractLinterTest extends TestCase
         self::assertSame(ContractResult::TYPED, $this->lint($dir)->status);
     }
 
+    public function testADeclaredShapeIsCheckedWhateverTheRole(): void
+    {
+        // An author who enumerates the shape of a `parent` prop is claiming
+        // it, and the claim was being ignored: 18 such declarations across two
+        // real projects — every menu shape in mairateam among them — were
+        // written and then never checked.
+        $dir = $this->component('header-menu', <<<'YAML'
+        name: Header menu
+        fields:
+          items:
+            type: repeater
+            label: Items
+            role: parent
+            fields:
+              title: { type: text, label: Title }
+        YAML, '{% for item in content.items %}{{ item.titel }}{% endfor %}');
+
+        self::assertSame(['items.titel'], $this->lint($dir)->violations);
+    }
+
+    public function testASelfReferencingForwardExpressesRecursion(): void
+    {
+        // The schema cannot say "and so on"; `of:` pointing at its own
+        // component can. Depth is bounded by the read path, so the walk
+        // terminates on its own rather than needing a limit.
+        $dir = $this->component('menu', <<<'YAML'
+        name: Menu
+        fields:
+          items:
+            type: repeater
+            label: Items
+            role: parent
+            fields:
+              title: { type: text, label: Title }
+              below: { type: repeater, role: parent, of: component:menu#items }
+        YAML, '{{ content.items.below.below.below.title }}{{ content.items.below.below.titel }}');
+
+        // Four levels deep is fine; a typo at any depth is not.
+        self::assertSame(['items.below.below.titel'], $this->lint($dir)->violations);
+    }
+
     public function testReadsInsideANonFieldStructureAreNotEnumerated(): void
     {
         $dir = $this->component('article-featured', <<<'YAML'
