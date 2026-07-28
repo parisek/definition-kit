@@ -5,6 +5,20 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Fixed
+
+- **`fields-migrate` refuses to overwrite an existing definition** unless
+  `--force`. Migration derives a definition from `acf.json`, so anything
+  authored only in the YAML — `mcp:` guidance, `dev:` notes, a hand-corrected
+  `name:` — exists in no other file and was silently deleted by a re-run.
+
+  Found by running the 0.7.0 pipeline over an adopted project: a `--root` sweep
+  cost **430 lines of authored annotation across 52 components**, and nothing in
+  the tool's output said so — every component reported `OK`. It surfaced only
+  from reading the diff.
+
+  Re-deriving after the CMS changed is still legitimate, so `--force` keeps that
+  path, and the skip message names it.
 
 ## [0.7.0] - 2026-07-28
 ### Added
