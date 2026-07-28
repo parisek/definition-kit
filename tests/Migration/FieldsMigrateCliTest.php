@@ -159,6 +159,49 @@ final class FieldsMigrateCliTest extends TestCase
         self::assertStringContainsString('fields: {  }', $yaml);
     }
 
+    public function test_refuses_to_overwrite_an_existing_definition(): void
+    {
+        // Migration derives from acf.json, so anything authored only in the
+        // YAML — `mcp:` guidance, `dev:` notes, a hand-corrected name — is in
+        // no other file. A `--root` sweep over an adopted project cost 430
+        // lines of authored annotation across 52 components before this guard,
+        // and the loss was invisible: every component reported OK.
+        $dir = sys_get_temp_dir() . '/fields-migrate-cli-' . uniqid('', true) . '/hero';
+        mkdir($dir, 0777, true);
+        file_put_contents("{$dir}/acf.json", json_encode([
+            'key' => 'group_hero',
+            'title' => 'Hero',
+            'fields' => [['key' => 'field_hero_title', 'name' => 'title', 'label' => 'T', 'type' => 'text']],
+        ], JSON_THROW_ON_ERROR));
+        file_put_contents("{$dir}/hero.yaml", "name: Hero\nmcp:\n  - 'Authored guidance'\nfields: {}\n");
+
+        $output = shell_exec(sprintf('php %s %s 2>&1', escapeshellarg($this->binPath), escapeshellarg($dir)));
+
+        self::assertIsString($output);
+        self::assertStringContainsString('SKIP hero', $output);
+        self::assertStringContainsString('Authored guidance', (string) file_get_contents("{$dir}/hero.yaml"));
+    }
+
+    public function test_force_re_derives_over_an_existing_definition(): void
+    {
+        // Re-deriving after the CMS changed is legitimate — it just has to be
+        // asked for.
+        $dir = sys_get_temp_dir() . '/fields-migrate-cli-' . uniqid('', true) . '/hero';
+        mkdir($dir, 0777, true);
+        file_put_contents("{$dir}/acf.json", json_encode([
+            'key' => 'group_hero',
+            'title' => 'Hero',
+            'fields' => [['key' => 'field_hero_title', 'name' => 'title', 'label' => 'T', 'type' => 'text']],
+        ], JSON_THROW_ON_ERROR));
+        file_put_contents("{$dir}/hero.yaml", "name: Hero\nmcp:\n  - 'Authored guidance'\nfields: {}\n");
+
+        $output = shell_exec(sprintf('php %s --force %s 2>&1', escapeshellarg($this->binPath), escapeshellarg($dir)));
+
+        self::assertIsString($output);
+        self::assertStringContainsString('OK   hero', $output);
+        self::assertStringNotContainsString('Authored guidance', (string) file_get_contents("{$dir}/hero.yaml"));
+    }
+
     public function test_fails_only_when_there_is_nothing_on_disk_to_describe(): void
     {
         $dir = sys_get_temp_dir() . '/fields-migrate-cli-' . uniqid('', true) . '/empty';
