@@ -33,10 +33,13 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   nothing in it (the schema denies both; `FieldProjectionFilter` denies the
   second again for callers that skip schema validation).
 
-  An unresolved target **fails** the run rather than merely being noted. The
-  check reads the target's fields, so an unreachable one leaves the prop with no
-  declared shape at all — reporting that and exiting zero is how a broken
-  reference survives CI. `fields-validate` names the two cases apart: no such
+  An unresolved target **fails** the run rather than merely being noted, and is
+  found by reading the definition rather than by tripping over it: every `of:`
+  target is resolved up front, so a broken reference surfaces even when the twig
+  never reads through it, reads the prop as a whole, does not parse, or does not
+  exist. The check reads the target's fields, so an unreachable one leaves the
+  prop with no declared shape at all — reporting that and exiting zero is how a
+  broken reference survives CI. `fields-validate` names the two cases apart: no such
   component, or that component does not declare that field (the second is what
   a rename looks like).
 

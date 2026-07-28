@@ -10,7 +10,10 @@ namespace Parisek\DefinitionKit\Contract;
  * Four states, and the distinction between the last two is the whole point:
  *
  * - `typed`     — every declared field carries a role, and every prop the twig
- *                 reads is accounted for. This one really passed.
+ *                 reads is accounted for. It still fails the run if it carries
+ *                 a broken `of:` target: nothing was read through the dangling
+ *                 reference, but the definition asserts a shape that is not
+ *                 there, and that is a defect wherever it sits.
  * - `violations`— typed, and reads something no role accounts for.
  * - `untyped`   — the definition has not been through the vocabulary yet. NOT
  *                 a pass. Reported as untyped so a fleet-wide run says how much
@@ -23,6 +26,13 @@ final class ContractResult
     public const VIOLATIONS = 'violations';
     public const UNTYPED = 'untyped';
     public const UNANALYSED = 'unanalysed';
+
+    /**
+     * An `of:` target that does not resolve. It lives here rather than on the
+     * linter because `isFailure()` has to know it, and a value object reaching
+     * into its producer for a constant is a cycle waiting to be tripped over.
+     */
+    public const NOTE_UNRESOLVED_FORWARD = 'unresolved-forwarded-shape';
 
     /**
      * @param list<string> $violations props read but accounted for by nothing
@@ -52,6 +62,6 @@ final class ContractResult
     public function isFailure(): bool
     {
         return self::VIOLATIONS === $this->status
-            || in_array(ContractLinter::NOTE_UNRESOLVED_FORWARD, $this->noteKinds(), true);
+            || in_array(self::NOTE_UNRESOLVED_FORWARD, $this->noteKinds(), true);
     }
 }

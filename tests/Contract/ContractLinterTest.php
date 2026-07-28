@@ -267,6 +267,81 @@ final class ContractLinterTest extends TestCase
         self::assertTrue($result->isFailure());
     }
 
+    public function testABrokenForwardIsFoundWhateverTheTwigDoes(): void
+    {
+        // Resolving forwards only where a read reached them meant a dangling
+        // reference went unreported whenever the twig happened not to read
+        // through it. The defect is in the definition, so it is found by
+        // reading the definition — each of these used to pass.
+        $cases = [
+            'never read at all' => ['{{ content.title }}', ContractResult::TYPED],
+            'read as a whole' => ['{{ content.menu|length }}', ContractResult::TYPED],
+            'template does not parse' => ['{% cache "k" %}{% endcache %}', ContractResult::UNANALYSED],
+        ];
+
+        foreach ($cases as $label => [$twig, $expectedStatus]) {
+            $dir = $this->component('header-' . md5($label), <<<'YAML'
+            name: Header
+            fields:
+              title: { type: text, label: Title, role: field }
+              menu: { type: repeater, label: Menu, role: parent, of: component:nope#items }
+            YAML, $twig);
+
+            $result = $this->lint($dir);
+
+            self::assertSame($expectedStatus, $result->status, $label);
+            self::assertTrue($result->isFailure(), $label);
+            self::assertContains(ContractResult::NOTE_UNRESOLVED_FORWARD, $result->noteKinds(), $label);
+        }
+    }
+
+    public function testABrokenForwardIsFoundOnAnUntypedComponentToo(): void
+    {
+        $dir = $this->component('header', <<<'YAML'
+        name: Header
+        fields:
+          title: { type: text, label: Title }
+          menu: { type: repeater, label: Menu, role: parent, of: component:nope#items }
+        YAML, '{{ content.title }}');
+
+        $result = $this->lint($dir);
+
+        self::assertSame(ContractResult::UNTYPED, $result->status);
+        self::assertTrue($result->isFailure());
+    }
+
+    public function testABrokenForwardIsFoundWithNoTwigAtAll(): void
+    {
+        $dir = "{$this->root}/headless";
+        mkdir($dir, 0777, true);
+        file_put_contents("{$dir}/headless.yaml", "name: Headless\nfields:\n"
+            . "  menu: { type: repeater, label: Menu, role: parent, of: component:nope#items }\n");
+
+        $result = $this->lint($dir);
+
+        self::assertSame(ContractResult::UNANALYSED, $result->status);
+        self::assertTrue($result->isFailure());
+    }
+
+    public function testANestedBrokenForwardIsFoundToo(): void
+    {
+        $dir = $this->component('header', <<<'YAML'
+        name: Header
+        fields:
+          inner:
+            type: group
+            label: Inner
+            role: parent
+            fields:
+              menu: { type: repeater, label: Menu, role: parent, of: component:nope#items }
+        YAML, '{{ content.inner }}');
+
+        $result = $this->lint($dir);
+
+        self::assertTrue($result->isFailure());
+        self::assertStringContainsString('inner.menu', $result->notes[0]['detail']);
+    }
+
     public function testADefinitionWithARolelessFieldIsUntypedNotPassing(): void
     {
         $dir = $this->component('hero', <<<'YAML'

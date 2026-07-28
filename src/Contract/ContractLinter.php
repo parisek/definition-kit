@@ -47,7 +47,8 @@ use Symfony\Component\Yaml\Yaml;
  */
 final class ContractLinter
 {
-    public const NOTE_UNRESOLVED_FORWARD = 'unresolved-forwarded-shape';
+    /** @deprecated Use ContractResult::NOTE_UNRESOLVED_FORWARD; kept so callers do not break. */
+    public const NOTE_UNRESOLVED_FORWARD = ContractResult::NOTE_UNRESOLVED_FORWARD;
 
     public function __construct(
         private readonly FrameworkProps $frameworkProps = new FrameworkProps(),
@@ -75,16 +76,33 @@ final class ContractLinter
             return new ContractResult($name, ContractResult::UNTYPED, reason: "no {$name}.yaml");
         }
         if (!is_file($twigPath)) {
-            return new ContractResult($name, ContractResult::UNANALYSED, reason: "no {$name}.twig to read");
+            return new ContractResult(
+                $name,
+                ContractResult::UNANALYSED,
+                notes: $this->resolveForwards(
+                    $this->fieldsOf($yamlPath),
+                    [],
+                    ComponentShapeResolver::forComponentDir($componentDir),
+                ),
+                reason: "no {$name}.twig to read",
+            );
         }
 
         /** @var array<string,mixed> $definition */
         $definition = Yaml::parseFile($yamlPath) ?? [];
         $fields = isset($definition['fields']) && is_array($definition['fields']) ? $definition['fields'] : [];
 
+        // Every `of:` target is resolved here, before anything is read.
+        // Resolving them lazily as reads reached them meant a dangling
+        // reference went unreported whenever the twig happened not to read
+        // through it — a prop read as a whole, an untyped component, a missing
+        // template. The defect is in the definition, so it is found by reading
+        // the definition.
+        $forwardNotes = $this->resolveForwards($fields, [], $shapes);
+
         $untypedReason = $this->untypedReason($fields);
         if (null !== $untypedReason && [] !== $fields) {
-            return new ContractResult($name, ContractResult::UNTYPED, reason: $untypedReason);
+            return new ContractResult($name, ContractResult::UNTYPED, notes: $forwardNotes, reason: $untypedReason);
         }
 
         $reads = (new TwigPropExtractor($this->templateResolver($componentDir)))->extractFile($twigPath);
@@ -94,21 +112,20 @@ final class ContractLinter
                 return new ContractResult(
                     $name,
                     ContractResult::UNANALYSED,
-                    notes: $reads->notes,
+                    notes: [...$reads->notes, ...$forwardNotes],
                     reason: $note['detail'],
                 );
             }
         }
 
-        $shapeNotes = [];
         $violations = [];
         foreach ($reads->reads as $read) {
-            if (!$this->isAccountedFor($read, $fields, $shapes, $shapeNotes)) {
+            if (!$this->isAccountedFor($read, $fields, $shapes)) {
                 $violations[] = $read;
             }
         }
 
-        $notes = [...$reads->notes, ...$shapeNotes];
+        $notes = [...$reads->notes, ...$forwardNotes];
 
         if ([] === $fields) {
             // `fields: {}` and a template that reads nothing but framework
@@ -132,6 +149,64 @@ final class ContractLinter
             $violations,
             $notes,
         );
+    }
+
+    /**
+     * Every `of:` target the definition carries, resolved.
+     *
+     * @param array<string,mixed> $fields
+     * @param list<string> $chain
+     * @return list<array{kind: string, detail: string}>
+     */
+    private function resolveForwards(array $fields, array $chain, ComponentShapeResolver $shapes): array
+    {
+        $notes = [];
+
+        foreach ($fields as $name => $field) {
+            if (!is_array($field)) {
+                continue;
+            }
+
+            $path = [...$chain, (string) $name];
+
+            if (ComponentShapeResolver::isComponentTarget($field['of'] ?? null)) {
+                $resolved = $shapes->resolve((string) $field['of']);
+                if (null !== $resolved['error']) {
+                    $notes[] = [
+                        'kind' => ContractResult::NOTE_UNRESOLVED_FORWARD,
+                        'detail' => sprintf('%s: %s', implode('.', $path), $resolved['error']),
+                    ];
+                }
+            }
+
+            if (isset($field['fields']) && is_array($field['fields'])) {
+                $notes = [...$notes, ...$this->resolveForwards($field['fields'], $path, $shapes)];
+            }
+
+            if (isset($field['layouts']) && is_array($field['layouts'])) {
+                foreach ($field['layouts'] as $layoutName => $layout) {
+                    if (is_array($layout) && isset($layout['fields']) && is_array($layout['fields'])) {
+                        $notes = [
+                            ...$notes,
+                            ...$this->resolveForwards($layout['fields'], [...$path, (string) $layoutName], $shapes),
+                        ];
+                    }
+                }
+            }
+        }
+
+        return $notes;
+    }
+
+    /**
+     * @return array<string,mixed>
+     */
+    private function fieldsOf(string $yamlPath): array
+    {
+        /** @var array<string,mixed> $definition */
+        $definition = Yaml::parseFile($yamlPath) ?? [];
+
+        return isset($definition['fields']) && is_array($definition['fields']) ? $definition['fields'] : [];
     }
 
     /**
@@ -206,11 +281,7 @@ final class ContractLinter
     /**
      * @param array<string,mixed> $fields
      */
-    /**
-     * @param array<string,mixed> $fields
-     * @param list<array{kind: string, detail: string}> $notes collected as a side effect
-     */
-    private function isAccountedFor(string $read, array $fields, ComponentShapeResolver $shapes, array &$notes): bool
+    private function isAccountedFor(string $read, array $fields, ComponentShapeResolver $shapes): bool
     {
         $segments = explode('.', $read);
 
@@ -235,7 +306,7 @@ final class ContractLinter
                 return true;
             }
 
-            $children = $this->childrenOf($field, $shapes, $notes);
+            $children = $this->childrenOf($field, $shapes);
             if (null === $children) {
                 // A declared leaf, or a field whose structure the definition
                 // never claimed to enumerate. Everything below it belongs to
@@ -258,29 +329,18 @@ final class ContractLinter
      */
     /**
      * @param array<string,mixed> $field
-     * @param list<array{kind: string, detail: string}> $notes
      * @return array<string,mixed>|null
      */
-    private function childrenOf(array $field, ComponentShapeResolver $shapes, array &$notes): ?array
+    private function childrenOf(array $field, ComponentShapeResolver $shapes): ?array
     {
         if (ComponentShapeResolver::isComponentTarget($field['of'] ?? null)) {
             // The shape lives in the component this prop is forwarded to, so
             // the check reads it from there. This is what makes the reference
             // worth having over a transcript: adding a field to the child now
-            // reaches every parent that forwards to it.
-            $resolved = $shapes->resolve((string) $field['of']);
-
-            if (null === $resolved['fields']) {
-                // Unreachable, so everything below it has to be treated as
-                // opaque — but silently doing that is how a component reads
-                // fifty undeclared props and still reports clean. Say it.
-                $notes[] = [
-                    'kind' => self::NOTE_UNRESOLVED_FORWARD,
-                    'detail' => (string) $resolved['error'],
-                ];
-            }
-
-            return $resolved['fields'];
+            // reaches every parent that forwards to it. An unreachable target
+            // leaves everything below it opaque; resolveForwards() has already
+            // reported it.
+            return $shapes->resolve((string) $field['of'])['fields'];
         }
 
         if (true === ($field['open'] ?? false)) {
