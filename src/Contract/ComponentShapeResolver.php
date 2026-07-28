@@ -62,11 +62,23 @@ final class ComponentShapeResolver
         }
 
         $target = substr($of, strlen(self::PREFIX));
+        $hasSuffix = str_contains($target, '#');
         [$slug, $fieldPath] = array_pad(explode('#', $target, 2), 2, null);
         $slug = (string) $slug;
 
         if ('' === $slug) {
             return ['fields' => null, 'error' => "`of: {$of}` names no component."];
+        }
+
+        if ($hasSuffix && '' === (string) $fieldPath) {
+            // `component:header-menu#` is a half-finished edit, not a request
+            // for the whole component. Treating it as one would resolve to a
+            // different shape than the author was reaching for and say nothing.
+            return ['fields' => null, 'error' => sprintf(
+                '`of: %s` ends in `#` without naming a field. Drop the `#` to borrow the whole '
+                . "component's input map, or name the field after it.",
+                $of,
+            )];
         }
 
         $path = "{$this->componentsRoot}/{$slug}/{$slug}.yaml";
@@ -82,9 +94,16 @@ final class ComponentShapeResolver
         $definition = Yaml::parseFile($path) ?? [];
         $fields = isset($definition['fields']) && is_array($definition['fields']) ? $definition['fields'] : [];
 
-        if (null === $fieldPath || '' === $fieldPath) {
+        if (null === $fieldPath) {
             // The whole component's input map — a prop that IS another
             // component's context, rather than one of its fields.
+            if ([] === $fields) {
+                return ['fields' => null, 'error' => sprintf(
+                    '`of: %s` points at a component that declares no fields — there is no shape to borrow.',
+                    $of,
+                )];
+            }
+
             return ['fields' => $fields, 'error' => null];
         }
 

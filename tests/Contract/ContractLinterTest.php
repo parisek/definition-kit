@@ -261,6 +261,10 @@ final class ContractLinterTest extends TestCase
 
         self::assertSame([], $result->violations);
         self::assertSame([ContractLinter::NOTE_UNRESOLVED_FORWARD], $result->noteKinds());
+        // …and it fails the run. A note that is a defect rather than a caveat
+        // has to reach the exit code, or the gate passes on a definition whose
+        // shape nobody can read.
+        self::assertTrue($result->isFailure());
     }
 
     public function testADefinitionWithARolelessFieldIsUntypedNotPassing(): void

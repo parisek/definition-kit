@@ -271,7 +271,8 @@
                 },
                 "of": {
                     "type": "string",
-                    "description": "What this field points at, as `<kind>:<name>`. `post:article` (repeatable as a comma-separated list), `term:<taxonomy>` and `geo` are reference targets. `component:<slug>[#<field>]` is the fourth kind and means something different in shape but the same in spirit: this prop IS that component's input, so its shape lives there. `header.menu` is `of: component:header-menu#items` rather than a transcript of the child's item fields — a transcript is a second place to keep right, and the one in tailwind-base had already drifted. A field carrying a component target declares no `fields:` of its own and must not project into acf.json: nobody edits a value the parent passes through."
+                    "pattern": "^(geo|term:[A-Za-z0-9_-]+|post:[A-Za-z0-9_-]+(,post:[A-Za-z0-9_-]+)*|component:[a-z0-9][a-z0-9-]*(#[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*)?)$",
+                    "description": "What this field points at, as `<kind>:<name>`. The grammar is closed on purpose — a typo like `components:header-menu` or `post :article` would otherwise validate and then be silently ignored by every linter. Four kinds: `geo`, `term:<taxonomy>`, `post:<type>[,post:<type>…]` (the reference targets AbstractTypeReverseMapper already enforces at generation), and `component:<slug>[#<field>]`. The last means this prop IS that component's input, so its shape lives there: `header.menu` is `of: component:header-menu#items` rather than a transcript of the child's item fields — a transcript is a second place to keep right, and the one in tailwind-base had already drifted. A field carrying a component target declares no `fields:` of its own and must not project into acf.json; nobody edits a value the parent passes through."
                 },
                 "multiple": {
                     "type": "boolean"
@@ -481,7 +482,7 @@
                     }
                 },
                 {
-                    "$comment": "A borrowed shape has one home. Declaring `fields:` next to `of: component:` would recreate the transcript this target exists to remove, and leave the check with two answers.",
+                    "$comment": "A borrowed shape has one home. Declaring `fields:` next to `of: component:` would recreate the transcript this target exists to remove, and leave the check with two answers. The forward must also be non-projecting: `role:` is required and cannot be `field` (omitting it defaults to `field`, which defaults `acf:` to true), so a forward can never reach acf.json with no sub-fields to emit.",
                     "if": {
                         "properties": {
                             "of": {
@@ -497,6 +498,19 @@
                             "required": [
                                 "fields"
                             ]
+                        },
+                        "required": [
+                            "role"
+                        ],
+                        "properties": {
+                            "role": {
+                                "not": {
+                                    "const": "field"
+                                }
+                            },
+                            "acf": {
+                                "const": false
+                            }
                         }
                     }
                 },

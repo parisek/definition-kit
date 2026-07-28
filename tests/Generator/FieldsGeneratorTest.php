@@ -1500,6 +1500,19 @@ final class FieldsGeneratorTest extends TestCase
         self::assertSame(['video'], array_column($group['fields'][0]['sub_fields'], 'name'));
     }
 
+    public function test_a_forwarded_shape_that_projects_is_rejected_in_process(): void
+    {
+        // Belt-and-braces for callers that skip schema validation. A forward
+        // has no sub-fields of its own, so projecting one would emit an ACF
+        // group with nothing in it.
+        $this->expectException(\Parisek\DefinitionKit\Generator\GenerationValidationException::class);
+        $this->expectExceptionMessageMatches('/forwards its shape/');
+
+        $this->generateGroup($this->tree([
+            'menu' => ['type' => 'repeater', 'label' => 'Menu', 'acf' => true, 'of' => 'component:header-menu#items'],
+        ]), 'demo', 1700000000);
+    }
+
     // --- rule 9 — projecting container with zero projecting children ----
 
     public function test_projecting_group_with_all_children_stripped_is_dropped_entirely(): void

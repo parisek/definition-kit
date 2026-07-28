@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Parisek\DefinitionKit\Generator;
 
+use Parisek\DefinitionKit\Contract\ComponentShapeResolver;
+
 /**
  * Implements the two-axis model from issue #13: `role:` (axis B —
  * provenance, where the runtime value comes from) and `acf:` (axis A —
@@ -109,6 +111,22 @@ final class FieldProjectionFilter
             $chain = [...$pathChain, (string) $name];
             $role = $this->resolveRole($field, $inheritedRole, $chain);
             $projects = $this->resolveProjects($field, $role, $chain);
+
+            if ($projects && ComponentShapeResolver::isComponentTarget($field['of'] ?? null)) {
+                // Belt-and-braces for in-process callers that skip schema
+                // validation (the schema denies this too). A forward has no
+                // sub-fields of its own, so projecting one would emit an ACF
+                // group with nothing in it — and nobody edits a value the
+                // parent passes through, which is why it is non-projecting by
+                // definition rather than by convention.
+                throw new GenerationValidationException(sprintf(
+                    "Field '%s' forwards its shape to another component (`of: %s`) but projects into "
+                    . 'acf.json. A forwarded prop is passed in by the caller, so it has no editor-facing '
+                    . 'field: give it a non-`field` role, or drop the `of:` if this really is an ACF field.',
+                    implode('.', $chain),
+                    (string) $field['of'],
+                ));
+            }
 
             if ($projects && !$ancestorProjects) {
                 throw new GenerationValidationException(sprintf(

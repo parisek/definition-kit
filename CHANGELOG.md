@@ -27,13 +27,18 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   field to the child immediately reaches every parent that forwards to it, and
   a parent cannot read a field the child does not have.
 
-  A field carrying a component target declares no `fields:` of its own — the
-  schema rejects both together, since a borrowed shape with a local copy beside
-  it is the transcript again. `fields-validate` fails a target that does not
-  resolve, naming the two cases apart (no such component / that component does
-  not declare that field — the second is what a rename looks like). An
-  unresolved target leaves the prop opaque to the check, which reports it as a
-  note rather than passing quietly.
+  A field carrying a component target declares no `fields:` of its own and must
+  carry a non-`field` role: a borrowed shape with a local copy beside it is the
+  transcript again, and a forward that projects would emit an ACF group with
+  nothing in it (the schema denies both; `FieldProjectionFilter` denies the
+  second again for callers that skip schema validation).
+
+  An unresolved target **fails** the run rather than merely being noted. The
+  check reads the target's fields, so an unreachable one leaves the prop with no
+  declared shape at all — reporting that and exiting zero is how a broken
+  reference survives CI. `fields-validate` names the two cases apart: no such
+  component, or that component does not declare that field (the second is what
+  a rename looks like).
 
   Cheap because a forwarded prop is always non-projecting: nobody edits a value
   the parent passes through, so `acf.json` generation never sees one and only
@@ -219,6 +224,14 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   either would be a guess dressed as evidence.
 
 ### Changed
+
+- **`of:` is now a closed grammar** — `geo`, `term:<taxonomy>`,
+  `post:<type>[,post:<type>…]`, `component:<slug>[#<field>]`. It was an open
+  string, so `components:header-menu` or `post :article` passed validation and
+  was then silently ignored by every linter: a target kind nobody checks. The
+  generator already enforced the three reference kinds at generation time
+  (`AbstractTypeReverseMapper`); the schema now says the same thing earlier, and
+  covers the group/repeater fields the generator never sees.
 
 - **`type:` and `label:` are required only of a field that projects into
   acf.json.** They describe an ACF field — the widget and the caption above it —

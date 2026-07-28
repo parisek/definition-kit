@@ -43,8 +43,15 @@ final class ContractResult
         return array_values(array_unique(array_column($this->notes, 'kind')));
     }
 
+    /**
+     * A definition asserting a shape that is not there is a defect, not a
+     * caveat: the check reads the target's fields, so an unreachable target
+     * leaves the prop with no declared shape at all. Reporting it as a note
+     * and exiting zero is how a broken reference survives CI.
+     */
     public function isFailure(): bool
     {
-        return self::VIOLATIONS === $this->status;
+        return self::VIOLATIONS === $this->status
+            || in_array(ContractLinter::NOTE_UNRESOLVED_FORWARD, $this->noteKinds(), true);
     }
 }

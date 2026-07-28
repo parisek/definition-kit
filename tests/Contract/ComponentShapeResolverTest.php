@@ -85,15 +85,35 @@ final class ComponentShapeResolverTest extends TestCase
         self::assertStringContainsString('header-menu.yaml', (string) $result['error']);
     }
 
-    public function testATargetWithNoShapeToBorrowIsAnError(): void
+    public function testAFieldTargetOnAComponentWithNoFieldsIsAnError(): void
     {
-        // `divider` declares nothing, so `of: component:divider` promises a
-        // shape that is not there. Returning an empty map instead would make
-        // every read of the borrowing prop a violation, with no clue why.
         $result = $this->resolve('component:divider#anything');
 
         self::assertNull($result['fields']);
         self::assertNotNull($result['error']);
+    }
+
+    public function testAWholeComponentTargetWithNothingToBorrowIsAnError(): void
+    {
+        // `divider` declares nothing, so `of: component:divider` promises a
+        // shape that is not there. Returning an empty map instead would make
+        // every read of the borrowing prop a violation with no clue why — and
+        // the field-path branch already rejected this while the
+        // whole-component branch did not.
+        $result = $this->resolve('component:divider');
+
+        self::assertNull($result['fields']);
+        self::assertNotNull($result['error']);
+    }
+
+    public function testATrailingHashIsAHalfFinishedEditNotAWholeComponentTarget(): void
+    {
+        // `component:header-menu#` resolving to the whole component would hand
+        // back a different shape than the author was reaching for, silently.
+        $result = $this->resolve('component:header-menu#');
+
+        self::assertNull($result['fields']);
+        self::assertStringContainsString('#', (string) $result['error']);
     }
 
     public function testNonComponentTargetsAreNotThisResolversBusiness(): void
