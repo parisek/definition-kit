@@ -5,8 +5,6 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
-
-## [0.6.1] - 2026-07-27
 ### Added
 
 - **`of: component:<slug>[#<field>]`** — a prop whose shape is another
@@ -48,6 +46,19 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Cheap because a forwarded prop is always non-projecting: nobody edits a value
   the parent passes through, so `acf.json` generation never sees one and only
   the check had to learn the reference.
+
+### Changed
+
+- **`of:` is now a closed grammar** — `geo`, `term:<taxonomy>`,
+  `post:<type>[,post:<type>…]`, `component:<slug>[#<field>]`. It was an open
+  string, so `components:header-menu` or `post :article` passed validation and
+  was then silently ignored by every linter: a target kind nobody checks. The
+  generator already enforced the three reference kinds at generation time
+  (`AbstractTypeReverseMapper`); the schema now says the same thing earlier, and
+  covers the group/repeater fields the generator never sees.
+
+## [0.6.1] - 2026-07-27
+### Added
 
 - **`fields-lint --contract-only`** runs the input-contract check without the
   CMS-projection drift check. Drift compares a definition against the
@@ -229,14 +240,6 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   either would be a guess dressed as evidence.
 
 ### Changed
-
-- **`of:` is now a closed grammar** — `geo`, `term:<taxonomy>`,
-  `post:<type>[,post:<type>…]`, `component:<slug>[#<field>]`. It was an open
-  string, so `components:header-menu` or `post :article` passed validation and
-  was then silently ignored by every linter: a target kind nobody checks. The
-  generator already enforced the three reference kinds at generation time
-  (`AbstractTypeReverseMapper`); the schema now says the same thing earlier, and
-  covers the group/repeater fields the generator never sees.
 
 - **`type:` and `label:` are required only of a field that projects into
   acf.json.** They describe an ACF field — the widget and the caption above it —
