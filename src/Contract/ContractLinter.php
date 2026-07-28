@@ -50,6 +50,9 @@ final class ContractLinter
     /** @deprecated Use ContractResult::NOTE_UNRESOLVED_FORWARD; kept so callers do not break. */
     public const NOTE_UNRESOLVED_FORWARD = ContractResult::NOTE_UNRESOLVED_FORWARD;
 
+    /** @var array<string,ComponentShapeResolver> components root => resolver */
+    private array $shapes = [];
+
     public function __construct(
         private readonly FrameworkProps $frameworkProps = new FrameworkProps(),
     ) {
@@ -67,7 +70,7 @@ final class ContractLinter
     public function lint(string $componentDir): ContractResult
     {
         $componentDir = rtrim($componentDir, '/');
-        $shapes = ComponentShapeResolver::forComponentDir($componentDir);
+        $shapes = $this->shapesFor($componentDir);
         $name = basename($componentDir);
         $yamlPath = "{$componentDir}/{$name}.yaml";
         $twigPath = "{$componentDir}/{$name}.twig";
@@ -79,11 +82,7 @@ final class ContractLinter
             return new ContractResult(
                 $name,
                 ContractResult::UNANALYSED,
-                notes: $this->resolveForwards(
-                    $this->fieldsOf($yamlPath),
-                    [],
-                    ComponentShapeResolver::forComponentDir($componentDir),
-                ),
+                notes: $this->resolveForwards($this->fieldsOf($yamlPath), [], $this->shapesFor($componentDir)),
                 reason: "no {$name}.twig to read",
             );
         }
@@ -149,6 +148,20 @@ final class ContractLinter
             $violations,
             $notes,
         );
+    }
+
+    /**
+     * One resolver per components root, so a `--root` sweep parses each
+     * forwarded-to definition once rather than once per reference to it.
+     * Instance-scoped rather than static: a cache that outlives the files it
+     * describes answers from a stale parse, and a linter doing that is worse
+     * than a slow one.
+     */
+    private function shapesFor(string $componentDir): ComponentShapeResolver
+    {
+        $root = dirname($componentDir);
+
+        return $this->shapes[$root] ??= new ComponentShapeResolver($root);
     }
 
     /**

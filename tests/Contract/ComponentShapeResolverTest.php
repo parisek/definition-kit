@@ -126,6 +126,23 @@ final class ComponentShapeResolverTest extends TestCase
         self::assertNull($result['error']);
     }
 
+    public function testATargetIsParsedOnceAndAnsweredFromThereAfter(): void
+    {
+        $resolver = new ComponentShapeResolver($this->root);
+
+        self::assertSame(['title', 'url'], array_keys((array) $resolver->resolve('component:header-menu#items')['fields']));
+
+        // Deleting the file it read proves the second answer came from the
+        // cache — a `--root` sweep asks for the same target once per
+        // reference, and re-parsing each time is the cost this avoids.
+        unlink("{$this->root}/header-menu/header-menu.yaml");
+
+        self::assertSame(['title', 'url'], array_keys((array) $resolver->resolve('component:header-menu#items')['fields']));
+        // …and a resolver that did not see it is not fooled: the cache is per
+        // instance, so it cannot outlive the files it describes.
+        self::assertNotNull((new ComponentShapeResolver($this->root))->resolve('component:header-menu#items')['error']);
+    }
+
     public function testForComponentDirDerivesTheComponentsRoot(): void
     {
         $resolver = ComponentShapeResolver::forComponentDir("{$this->root}/header/");

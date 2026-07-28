@@ -33,6 +33,20 @@ final class ComponentShapeResolver
 {
     public const PREFIX = 'component:';
 
+    /**
+     * Resolutions already computed, keyed by the `of:` string.
+     *
+     * A definition is parsed once per target rather than once per reference:
+     * `resolveForwards()` walks every forward, and the contract check walks
+     * them again for the reads that go through one, so the same target is
+     * asked for repeatedly. The cache is per instance, not static — a shared
+     * one would outlive the files it describes, and a linter that answers from
+     * a stale parse is worse than a slow one.
+     *
+     * @var array<string,array{fields: array<string,mixed>|null, error: ?string}>
+     */
+    private array $resolved = [];
+
     public function __construct(private readonly string $componentsRoot)
     {
     }
@@ -61,6 +75,14 @@ final class ComponentShapeResolver
             return ['fields' => null, 'error' => null];
         }
 
+        return $this->resolved[$of] ??= $this->resolveUncached($of);
+    }
+
+    /**
+     * @return array{fields: array<string,mixed>|null, error: ?string}
+     */
+    private function resolveUncached(string $of): array
+    {
         $target = substr($of, strlen(self::PREFIX));
         $hasSuffix = str_contains($target, '#');
         [$slug, $fieldPath] = array_pad(explode('#', $target, 2), 2, null);
