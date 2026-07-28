@@ -25,6 +25,14 @@ Behaviour-affecting changes belong under `## [Unreleased]` in `CHANGELOG.md`
 normally added by their own PR. **Don't hand-stamp a version heading** — the
 workflow does that.
 
+**Put entries directly under the anchor comment**, and leave the comment where
+it is. An empty `[Unreleased]` has no content of its own, so a branch whose
+changelog edit sits right under that bare heading merges into whatever heading
+occupies those lines by then — which, after a release, is the version just
+stamped. That put a feature into the notes of three tags that did not contain
+it before the anchor existed. The stamp keeps the anchor in the fresh
+`[Unreleased]` and does not carry it into the stamped block.
+
 ### 3. Trigger the Stamp Release workflow
 
 Actions tab → **Stamp Release** → Run workflow → enter `X.Y.Z` (no `v` prefix).

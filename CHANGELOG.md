@@ -5,8 +5,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
-
-## [0.7.1] - 2026-07-28
+<!-- New entries go directly under this line. It is the anchor that keeps a branch's
+     changelog edit from merging into a version that shipped without it. -->
 ### Fixed
 
 - **A declared shape is now checked whatever the role carries it.** `childrenOf()`
@@ -31,6 +31,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   still caught. Documented and pinned by a test rather than built: it already
   worked, and nothing said so.
 
+## [0.7.1] - 2026-07-28
 ### Fixed
 
 - **`fields-migrate` refuses to overwrite an existing definition** unless
@@ -343,7 +344,6 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   from 202 `field` + 1 `derived` to 203 `field`, 6 `query`, 6 `parent`,
   1 `derived`.
 
-
 ## [0.5.1] - 2026-07-27
 ### Added
 
@@ -415,7 +415,6 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   paragraph, which is precisely why its audience read as ambiguous. It is the
   editor's copy and projects into `block.json`.
 
-
 ## [0.4.2] - 2026-07-26
 ### Added
 
@@ -446,7 +445,6 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   project, the broader rule captured on every single component and would have
   changed the migration output of all of them.
   ([#18](https://github.com/parisek/definition-kit/issues/18))
-
 
 ## [0.4.1] - 2026-07-26
 
@@ -504,7 +502,6 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   reported instead of shipping as a dangling reference.
 - `fields-migrate` sets `role: field` on everything. Provenance cannot be
   inferred from an ACF export; anything else needs a manual audit.
-
 
 ## [0.3.1] - 2026-07-25
 

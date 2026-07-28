@@ -44,11 +44,14 @@ jobs:
             echo "::error::CHANGELOG.md has no [Unreleased] section"
             exit 1
           fi
+          # The anchor comment is not content — a section holding only it has
+          # nothing to release, and stamping would produce a version with empty
+          # notes.
           CONTENT=$(awk '
             /^## \[Unreleased\]/{flag=1; next}
             /^## \[/{flag=0}
             flag
-          ' CHANGELOG.md | grep -v '^[[:space:]]*$' | head -1)
+          ' CHANGELOG.md | grep -v '^[[:space:]]*$' | grep -v '^[[:space:]]*<!--' | grep -v -- '-->[[:space:]]*$' | head -1)
           if [ -z "$CONTENT" ]; then
             echo "::error::[Unreleased] section is empty — nothing to release"
             exit 1
@@ -75,14 +78,28 @@ jobs:
           # block followed by the new stamped version block, so the next
           # cycle has somewhere to accumulate entries. UTC date avoids
           # off-by-one against the runner's local timezone.
+          #
+          # The fresh block keeps an anchor comment, and the stamped one does
+          # not. Without it an empty `[Unreleased]` has no content of its own,
+          # so a branch that added entries directly under that heading merges
+          # them into whatever heading now occupies those lines — the version
+          # just stamped. That happened three times in one day, each time
+          # putting a feature in the release notes of a tag that does not
+          # contain it. The anchor exists only in `[Unreleased]`, so the merge
+          # has somewhere unambiguous to land.
           python3 <<'PY'
           import os, re, pathlib, datetime
           version = os.environ['VERSION']
           date    = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d')
           path    = pathlib.Path('CHANGELOG.md')
           text    = path.read_text()
-          replacement = f"## [Unreleased]\n\n## [{version}] - {date}"
-          new = re.sub(r'^## \[Unreleased\]', replacement, text, count=1, flags=re.M)
+          anchor  = (
+              "<!-- New entries go directly under this line. It is the anchor that keeps a branch's\n"
+              "     changelog edit from merging into a version that shipped without it. -->"
+          )
+          pattern = r'^## \[Unreleased\]\n(?:<!--.*?-->\n)?'
+          replacement = f"## [Unreleased]\n{anchor}\n\n## [{version}] - {date}\n"
+          new = re.sub(pattern, replacement, text, count=1, flags=re.M | re.S)
           if new == text:
               raise SystemExit("failed to stamp CHANGELOG (no [Unreleased] heading found)")
           path.write_text(new)
