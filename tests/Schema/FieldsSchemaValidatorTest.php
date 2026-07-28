@@ -646,6 +646,79 @@ final class FieldsSchemaValidatorTest extends TestCase
         self::assertFalse((new FieldsSchemaValidator())->validateData($tree)->valid);
     }
 
+    // --- `of:` is a closed grammar (issue #27) ---------------------------
+
+    public function test_the_four_of_target_kinds_validate(): void
+    {
+        foreach ([
+            'related: { type: reference, label: R, of: geo }',
+            'related: { type: reference, label: R, of: term:category }',
+            'related: { type: reference, label: R, of: post:article }',
+            'related: { type: reference, label: R, of: "post:article,post:page" }',
+            'menu: { type: repeater, label: M, role: parent, of: component:header-menu }',
+            'menu: { type: repeater, label: M, role: parent, of: component:header-menu#items }',
+            'menu: { type: repeater, label: M, role: parent, of: "component:header-menu#items.attributes" }',
+        ] as $field) {
+            $tree = Yaml::parse("name: X\nfields:\n  {$field}\n", Yaml::PARSE_OBJECT_FOR_MAP);
+            $result = (new FieldsSchemaValidator())->validateData($tree);
+            self::assertTrue($result->valid, $field . ': ' . print_r($result->errors, true));
+        }
+    }
+
+    public function test_a_typo_in_an_of_target_no_longer_validates(): void
+    {
+        // Before the grammar closed, `components:` passed the schema and was
+        // then ignored by every linter — the target kind nobody checks.
+        foreach ([
+            'menu: { type: repeater, label: M, role: parent, of: "components:header-menu#items" }',
+            'menu: { type: repeater, label: M, role: parent, of: "component:" }',
+            'menu: { type: repeater, label: M, role: parent, of: "component:header-menu#" }',
+            'related: { type: reference, label: R, of: "post :article" }',
+            'related: { type: reference, label: R, of: "posts:article" }',
+        ] as $field) {
+            $tree = Yaml::parse("name: X\nfields:\n  {$field}\n", Yaml::PARSE_OBJECT_FOR_MAP);
+            self::assertFalse(
+                (new FieldsSchemaValidator())->validateData($tree)->valid,
+                $field . ' was expected to fail',
+            );
+        }
+    }
+
+    public function test_a_forwarded_shape_must_be_non_projecting(): void
+    {
+        // A forward has no sub-fields of its own, so projecting one would emit
+        // an ACF group with nothing in it. Omitting `role:` defaults to
+        // `field`, which defaults `acf:` to true — hence `role` is required.
+        foreach ([
+            'menu: { type: repeater, label: M, of: component:header-menu#items }',
+            'menu: { type: repeater, label: M, role: field, of: component:header-menu#items }',
+            'menu: { type: repeater, label: M, role: parent, acf: true, of: component:header-menu#items }',
+        ] as $field) {
+            $tree = Yaml::parse("name: X\nfields:\n  {$field}\n", Yaml::PARSE_OBJECT_FOR_MAP);
+            self::assertFalse(
+                (new FieldsSchemaValidator())->validateData($tree)->valid,
+                $field . ' was expected to fail',
+            );
+        }
+    }
+
+    public function test_fields_alongside_a_forwarded_shape_is_rejected(): void
+    {
+        $tree = Yaml::parse(<<<'YAML'
+        name: X
+        fields:
+          menu:
+            type: repeater
+            label: Menu
+            role: parent
+            of: component:header-menu#items
+            fields:
+              title: { type: text, label: T }
+        YAML, Yaml::PARSE_OBJECT_FOR_MAP);
+
+        self::assertFalse((new FieldsSchemaValidator())->validateData($tree)->valid);
+    }
+
     public function test_existing_dávka_1_fixtures_still_validate(): void
     {
         foreach (['valid-flat', 'valid-nested', 'valid-empty-wp'] as $name) {

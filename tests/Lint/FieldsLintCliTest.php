@@ -96,6 +96,32 @@ final class FieldsLintCliTest extends TestCase
         self::assertStringContainsString('acf.json missing', implode("\n", $output));
     }
 
+    public function test_a_broken_forwarded_shape_exits_nonzero(): void
+    {
+        // The gate this feature exists for. A reference nobody can follow used
+        // to be a note, and notes do not reach the exit code.
+        $dir = "{$this->root}/header";
+        mkdir($dir, 0777, true);
+        file_put_contents("{$dir}/header.yaml", Yaml::dump([
+            'name' => 'Header',
+            'fields' => [
+                'menu' => ['type' => 'repeater', 'label' => 'Menu', 'role' => 'parent', 'of' => 'component:nope#items'],
+            ],
+        ], 10, 2));
+        // Reads nothing undeclared, so the ONLY thing wrong is the reference.
+        file_put_contents("{$dir}/header.twig", '{{ content.menu|length }}');
+
+        $output = [];
+        $exitCode = null;
+        exec(escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg($this->bin) . ' --contract-only '
+            . escapeshellarg($dir) . ' 2>&1', $output, $exitCode);
+
+        $text = implode("\n", $output);
+        self::assertSame(1, $exitCode, $text);
+        self::assertStringContainsString('BROKEN REF header', $text);
+        self::assertStringContainsString('broken `of:` target', $text);
+    }
+
     public function test_single_drifted_component_exits_one_and_prints_drift(): void
     {
         $this->makeCleanComponent('demo-card');

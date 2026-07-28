@@ -9,6 +9,46 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [0.6.1] - 2026-07-27
 ### Added
 
+- **`of: component:<slug>[#<field>]`** — a prop whose shape is another
+  component's input, declared once where it belongs (issue #27).
+
+  `header.twig` hands `menu` straight to `header-menu` and never looks inside
+  it, but a `repeater` had to enumerate `fields:`, so `header.yaml` transcribed
+  the child's item shape. The transcript drifted: it was missing
+  `attributes.target` and the whole submenu group until review caught it.
+  tailwind-base has four such pairs across 25 components — `header.menu` ≡
+  `header-menu.items`, `header.language_switcher` ≡
+  `header-language-switcher.items`, `article-list.pagination` ≡
+  `pagination.items` (seven sub-fields), `page-header-default.breadcrumb` ≡
+  `breadcrumb.items`.
+
+  `of:` already answers "what does this point at" with a `<kind>:<name>`
+  vocabulary (`post:article`, `term:category`, `geo`), so a component is a
+  fourth kind of target rather than a new key. The contract check reads the
+  target's fields, which is what the reference buys over a transcript: adding a
+  field to the child immediately reaches every parent that forwards to it, and
+  a parent cannot read a field the child does not have.
+
+  A field carrying a component target declares no `fields:` of its own and must
+  carry a non-`field` role: a borrowed shape with a local copy beside it is the
+  transcript again, and a forward that projects would emit an ACF group with
+  nothing in it (the schema denies both; `FieldProjectionFilter` denies the
+  second again for callers that skip schema validation).
+
+  An unresolved target **fails** the run rather than merely being noted, and is
+  found by reading the definition rather than by tripping over it: every `of:`
+  target is resolved up front, so a broken reference surfaces even when the twig
+  never reads through it, reads the prop as a whole, does not parse, or does not
+  exist. The check reads the target's fields, so an unreachable one leaves the
+  prop with no declared shape at all — reporting that and exiting zero is how a
+  broken reference survives CI. `fields-validate` names the two cases apart: no such
+  component, or that component does not declare that field (the second is what
+  a rename looks like).
+
+  Cheap because a forwarded prop is always non-projecting: nobody edits a value
+  the parent passes through, so `acf.json` generation never sees one and only
+  the check had to learn the reference.
+
 - **`fields-lint --contract-only`** runs the input-contract check without the
   CMS-projection drift check. Drift compares a definition against the
   `acf.json`/`block.json` generated from it; a CMS-agnostic skeleton has neither
@@ -189,6 +229,14 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   either would be a guess dressed as evidence.
 
 ### Changed
+
+- **`of:` is now a closed grammar** — `geo`, `term:<taxonomy>`,
+  `post:<type>[,post:<type>…]`, `component:<slug>[#<field>]`. It was an open
+  string, so `components:header-menu` or `post :article` passed validation and
+  was then silently ignored by every linter: a target kind nobody checks. The
+  generator already enforced the three reference kinds at generation time
+  (`AbstractTypeReverseMapper`); the schema now says the same thing earlier, and
+  covers the group/repeater fields the generator never sees.
 
 - **`type:` and `label:` are required only of a field that projects into
   acf.json.** They describe an ACF field — the widget and the caption above it —

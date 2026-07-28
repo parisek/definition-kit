@@ -144,6 +144,7 @@ foreach ($results as $result) {
 // that says "40 OK" while 35 of them were never checked is how a lint stops
 // being believed.
 $contractFailures = 0;
+$brokenRefs = 0;
 $typed = 0;
 $untyped = 0;
 $unanalysed = 0;
@@ -153,7 +154,9 @@ foreach ($contractResults as $contract) {
     switch ($contract->status) {
         case ContractResult::TYPED:
             $typed++;
-            echo "  OK        {$contract->component}\n";
+            echo $contract->isFailure()
+                ? "  BROKEN REF {$contract->component}\n"
+                : "  OK        {$contract->component}\n";
             break;
         case ContractResult::VIOLATIONS:
             $typed++;
@@ -179,12 +182,21 @@ foreach ($contractResults as $contract) {
     foreach ($contract->notes as $note) {
         echo "    [{$note['kind']}] {$note['detail']}\n";
     }
+
+    // A note that is a defect rather than a caveat — an `of:` target that does
+    // not resolve — has to reach the exit code, or the gate passes on a
+    // definition whose shape nobody can read.
+    if (ContractResult::VIOLATIONS !== $contract->status && $contract->isFailure()) {
+        $brokenRefs++;
+        $failures++;
+    }
 }
 
 echo sprintf(
-    "  %d typed (%d with undeclared props), %d untyped, %d unanalysed\n",
+    "  %d typed (%d with undeclared props%s), %d untyped, %d unanalysed\n",
     $typed,
     $contractFailures,
+    $brokenRefs > 0 ? sprintf(', %d with a broken `of:` target', $brokenRefs) : '',
     $untyped,
     $unanalysed,
 );
