@@ -7,6 +7,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 <!-- New entries go directly under this line. It is the anchor that keeps a branch's
      changelog edit from merging into a version that shipped without it. -->
+
+## [0.7.2] - 2026-07-28
 ### Fixed
 
 - **A declared shape is now checked whatever the role carries it.** `childrenOf()`
