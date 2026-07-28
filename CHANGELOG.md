@@ -7,6 +7,30 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 ### Fixed
 
+- **A declared shape is now checked whatever the role carries it.** `childrenOf()`
+  stopped at any non-`field` role before looking for declared children, so a
+  `role: parent` or `role: query` prop that enumerated its `fields:` had that
+  enumeration ignored — the author wrote the shape and got no verification for
+  it. **18 such declarations across mairateam and tailwind-base** were being
+  skipped, including every menu shape in mairateam.
+
+  The rule is now: declared children are checked; the role only decides what
+  happens when nothing is declared. A `query` row with no `fields:` is still
+  opaque, because there its shape genuinely is its source's business.
+
+  Neither corpus gains a violation from this, so it costs nothing today and
+  starts verifying what was already written.
+
+- **`of:` pointing at its own component expresses recursion.** A menu whose rows
+  contain menu rows had to be modelled to a fixed depth, and a level past that
+  was silently undeclared. `below: {of: component:menu#items}` says "and so on"
+  instead. The walk terminates because depth is bounded by the read path, not
+  by the definition — no cycle detection needed, and a typo at any depth is
+  still caught. Documented and pinned by a test rather than built: it already
+  worked, and nothing said so.
+
+### Fixed
+
 - **`fields-migrate` refuses to overwrite an existing definition** unless
   `--force`. Migration derives a definition from `acf.json`, so anything
   authored only in the YAML — `mcp:` guidance, `dev:` notes, a hand-corrected
