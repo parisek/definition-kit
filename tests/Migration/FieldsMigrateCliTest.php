@@ -239,4 +239,25 @@ final class FieldsMigrateCliTest extends TestCase
             self::assertFileExists("{$root}/{$name}/{$name}.yaml", "{$name} was not migrated");
         }
     }
+
+    public function test_unknown_option_is_refused_without_migrating_anything(): void
+    {
+        // Both of this command's guards are opt-in flags, so a swallowed typo
+        // drops the guard silently: `--dryrun` used to migrate for real. The
+        // failure has to be loud — the caller has no other way to notice.
+        $root = sys_get_temp_dir() . '/fields-migrate-cli-' . uniqid('', true);
+        mkdir("{$root}/hero", 0777, true);
+        file_put_contents("{$root}/hero/hero.twig", "{#\nname: \"hero\"\n#}\n");
+
+        $output = shell_exec(sprintf(
+            'php %s --dryrun --root=%s 2>&1; echo "exit=$?"',
+            escapeshellarg($this->binPath),
+            escapeshellarg($root),
+        ));
+
+        self::assertIsString($output);
+        self::assertStringContainsString('unknown option: --dryrun', $output);
+        self::assertStringContainsString('exit=2', $output);
+        self::assertFileDoesNotExist("{$root}/hero/hero.yaml");
+    }
 }

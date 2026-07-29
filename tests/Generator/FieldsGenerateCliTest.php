@@ -134,4 +134,52 @@ final class FieldsGenerateCliTest extends TestCase
         self::assertStringContainsString('FAIL demo', $output);
         self::assertFileDoesNotExist("{$dir}/acf.json");
     }
+
+    public function test_unknown_option_is_refused_without_writing_anything(): void
+    {
+        // The dangerous shape: an option that reads like a read-only check.
+        // Before the guard it fell through to the positional argument, left
+        // $dryRun false, and the command rewrote acf.json/block.json — the
+        // caller believed nothing had been touched.
+        $dir = $this->makeComponentDir('demo', "name: Demo\nfields:\n  title:\n    type: text\n    label: Nadpis\n");
+
+        $output = shell_exec(sprintf(
+            'php %s --check %s 2>&1; echo "exit=$?"',
+            escapeshellarg($this->binPath),
+            escapeshellarg($dir),
+        ));
+
+        self::assertIsString($output);
+        self::assertStringContainsString('unknown option: --check', $output);
+        self::assertStringContainsString('exit=2', $output);
+        self::assertFileDoesNotExist("{$dir}/acf.json");
+        self::assertFileDoesNotExist("{$dir}/block.json");
+    }
+
+    public function test_known_options_are_not_caught_by_the_unknown_option_guard(): void
+    {
+        // The guard keys off a leading '-', so it must not swallow the real
+        // flags sitting next to it.
+        $dir = $this->makeComponentDir('demo', "name: Demo\nfields:\n  title:\n    type: text\n    label: Nadpis\n");
+
+        $dryRunOutput = shell_exec(sprintf(
+            'php %s --dry-run %s 2>&1',
+            escapeshellarg($this->binPath),
+            escapeshellarg($dir),
+        ));
+
+        self::assertIsString($dryRunOutput);
+        self::assertStringContainsString('OK   demo', $dryRunOutput);
+        self::assertFileDoesNotExist("{$dir}/acf.json");
+
+        $rootOutput = shell_exec(sprintf(
+            'php %s --root=%s 2>&1',
+            escapeshellarg($this->binPath),
+            escapeshellarg(dirname($dir)),
+        ));
+
+        self::assertIsString($rootOutput);
+        self::assertStringContainsString('OK   demo', $rootOutput);
+        self::assertFileExists("{$dir}/acf.json");
+    }
 }

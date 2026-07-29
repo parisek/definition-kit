@@ -30,6 +30,9 @@ $single = null;
 $write = false;
 $callSiteRoot = null;
 
+$usage = "usage: fields-roles [--write] <component-dir>\n"
+    . "       fields-roles [--write] [--call-sites=<dir>] --root=<components-root>\n";
+
 foreach ($args as $arg) {
     if ('--write' === $arg) {
         $write = true;
@@ -43,15 +46,19 @@ foreach ($args as $arg) {
         $callSiteRoot = substr($arg, 13);
         continue;
     }
+    // An unrecognised option must never fall through to $single. A mistyped
+    // `--call-sites` (or `--call-site=`) silently drops the evidence root, so
+    // the proposals come out of a narrower search than the caller asked for
+    // — and with --write those land in the definitions.
+    if (str_starts_with($arg, '-')) {
+        fwrite(STDERR, "unknown option: {$arg}\n" . $usage);
+        exit(2);
+    }
     $single = $arg;
 }
 
 if (null === $root && null === $single) {
-    fwrite(
-        STDERR,
-        "usage: fields-roles [--write] <component-dir>\n"
-        . "       fields-roles [--write] [--call-sites=<dir>] --root=<components-root>\n",
-    );
+    fwrite(STDERR, $usage);
     exit(2);
 }
 

@@ -7,6 +7,31 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 <!-- New entries go directly under this line. It is the anchor that keeps a branch's
      changelog edit from merging into a version that shipped without it. -->
+### Fixed
+
+- **An unrecognised CLI option is now refused instead of silently ignored.**
+  Every binary parsed its arguments with a trailing catch-all — anything that
+  matched no known flag became the positional component directory. A second
+  positional then overwrote it, so an unknown option simply vanished and the
+  command ran with its defaults.
+
+  The dangerous case is `fields-generate`: it writes `acf.json` and
+  `block.json` unless `--dry-run` is set. `fields-generate --check <dir>` reads
+  like a read-only check and instead **rewrote the working tree**, while
+  printing the same `OK <component> -> …/acf.json` line a real run prints.
+  Found downstream after a batch of hand-edits kept reappearing across eight
+  files with no apparent cause — the run that reverted them looked like a
+  verification step.
+
+  `fields-migrate` had the same shape with worse stakes: both `--dry-run` and
+  `--force` are opt-in, so `--dryrun` migrated for real. `fields-lint` and
+  `fields-roles` silently widened their scope the same way, and
+  `fields-validate` reported an option as an unreadable file, which reads like
+  a broken definition rather than a bad invocation.
+
+  All five now print `unknown option: <arg>` plus usage and exit `2` for any
+  argument starting with `-`. Known flags are untouched — a correct invocation
+  behaves exactly as before.
 
 ## [0.7.2] - 2026-07-28
 ### Fixed

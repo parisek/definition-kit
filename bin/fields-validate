@@ -20,9 +20,20 @@ foreach ([__DIR__ . '/../vendor/autoload.php', __DIR__ . '/../../../autoload.php
 }
 
 $paths = array_slice($argv, 1);
+$usage = "usage: fields-validate <file.yaml> [...]\n";
 if ([] === $paths) {
-    fwrite(STDERR, "usage: fields-validate <file.yaml> [...]\n");
+    fwrite(STDERR, $usage);
     exit(2);
+}
+
+// This command takes no options, so anything option-shaped is a mistake.
+// Without this it is validated as a filename and reported as an unreadable
+// file, which reads like a broken definition rather than a bad invocation.
+foreach ($paths as $path) {
+    if (str_starts_with($path, '-')) {
+        fwrite(STDERR, "unknown option: {$path}\n" . $usage);
+        exit(2);
+    }
 }
 
 $validator = new FieldsSchemaValidator();
