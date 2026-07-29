@@ -7,6 +7,57 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 <!-- New entries go directly under this line. It is the anchor that keeps a branch's
      changelog edit from merging into a version that shipped without it. -->
+### Fixed
+
+- **A legacy boolean `required` is now normalised on migration instead of
+  being parked in `wp:`.** `Migration\AcfJsonReader` lifted `required` only
+  for the canonical int `0`/`1`; a JSON boolean went into the raw `wp:`
+  passthrough to keep `migrate` → `generate` byte-reproducing its source.
+
+  That preserved a shape ACF itself never writes. `required` is edited as a
+  `true_false` setting, so ACF stores `0`/`1` — a census of ACF-authored
+  field groups found **16/16 as int `0`, never bool**. The consequence
+  downstream was permanent: every `acf.json` generated from such a
+  definition failed schema validation (`required` is `enum: [0, 1]`), with
+  no way out short of hand-editing the `wp:` block — and the hand-edit was
+  reverted by the next `fields-generate` run. One consuming project carried
+  21 of these across 8 components.
+
+  Reversibility is not loosened generally. Only the two enumerated pairs
+  (`false`→`0`, `true`→`1`) are normalised; any other value on `required`
+  still round-trips verbatim in `wp:`. The residual this creates — a
+  definition generating the canonical int against a legacy committed
+  boolean — is filtered by two new `Lint\DriftAllowlist` rules
+  (`legacy-boolean-required-false` / `-true`), the established mechanism
+  for already-understood export-era artifacts. A generated `0` against a
+  legacy `true` (a genuine disagreement about whether the field is
+  required) still fails, as does any non-boolean value.
+
+  `Migration\MigrationCompletenessAuditor` accepts the same shapes. Its
+  `required` branch has to agree with the reader's: a shape the reader
+  consumes but the auditor skips falls through to the generic leftover
+  check, which finds it neither in the type baseline (`required` is
+  excluded there) nor in `wp:` — and reports losslessly-migrated data as
+  "silent data loss".
+
+### Added
+
+- `Lint\DriftAllowlist` rules accept a `field_only` scope key — the
+  inverse of `root_only`, for props that exist on ACF fields but mean
+  nothing on the field-group object. The root `wp:` bag merges verbatim
+  into that object (`Generator\RootFieldGroupBuilder`), so a field-scoped
+  prop authored there does reach root level, where a field-scoped rule
+  must not excuse it.
+
+### Changed
+
+- `schemas/drift-lint-allowlist.yaml`'s header pointed at a
+  `static/tools/definition-kit/README.md` section as its source of truth —
+  a path from when this tool lived inside a consuming project, which does
+  not exist in this repository. The rules are now self-documenting, each
+  carrying its rationale inline. Stale "five residuals" counts in that
+  header and in `Support\StructuralDiff`'s docblock were dropped rather
+  than re-pinned to a number that will drift again.
 
 ## [0.7.3] - 2026-07-29
 ### Fixed

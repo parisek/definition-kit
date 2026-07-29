@@ -2,13 +2,18 @@
 # filters out of Support\StructuralDiff's output before the drift-lint
 # decides pass/fail. Every rule matches on an EXACT (prop, expected,
 # actual) triple, plus a scope (a field type, root-only, or a closed
-# component-slug list) — never a bare prop-name wildcard. A hand-edit
-# that changes the same prop to any OTHER value still fails: these rules
-# exist to un-flag ALREADY-UNDERSTOOD legacy export-era artifacts, not to
-# loosen the comparison generally. Source of truth for these five values:
-# static/tools/definition-kit/README.md "Known, documented round-trip
-# residuals" — keep this file and that section in sync; if that section
-# changes, this file must change with it, not silently diverge.
+# component-slug list) — never a bare prop-name wildcard. The one
+# exception is a prop whose value domain is itself closed and enumerated
+# here in full (see legacy-boolean-required-*): the enumeration is the
+# scope. A hand-edit that changes the same prop to any OTHER value still
+# fails: these rules exist to un-flag ALREADY-UNDERSTOOD legacy
+# export-era artifacts, not to loosen the comparison generally.
+#
+# These values were originally sourced from a "Known, documented
+# round-trip residuals" README section at static/tools/definition-kit/
+# README.md, from when this tool lived inside a consuming project. That
+# path does not exist in this repository — the rules below are now the
+# source of truth, and each carries its own rationale inline.
 #
 # `true_false.default_value` is deliberately NOT here — the README says
 # that one was fixed at the baseline source (schemas/acf-defaults-
@@ -44,6 +49,40 @@ rules:
     when_type: select
     expected: ''
     actual: false
+
+  # Legacy exports carry `required` as a JSON boolean; ACF itself never
+  # writes that shape (it is edited as a true_false setting, so ACF stores
+  # 0/1 — a census of ACF-authored field groups found 16/16 as int 0, never
+  # bool). Since Migration\AcfJsonReader now normalises the boolean instead
+  # of parking it in wp:, a definition migrated from such an export
+  # generates the canonical int while the committed acf.json still holds the
+  # boolean.
+  #
+  # Scope is `field_only` plus a fully-enumerated value domain: `required`
+  # is binary, so both canonical pairs appear below and nothing else on this
+  # prop is excused. `field_only` matters because the root `wp:` bag merges
+  # verbatim into the field-group object, so a `required` authored there
+  # would reach root level — where it means nothing to ACF and must stay
+  # visible as drift.
+  #
+  # Do NOT cite this as a precedent for dropping `when_type`/`components` in
+  # general. It works here only because the prop is two-valued AND lives
+  # exclusively on field objects; a prop with a wider domain, or one whose
+  # same-named counterpart at another nesting level means something else,
+  # still needs a real scope key.
+  - id: legacy-boolean-required-false
+    kind: value
+    props: [required]
+    field_only: true
+    expected: 0
+    actual: false
+
+  - id: legacy-boolean-required-true
+    kind: value
+    props: [required]
+    field_only: true
+    expected: 1
+    actual: true
 
   - id: legacy-minimal-export-prop-set
     kind: missing

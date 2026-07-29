@@ -119,4 +119,84 @@ final class DriftAllowlistTest extends TestCase
         $diffs = [['kind' => 'value', 'path' => '.fields[0].label', 'prop' => 'label', 'expected' => 'Title', 'actual' => 'Nadpis']];
         self::assertSame($diffs, $this->allowlist->filter('any-component', $diffs, $generated));
     }
+
+    public function test_legacy_boolean_required_is_allowed_against_the_canonical_int(): void
+    {
+        // Migration\AcfJsonReader normalises a legacy boolean `required` to
+        // the canonical int, so a definition migrated from such an export
+        // generates 0/1 while the committed acf.json still holds the boolean.
+        $generated = ['fields' => [['type' => 'text', 'name' => 'a', 'required' => 0]]];
+
+        foreach ([[0, false], [1, true]] as [$expected, $legacy]) {
+            $diffs = [[
+                'kind' => 'value', 'path' => '.fields[0].required', 'prop' => 'required',
+                'expected' => $expected, 'actual' => $legacy,
+            ]];
+            self::assertSame(
+                [],
+                $this->allowlist->filter('any-component', $diffs, $generated),
+                sprintf(
+                    'expected %s vs legacy %s should be excused',
+                    var_export($expected, true),
+                    var_export($legacy, true),
+                ),
+            );
+        }
+    }
+
+    public function test_a_mismatched_required_pair_is_still_genuine_drift(): void
+    {
+        // The rules enumerate the two canonical pairs and nothing else. A
+        // generated 0 against a legacy `true` means the definition and the
+        // committed JSON genuinely disagree about whether the field is
+        // required — never excusable by prop name alone.
+        $generated = ['fields' => [['type' => 'text', 'name' => 'a', 'required' => 0]]];
+        $diffs = [[
+            'kind' => 'value', 'path' => '.fields[0].required', 'prop' => 'required',
+            'expected' => 0, 'actual' => true,
+        ]];
+
+        self::assertSame($diffs, $this->allowlist->filter('any-component', $diffs, $generated));
+    }
+
+    public function test_a_non_boolean_required_value_is_still_genuine_drift(): void
+    {
+        $generated = ['fields' => [['type' => 'text', 'name' => 'a', 'required' => 0]]];
+        $diffs = [[
+            'kind' => 'value', 'path' => '.fields[0].required', 'prop' => 'required',
+            'expected' => 0, 'actual' => 'yes',
+        ]];
+
+        self::assertSame($diffs, $this->allowlist->filter('any-component', $diffs, $generated));
+    }
+
+    public function test_legacy_boolean_required_is_excused_at_every_field_depth(): void
+    {
+        $generated = ['fields' => [['type' => 'text', 'name' => 'a', 'required' => 0]]];
+
+        foreach ([
+            '.fields[0].required',
+            '.fields[0].sub_fields[2].required',
+            '.fields[0].layouts[0].sub_fields[1].required',
+        ] as $path) {
+            $diffs = [['kind' => 'value', 'path' => $path, 'prop' => 'required', 'expected' => 0, 'actual' => false]];
+            self::assertSame([], $this->allowlist->filter('any-component', $diffs, $generated), $path);
+        }
+    }
+
+    public function test_a_root_level_required_is_never_excused(): void
+    {
+        // `required` is a field prop; it means nothing on the field-group
+        // object. But the root `wp:` bag merges verbatim into that object
+        // (Generator\RootFieldGroupBuilder), so one CAN be authored there —
+        // and an unscoped rule would have quietly swallowed it. `field_only`
+        // keeps it visible.
+        $generated = ['required' => 0, 'fields' => []];
+        $diffs = [[
+            'kind' => 'value', 'path' => '.required', 'prop' => 'required',
+            'expected' => 0, 'actual' => false,
+        ]];
+
+        self::assertSame($diffs, $this->allowlist->filter('any-component', $diffs, $generated));
+    }
 }

@@ -724,4 +724,74 @@ final class AcfJsonReaderTest extends TestCase
 
         self::assertArrayNotHasKey('wp', $tree['fields']['items']['layouts']['title']);
     }
+
+    public function test_boolean_required_false_is_normalised_not_parked_in_wp(): void
+    {
+        // Legacy exports carry `required` as a JSON boolean. Parking it in
+        // wp: reproduced a shape ACF never writes and made every generated
+        // acf.json fail schema validation (`required` is enum [0, 1]).
+        $tree = $this->reader->read($this->group([
+            ['key' => 'field_demo_a', 'name' => 'a', 'label' => 'A', 'type' => 'text', 'required' => false],
+        ]), 'demo');
+
+        $field = $tree['fields']['a'];
+        self::assertArrayNotHasKey('required', $field, 'not-required is the default — nothing to record');
+        self::assertArrayNotHasKey('wp', $field, 'the boolean must not survive as a raw passthrough');
+    }
+
+    public function test_boolean_required_true_is_normalised_to_the_semantic_key(): void
+    {
+        $tree = $this->reader->read($this->group([
+            ['key' => 'field_demo_a', 'name' => 'a', 'label' => 'A', 'type' => 'text', 'required' => true],
+        ]), 'demo');
+
+        $field = $tree['fields']['a'];
+        self::assertTrue($field['required']);
+        self::assertArrayNotHasKey('wp', $field);
+    }
+
+    public function test_canonical_int_required_is_still_lifted_unchanged(): void
+    {
+        // The normalisation must not disturb the shape ACF actually writes.
+        $tree = $this->reader->read($this->group([
+            ['key' => 'field_demo_a', 'name' => 'a', 'label' => 'A', 'type' => 'text', 'required' => 0],
+            ['key' => 'field_demo_b', 'name' => 'b', 'label' => 'B', 'type' => 'text', 'required' => 1],
+        ]), 'demo');
+
+        self::assertArrayNotHasKey('required', $tree['fields']['a']);
+        self::assertTrue($tree['fields']['b']['required']);
+        self::assertArrayNotHasKey('wp', $tree['fields']['a']);
+        self::assertArrayNotHasKey('wp', $tree['fields']['b']);
+    }
+
+    /**
+     * Only the enumerated boolean pair is normalised. Every other shape is
+     * still unknown data and must round-trip verbatim rather than be guessed
+     * at — the reversibility rule the boolean case carves an exception out
+     * of, not a licence to coerce. Numeric strings and floats matter most
+     * here: PHP's loose equality would have swallowed them, `===` does not.
+     *
+     * @return array<string, array{0: mixed}>
+     */
+    public static function nonCanonicalRequiredValues(): array
+    {
+        return [
+            'numeric string one' => ['1'],
+            'numeric string zero' => ['0'],
+            'float' => [0.0],
+            'empty array' => [[]],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('nonCanonicalRequiredValues')]
+    public function test_non_boolean_non_canonical_required_still_survives_in_wp(mixed $raw): void
+    {
+        $tree = $this->reader->read($this->group([
+            ['key' => 'field_demo_a', 'name' => 'a', 'label' => 'A', 'type' => 'text', 'required' => $raw],
+        ]), 'demo');
+
+        $field = $tree['fields']['a'];
+        self::assertArrayNotHasKey('required', $field);
+        self::assertSame($raw, $field['wp']['required']);
+    }
 }
