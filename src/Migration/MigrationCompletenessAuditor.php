@@ -131,10 +131,17 @@ final class MigrationCompletenessAuditor
             // the audit and the generator identically.
             $reconstructed = $this->fieldReconstructor->reconstruct($defField, $nameKeyMap);
 
+            // Accepts the same shapes Migration\AcfJsonReader lifts — the
+            // canonical int AND the legacy boolean. These two must agree: a
+            // shape the reader consumes but this block skips falls through to
+            // the generic leftover loop below, which finds it neither in the
+            // type baseline (which excludes `required`) nor in wp: (the
+            // reader took it), and reports losslessly-migrated data as
+            // silent data loss.
             $rawRequired = $acfField['required'] ?? null;
-            if (0 === $rawRequired || 1 === $rawRequired) {
+            if (is_bool($rawRequired) || 0 === $rawRequired || 1 === $rawRequired) {
                 $accounted[] = 'required';
-                $expected = 1 === $rawRequired;
+                $expected = true === $rawRequired || 1 === $rawRequired;
                 $actual = 1 === $reconstructed['required'];
                 if ($expected !== $actual) {
                     $violations[] = sprintf(

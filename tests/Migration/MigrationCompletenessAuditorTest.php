@@ -237,4 +237,57 @@ final class MigrationCompletenessAuditorTest extends TestCase
             'expected a duplicate-layout violation, got: ' . implode(' | ', $violations),
         );
     }
+
+    /**
+     * The auditor's `required` branch must accept exactly the shapes
+     * Migration\AcfJsonReader lifts. When the reader consumed the legacy
+     * boolean but this class still only recognised the canonical int, the
+     * prop fell through to the generic leftover loop — which found it
+     * neither in the type baseline (`required` is excluded there) nor in
+     * `wp:` (the reader had taken it) and reported correctly-migrated data
+     * as "silent data loss".
+     *
+     * @return array<string, array{0: bool|int, 1: array<string,mixed>}>
+     */
+    public static function requiredShapes(): array
+    {
+        return [
+            'legacy bool false' => [false, ['type' => 'text', 'label' => 'A']],
+            'legacy bool true' => [true, ['type' => 'text', 'label' => 'A', 'required' => true]],
+            'canonical int 0' => [0, ['type' => 'text', 'label' => 'A']],
+            'canonical int 1' => [1, ['type' => 'text', 'label' => 'A', 'required' => true]],
+        ];
+    }
+
+    /**
+     * @param array<string,mixed> $definitionField
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('requiredShapes')]
+    public function test_every_required_shape_the_reader_lifts_audits_clean(
+        bool|int $rawRequired,
+        array $definitionField,
+    ): void {
+        $acf = [[
+            'key' => 'field_demo_a', 'name' => 'a', 'label' => 'A', 'type' => 'text',
+            'required' => $rawRequired,
+        ]];
+
+        self::assertSame([], $this->auditor->audit($acf, ['a' => $definitionField]));
+    }
+
+    public function test_a_boolean_required_that_the_definition_contradicts_is_still_flagged(): void
+    {
+        // Accepting the boolean must not turn the check itself off: an ACF
+        // field that IS required against a definition that says it is not
+        // remains a genuine reconstruction failure.
+        $acf = [[
+            'key' => 'field_demo_a', 'name' => 'a', 'label' => 'A', 'type' => 'text',
+            'required' => true,
+        ]];
+
+        $violations = $this->auditor->audit($acf, ['a' => ['type' => 'text', 'label' => 'A']]);
+
+        self::assertNotEmpty($violations);
+        self::assertStringContainsString('required', $violations[0]);
+    }
 }

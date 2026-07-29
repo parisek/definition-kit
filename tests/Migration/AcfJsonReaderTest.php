@@ -764,17 +764,34 @@ final class AcfJsonReaderTest extends TestCase
         self::assertArrayNotHasKey('wp', $tree['fields']['b']);
     }
 
-    public function test_non_boolean_non_canonical_required_still_survives_in_wp(): void
+    /**
+     * Only the enumerated boolean pair is normalised. Every other shape is
+     * still unknown data and must round-trip verbatim rather than be guessed
+     * at — the reversibility rule the boolean case carves an exception out
+     * of, not a licence to coerce. Numeric strings and floats matter most
+     * here: PHP's loose equality would have swallowed them, `===` does not.
+     *
+     * @return array<string, array{0: mixed}>
+     */
+    public static function nonCanonicalRequiredValues(): array
     {
-        // Only the enumerated boolean pair is normalised. Anything else is
-        // still unknown data and must round-trip verbatim rather than be
-        // guessed at — the reversibility rule the boolean case carves out of.
+        return [
+            'numeric string one' => ['1'],
+            'numeric string zero' => ['0'],
+            'float' => [0.0],
+            'empty array' => [[]],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('nonCanonicalRequiredValues')]
+    public function test_non_boolean_non_canonical_required_still_survives_in_wp(mixed $raw): void
+    {
         $tree = $this->reader->read($this->group([
-            ['key' => 'field_demo_a', 'name' => 'a', 'label' => 'A', 'type' => 'text', 'required' => '1'],
+            ['key' => 'field_demo_a', 'name' => 'a', 'label' => 'A', 'type' => 'text', 'required' => $raw],
         ]), 'demo');
 
         $field = $tree['fields']['a'];
         self::assertArrayNotHasKey('required', $field);
-        self::assertSame('1', $field['wp']['required']);
+        self::assertSame($raw, $field['wp']['required']);
     }
 }

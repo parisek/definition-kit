@@ -85,6 +85,15 @@ final class DriftAllowlist
         if (($rule['root_only'] ?? false) && !$this->isRootLevelPath($diff['path'])) {
             return false;
         }
+        // Inverse of root_only, for props that exist on ACF *fields* but have
+        // no meaning on the field-group object itself. The root `wp:` bag is
+        // merged verbatim into that object (Generator\RootFieldGroupBuilder),
+        // so a prop authored there does reach root level — without this,
+        // a field-scoped rule would excuse a root-level diff it was never
+        // written for.
+        if (($rule['field_only'] ?? false) && $this->isRootLevelPath($diff['path'])) {
+            return false;
+        }
         if (isset($rule['components']) && !in_array($componentSlug, (array) $rule['components'], true)) {
             return false;
         }

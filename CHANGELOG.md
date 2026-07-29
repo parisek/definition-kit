@@ -33,6 +33,22 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   legacy `true` (a genuine disagreement about whether the field is
   required) still fails, as does any non-boolean value.
 
+  `Migration\MigrationCompletenessAuditor` accepts the same shapes. Its
+  `required` branch has to agree with the reader's: a shape the reader
+  consumes but the auditor skips falls through to the generic leftover
+  check, which finds it neither in the type baseline (`required` is
+  excluded there) nor in `wp:` — and reports losslessly-migrated data as
+  "silent data loss".
+
+### Added
+
+- `Lint\DriftAllowlist` rules accept a `field_only` scope key — the
+  inverse of `root_only`, for props that exist on ACF fields but mean
+  nothing on the field-group object. The root `wp:` bag merges verbatim
+  into that object (`Generator\RootFieldGroupBuilder`), so a field-scoped
+  prop authored there does reach root level, where a field-scoped rule
+  must not excuse it.
+
 ### Changed
 
 - `schemas/drift-lint-allowlist.yaml`'s header pointed at a
