@@ -184,13 +184,29 @@ final class AcfJsonReader
             $out['description'] = (string) $acfField['instructions'];
         }
 
-        // `required` is lifted ONLY for the canonical ACF shape (int 0/1) —
-        // any other raw shape (the corpus also has bool `required: false`)
-        // is left in wp: rather than mis-cast, matching the reversibility
-        // audit from the superseded PR #267.
+        // `required` is lifted for the canonical ACF shape (int 0/1) AND for
+        // the boolean shape found in legacy exports.
+        //
+        // Booleans used to be left in wp: verbatim, to keep migrate→generate
+        // byte-reproducing its source (the reversibility audit from the
+        // superseded PR #267). That preserved a shape ACF itself never
+        // writes: `required` is edited as a true_false setting, so ACF stores
+        // 0/1 — a corpus census of ACF-authored field groups found 16/16 as
+        // int 0, never bool. Round-tripping the boolean therefore kept
+        // reproducing something no ACF write could produce, and every
+        // downstream acf.json generated from such a definition failed schema
+        // validation (`required` is `enum: [0, 1]`) with no way out short of
+        // hand-editing the wp: block.
+        //
+        // The residual this creates — generated 0 vs a legacy committed
+        // `false` — is filtered by Lint\DriftAllowlist's
+        // `legacy-boolean-required` rule, the established mechanism for
+        // exactly this class of already-understood export-era artifact.
+        // Reversibility is not loosened generally: only this one enumerated,
+        // documented pair is normalised.
         $rawRequired = $acfField['required'] ?? null;
-        if (0 === $rawRequired || 1 === $rawRequired) {
-            if (1 === $rawRequired) {
+        if (is_bool($rawRequired) || 0 === $rawRequired || 1 === $rawRequired) {
+            if (true === $rawRequired || 1 === $rawRequired) {
                 $out['required'] = true;
             }
             $consumed[] = 'required';

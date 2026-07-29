@@ -119,4 +119,54 @@ final class DriftAllowlistTest extends TestCase
         $diffs = [['kind' => 'value', 'path' => '.fields[0].label', 'prop' => 'label', 'expected' => 'Title', 'actual' => 'Nadpis']];
         self::assertSame($diffs, $this->allowlist->filter('any-component', $diffs, $generated));
     }
+
+    public function test_legacy_boolean_required_is_allowed_against_the_canonical_int(): void
+    {
+        // Migration\AcfJsonReader normalises a legacy boolean `required` to
+        // the canonical int, so a definition migrated from such an export
+        // generates 0/1 while the committed acf.json still holds the boolean.
+        $generated = ['fields' => [['type' => 'text', 'name' => 'a', 'required' => 0]]];
+
+        foreach ([[0, false], [1, true]] as [$expected, $legacy]) {
+            $diffs = [[
+                'kind' => 'value', 'path' => '.fields[0].required', 'prop' => 'required',
+                'expected' => $expected, 'actual' => $legacy,
+            ]];
+            self::assertSame(
+                [],
+                $this->allowlist->filter('any-component', $diffs, $generated),
+                sprintf(
+                    'expected %s vs legacy %s should be excused',
+                    var_export($expected, true),
+                    var_export($legacy, true),
+                ),
+            );
+        }
+    }
+
+    public function test_a_mismatched_required_pair_is_still_genuine_drift(): void
+    {
+        // The rules enumerate the two canonical pairs and nothing else. A
+        // generated 0 against a legacy `true` means the definition and the
+        // committed JSON genuinely disagree about whether the field is
+        // required — never excusable by prop name alone.
+        $generated = ['fields' => [['type' => 'text', 'name' => 'a', 'required' => 0]]];
+        $diffs = [[
+            'kind' => 'value', 'path' => '.fields[0].required', 'prop' => 'required',
+            'expected' => 0, 'actual' => true,
+        ]];
+
+        self::assertSame($diffs, $this->allowlist->filter('any-component', $diffs, $generated));
+    }
+
+    public function test_a_non_boolean_required_value_is_still_genuine_drift(): void
+    {
+        $generated = ['fields' => [['type' => 'text', 'name' => 'a', 'required' => 0]]];
+        $diffs = [[
+            'kind' => 'value', 'path' => '.fields[0].required', 'prop' => 'required',
+            'expected' => 0, 'actual' => 'yes',
+        ]];
+
+        self::assertSame($diffs, $this->allowlist->filter('any-component', $diffs, $generated));
+    }
 }

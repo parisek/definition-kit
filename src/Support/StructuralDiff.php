@@ -21,8 +21,9 @@ namespace Parisek\DefinitionKit\Support;
  * empty-string/null/array normalization — see the dávka-3 README's
  * "Fixed during the dávka-3 review round" note for the exact bug that
  * over-loose comparison hid. Lint\DriftAllowlist adds a THIRD, separate,
- * narrower layer on top of this for the five documented round-trip
- * residuals — it does not modify this class.
+ * narrower layer on top of this for the documented round-trip residuals
+ * enumerated in schemas/drift-lint-allowlist.yaml — it does not modify
+ * this class.
  */
 final class StructuralDiff
 {
