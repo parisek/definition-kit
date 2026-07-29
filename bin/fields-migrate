@@ -152,6 +152,10 @@ $dryRun = false;
 $force = false;
 $single = null;
 
+$usage = "usage: fields-migrate [--dry-run] [--force] <component-dir>\n"
+    . "       fields-migrate [--dry-run] [--force] --root=<components-root>\n"
+    . "  --force re-derives over an existing definition, discarding whatever only it records.\n";
+
 foreach ($args as $arg) {
     if (str_starts_with($arg, '--root=')) {
         $root = substr($arg, 7);
@@ -165,16 +169,19 @@ foreach ($args as $arg) {
         $force = true;
         continue;
     }
+    // An unrecognised option must never fall through to $single. Both guards
+    // this command offers are opt-in flags, so a typo silently drops the
+    // guard: `--dryrun` writes for real, `--Force` stops short of the
+    // re-derive the caller asked for. Refuse instead of guessing.
+    if (str_starts_with($arg, '-')) {
+        fwrite(STDERR, "unknown option: {$arg}\n" . $usage);
+        exit(2);
+    }
     $single = $arg;
 }
 
 if (null === $root && null === $single) {
-    fwrite(
-        STDERR,
-        "usage: fields-migrate [--dry-run] [--force] <component-dir>\n"
-        . "       fields-migrate [--dry-run] [--force] --root=<components-root>\n"
-        . "  --force re-derives over an existing definition, discarding whatever only it records.\n",
-    );
+    fwrite(STDERR, $usage);
     exit(2);
 }
 

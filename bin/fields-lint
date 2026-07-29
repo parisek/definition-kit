@@ -47,6 +47,9 @@ $single = null;
 // meaningful there, is unusable as a gate underneath the noise.
 $contractOnly = false;
 
+$usage = "usage: fields-lint [--contract-only] <component-dir>\n"
+    . "       fields-lint [--contract-only] --root=<components-root>\n";
+
 foreach ($args as $arg) {
     if ('--contract-only' === $arg) {
         $contractOnly = true;
@@ -56,15 +59,19 @@ foreach ($args as $arg) {
         $root = substr($arg, 7);
         continue;
     }
+    // An unrecognised option must never fall through to $single. A swallowed
+    // flag here widens the lint silently — `--contractonly` reports drift
+    // findings the caller meant to exclude, and the run still exits 0/1 as if
+    // the requested scope had been honoured.
+    if (str_starts_with($arg, '-')) {
+        fwrite(STDERR, "unknown option: {$arg}\n" . $usage);
+        exit(2);
+    }
     $single = $arg;
 }
 
 if (null === $root && null === $single) {
-    fwrite(
-        STDERR,
-        "usage: fields-lint [--contract-only] <component-dir>\n"
-        . "       fields-lint [--contract-only] --root=<components-root>\n",
-    );
+    fwrite(STDERR, $usage);
     exit(2);
 }
 

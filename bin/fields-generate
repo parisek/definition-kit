@@ -127,6 +127,8 @@ $root = null;
 $dryRun = false;
 $single = null;
 
+$usage = "usage: fields-generate <component-dir> | fields-generate --root=<components-root> [--dry-run]\n";
+
 foreach ($args as $arg) {
     if (str_starts_with($arg, '--root=')) {
         $root = substr($arg, 7);
@@ -136,11 +138,20 @@ foreach ($args as $arg) {
         $dryRun = true;
         continue;
     }
+    // An unrecognised option must never fall through to $single. This command
+    // WRITES acf.json/block.json unless --dry-run is set, so swallowing a
+    // misspelled or invented flag turns an intended no-op into an overwrite:
+    // `fields-generate --check <dir>` reads like a read-only check and instead
+    // rewrites the working tree.
+    if (str_starts_with($arg, '-')) {
+        fwrite(STDERR, "unknown option: {$arg}\n" . $usage);
+        exit(2);
+    }
     $single = $arg;
 }
 
 if (null === $root && null === $single) {
-    fwrite(STDERR, "usage: fields-generate <component-dir> | fields-generate --root=<components-root> [--dry-run]\n");
+    fwrite(STDERR, $usage);
     exit(2);
 }
 
