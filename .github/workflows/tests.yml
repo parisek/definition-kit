@@ -25,6 +25,14 @@ jobs:
       - name: PHPUnit
         run: composer test
 
+  adr-index:
+    name: docs/adr/ index is in sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Validate the ADR directory against the index
+        run: python3 scripts/check-adr-index.py
+
   composer:
     name: composer hygiene
     runs-on: ubuntu-latest

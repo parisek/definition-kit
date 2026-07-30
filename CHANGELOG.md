@@ -5,6 +5,24 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+### Added
+
+- **ADR practice, matching the three sibling Composer packages.** This was the
+  only one of `parisek/{styleguide, timber-kit, definition-kit, acf-json-schema}`
+  with no `docs/adr/` at all. Adds `docs/adr/README.md` and an `AGENTS.md`
+  § *Architecture decisions* section carrying the same rules as the siblings:
+  record sparingly (three conditions), propose before writing, permanent
+  sequential numbering, Nygard triad, supersede by linking, qualified cross-repo
+  citations, and a mandatory index entry.
+
+  `scripts/check-adr-index.py` (`composer adr`, CI job *docs/adr/ index is in
+  sync*, also folded into `composer check`) enforces the last one.
+
+  **No ADR is written as part of this.** The index says so plainly — the
+  practice is set up so the first real trade-off has somewhere to land, not so
+  the directory can be filled. Writing one to justify the directory is exactly
+  what the "record sparingly" rule forbids.
 <!-- New entries go directly under this line. It is the anchor that keeps a branch's
      changelog edit from merging into a version that shipped without it. -->
 
