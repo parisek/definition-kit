@@ -43,6 +43,21 @@ Run inside DDEV where a project provides one (`ddev composer …`, `ddev exec ve
 - **`schemas/` paths are resolved `__DIR__ . '/../../schemas/…'` from `src/*/`** — `src/` and `schemas/` are siblings at the repo root; keep them so.
 - **`bin/*` autoload discovery** tries `__DIR__/../vendor/autoload.php` (standalone) then `__DIR__/../../../autoload.php` (installed in a consumer's `vendor/`). Preserve both.
 
+## Architecture decisions (ADRs)
+
+Significant decisions live in `docs/adr/`. See `docs/adr/README.md` for the full
+practice and the index. Shared with `parisek/styleguide`, `parisek/timber-kit`
+and `parisek/acf-json-schema` — same rules in all four packages.
+
+- Record **sparingly** — only when a decision is (1) hard to reverse, (2) surprising without context, and (3) the result of a real trade-off. Most changes warrant none.
+- Propose and get a yes **before** writing one. Don't auto-create.
+- One file per decision, `NNNN-kebab-title.md`, sequential and permanent (never renumber/reuse).
+- Structure is the Nygard triad: `## Context` / `## Decision` / `## Consequences`. No status line.
+- To reverse a past decision, write a new ADR linking back — don't edit the old one.
+- The ADR lands in the **same PR** as the work it describes — a merge gate, not a follow-up.
+- Citing a sibling repo's ADR: **always qualify it with the repo** — `tailwind-base ADR-0012`, never a bare `ADR 0012`. Numbering spaces are per-repo.
+- Every ADR belongs in the index in `docs/adr/README.md`; `composer adr` (and CI) enforces it.
+
 ## Upstream-first
 
 This package is the single upstream owner of the definition-kit tooling. Downstream projects (tailwind-base, individual WordPress/Drupal sites) consume it via Composer and must not fork it in-tree. Fix here, tag a release, `composer update` downstream.
