@@ -217,6 +217,10 @@ final class DriftLinterTest extends TestCase
 
         self::assertFalse($result->clean);
         self::assertStringContainsString('zero ACF-backed fields', (string) $result->error);
+        // The message must keep saying that the fieldless state itself is fine,
+        // or the next reader re-investigates whether their block is broken and
+        // "fixes" it by adding a placeholder field.
+        self::assertStringContainsString('valid end state', (string) $result->error);
     }
 
     public function test_invalid_definition_is_reported_as_an_error_not_a_crash(): void

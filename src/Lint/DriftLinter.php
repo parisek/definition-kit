@@ -102,7 +102,10 @@ final class DriftLinter
                     $componentName,
                     'acf.json is present but the definition now has zero ACF-backed fields '
                     . '(every field is non-projecting, or `fields:` is empty) — this acf.json is stale. '
-                    . 'Delete it (fields-generate will not delete it for you).',
+                    . 'Delete it (fields-generate will not delete it for you). '
+                    . 'Having no ACF-backed fields is a valid end state, not a half-finished migration: '
+                    . 'ACF reads a missing field group as empty rather than broken. '
+                    . 'Do not add a placeholder field to keep the group alive.',
                 );
             }
             $acfDiffs = [];
