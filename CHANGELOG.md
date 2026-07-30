@@ -7,8 +7,18 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 <!-- New entries go directly under this line. It is the anchor that keeps a branch's
      changelog edit from merging into a version that shipped without it. -->
+### Changed
+
+- **The stale-`acf.json` drift error now says that having no ACF-backed fields
+  is a valid end state.** The message told you to delete the leftover file but
+  not whether the fieldless block itself was broken, so the answer had to be
+  re-derived from ACF's source each time — and the tempting wrong fix, adding a
+  placeholder field to keep the group alive, looked reasonable. ACF reads a
+  missing field group as empty rather than broken; the block stays registered
+  through `block.json` either way.
 
 ## [0.7.4] - 2026-07-29
+
 ### Fixed
 
 - **A legacy boolean `required` is now normalised on migration instead of
