@@ -26,6 +26,27 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 <!-- New entries go directly under this line. It is the anchor that keeps a branch's
      changelog edit from merging into a version that shipped without it. -->
 
+### Fixed
+
+- **`fields-generate` no longer writes a `block.json` for a non-block `kind`.**
+  It called `BlockJsonWriter` unconditionally, so every
+  `section`/`element`/`part`/`utility` component got a `block.json` it has no
+  use for — the exact state `KindLinter` already reports as an error. One
+  `--root=` run over a 67-component downstream theme produced 28 spurious
+  files.
+
+  The gate fires only on a **present**, non-block `kind`. A definition with no
+  `kind` keeps the previous behaviour: absence means "the backfill has not
+  reached this file", not "not a block", which is why `KindLinter` warns rather
+  than errors there too.
+
+- **`fields-lint` now reports a leftover `block.json` on a non-block `kind` as
+  a stale file, not as drift.** Since generation no longer rewrites that file
+  and never deletes it, the old output printed a diff under the remediation
+  "run `fields-generate`" — the one command that provably could not fix it, so
+  re-running it returned the identical diff forever. This is the `block.json`
+  half of the Rule 4 (#13) treatment `acf.json` already had.
+
 ## [0.7.5] - 2026-07-30
 ### Changed
 

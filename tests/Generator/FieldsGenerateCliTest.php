@@ -156,6 +156,113 @@ final class FieldsGenerateCliTest extends TestCase
         self::assertFileDoesNotExist("{$dir}/block.json");
     }
 
+    /** @return list<array{string}> */
+    public static function nonBlockKindProvider(): array
+    {
+        return [['section'], ['element'], ['part'], ['utility']];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('nonBlockKindProvider')]
+    public function test_a_non_block_kind_gets_no_block_json(string $kind): void
+    {
+        // Generating block.json for a component that is not editor-insertable
+        // manufactures the contradiction KindLinter reports as an error. acf.json
+        // is unaffected — a `part` still projects its fields.
+        $dir = $this->makeComponentDir(
+            'demo',
+            "name: Demo\nkind: {$kind}\nfields:\n  title:\n    type: text\n    label: Nadpis\n",
+        );
+
+        $output = shell_exec(sprintf('php %s %s 2>&1', escapeshellarg($this->binPath), escapeshellarg($dir)));
+
+        self::assertIsString($output);
+        self::assertStringContainsString('OK   demo', $output);
+        self::assertFileExists("{$dir}/acf.json");
+        self::assertFileDoesNotExist("{$dir}/block.json");
+    }
+
+    public function test_kind_block_still_gets_a_block_json(): void
+    {
+        $dir = $this->makeComponentDir(
+            'demo',
+            "name: Demo\nkind: block\nfields:\n  title:\n    type: text\n    label: Nadpis\n",
+        );
+
+        shell_exec(sprintf('php %s %s 2>&1', escapeshellarg($this->binPath), escapeshellarg($dir)));
+
+        self::assertFileExists("{$dir}/block.json");
+    }
+
+    public function test_a_non_block_kind_leaves_an_already_committed_block_json_alone(): void
+    {
+        // Rule 4 semantics: generation stops WRITING, it never deletes. The
+        // leftover file is DriftLinter's/KindLinter's to report, not this
+        // script's to remove.
+        //
+        // The run itself must be asserted to have SUCCEEDED. Without that, a
+        // regression that aborts the CLI before it ever reaches the gate would
+        // also leave the file untouched and this test would still pass.
+        $dir = $this->makeComponentDir(
+            'demo',
+            "name: Demo\nkind: part\nfields:\n  title:\n    type: text\n    label: Nadpis\n",
+            ['name' => 'acf/demo', 'sentinel' => true],
+        );
+
+        $output = shell_exec(sprintf('php %s %s 2>&1', escapeshellarg($this->binPath), escapeshellarg($dir)));
+
+        self::assertIsString($output);
+        self::assertStringContainsString('OK   demo', $output);
+
+        $raw = file_get_contents("{$dir}/block.json");
+        self::assertIsString($raw);
+        self::assertSame(['name' => 'acf/demo', 'sentinel' => true], json_decode($raw, true));
+    }
+
+    public function test_the_gate_also_holds_in_dry_run_and_batch_mode(): void
+    {
+        // --dry-run and --root= take a different path through the temp-file
+        // plumbing than the single-dir write, so the gate is asserted on both
+        // rather than assumed to carry over.
+        $dir = $this->makeComponentDir(
+            'demo',
+            "name: Demo\nkind: utility\nfields:\n  title:\n    type: text\n    label: Nadpis\n",
+        );
+
+        $dryRun = shell_exec(sprintf(
+            'php %s --dry-run %s 2>&1',
+            escapeshellarg($this->binPath),
+            escapeshellarg($dir),
+        ));
+
+        self::assertIsString($dryRun);
+        self::assertStringContainsString('OK   demo', $dryRun);
+        self::assertFileDoesNotExist("{$dir}/block.json");
+        self::assertFileDoesNotExist("{$dir}/acf.json");
+
+        $batch = shell_exec(sprintf(
+            'php %s --root=%s 2>&1',
+            escapeshellarg($this->binPath),
+            escapeshellarg(dirname($dir)),
+        ));
+
+        self::assertIsString($batch);
+        self::assertStringContainsString('OK   demo', $batch);
+        self::assertFileExists("{$dir}/acf.json");
+        self::assertFileDoesNotExist("{$dir}/block.json");
+    }
+
+    public function test_a_definition_with_no_kind_keeps_getting_a_block_json(): void
+    {
+        // Absence of `kind` means "the backfill has not reached this file", not
+        // "not a block" — inferring from silence would strip block.json from
+        // every un-migrated component in a downstream repo.
+        $dir = $this->makeComponentDir('demo', "name: Demo\nfields:\n  title:\n    type: text\n    label: Nadpis\n");
+
+        shell_exec(sprintf('php %s %s 2>&1', escapeshellarg($this->binPath), escapeshellarg($dir)));
+
+        self::assertFileExists("{$dir}/block.json");
+    }
+
     public function test_known_options_are_not_caught_by_the_unknown_option_guard(): void
     {
         // The guard keys off a leading '-', so it must not swallow the real
