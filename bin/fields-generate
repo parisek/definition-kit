@@ -71,11 +71,30 @@ function fields_generate_one(string $componentDir, bool $dryRun): array
     $existingBlockJson = is_file($existingBlockJsonPath)
         ? json_decode(file_get_contents($existingBlockJsonPath), true)
         : null;
-    $block = (new BlockJsonGenerator())->generate(
-        $tree,
-        $componentName,
-        is_array($existingBlockJson) ? $existingBlockJson : null,
-    );
+
+    // Only `kind: block` has a block.json (ADR 0012 / KindLinter). Writing one
+    // for a `section`/`element`/`part`/`utility` component manufactures exactly
+    // the contradiction KindLinter reports as an error — "has a block.json but
+    // declares `kind: %s`" — so generation must not create it in the first
+    // place. Same shape as Rule 4 for acf.json below: STOP WRITING, never
+    // delete; an already-committed file stays until a human/CI removes it.
+    //
+    // The gate deliberately triggers only on a PRESENT, non-block `kind`. A
+    // definition with no `kind` at all keeps the previous behaviour, because
+    // absence means "the backfill has not reached this file", not "not a
+    // block" — KindLinter warns rather than errors there for the same reason,
+    // and inferring from silence would strip block.json from every
+    // un-migrated component in a downstream repo.
+    $kind = $tree['kind'] ?? null;
+    $blockWritten = !is_string($kind) || 'block' === $kind;
+
+    $block = $blockWritten
+        ? (new BlockJsonGenerator())->generate(
+            $tree,
+            $componentName,
+            is_array($existingBlockJson) ? $existingBlockJson : null,
+        )
+        : null;
 
     $acfOutPath = $dryRun ? tempnam(sys_get_temp_dir(), 'fields-generate-dry-run-acf-') : "{$componentDir}/acf.json";
     $blockOutPath = $dryRun ? tempnam(sys_get_temp_dir(), 'fields-generate-dry-run-block-') : $existingBlockJsonPath;
@@ -99,16 +118,18 @@ function fields_generate_one(string $componentDir, bool $dryRun): array
         }
     }
 
-    try {
-        (new BlockJsonWriter())->write($block, $blockOutPath);
-    } catch (\Throwable $e) {
-        if ($dryRun) {
-            if ($acfWritten) {
-                @unlink($acfOutPath);
+    if (null !== $block) {
+        try {
+            (new BlockJsonWriter())->write($block, $blockOutPath);
+        } catch (\Throwable $e) {
+            if ($dryRun) {
+                if ($acfWritten) {
+                    @unlink($acfOutPath);
+                }
+                @unlink($blockOutPath);
             }
-            @unlink($blockOutPath);
+            return ['ok' => false, 'component' => $componentName, 'error' => $e->getMessage()];
         }
-        return ['ok' => false, 'component' => $componentName, 'error' => $e->getMessage()];
     }
 
     if ($dryRun) {
