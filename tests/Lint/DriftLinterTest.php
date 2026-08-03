@@ -167,6 +167,64 @@ final class DriftLinterTest extends TestCase
         self::assertSame([], $result->blockDrift);
     }
 
+    public function test_block_json_under_a_non_block_kind_is_a_stale_file_error_not_drift(): void
+    {
+        // fields-generate no longer writes block.json for a non-block kind and
+        // never deletes one, so this leftover cannot be reconciled by
+        // regenerating. Reporting it as drift would advise "run
+        // fields-generate" — the one command that provably cannot fix it.
+        $tree = $this->minimalTree() + ['kind' => 'part'];
+        $this->writeDefinition($tree);
+        $this->generateCleanAcfAndBlock($tree, 1_700_000_000);
+
+        $result = (new DriftLinter())->lint($this->dir);
+
+        self::assertFalse($result->clean);
+        self::assertStringContainsString('`kind: part`', (string) $result->error);
+        self::assertStringContainsString('stale', (string) $result->error);
+        // Crucially NOT reported as a regenerable diff.
+        self::assertSame([], $result->blockDrift);
+    }
+
+    public function test_a_byte_identical_block_json_still_errors_under_a_non_block_kind(): void
+    {
+        // The file being in sync is irrelevant — it should not exist at all.
+        // Without this case the check would read as a diff-suppressor rather
+        // than a statement about which components may own a block.json.
+        $tree = $this->minimalTree() + ['kind' => 'element'];
+        $this->writeDefinition($tree);
+        $this->generateCleanAcfAndBlock($tree, 1_700_000_000);
+
+        $result = (new DriftLinter())->lint($this->dir);
+
+        self::assertFalse($result->clean);
+        self::assertStringContainsString('`kind: element`', (string) $result->error);
+    }
+
+    public function test_block_json_under_kind_block_is_still_compared_normally(): void
+    {
+        $tree = $this->minimalTree() + ['kind' => 'block'];
+        $this->writeDefinition($tree);
+        $this->generateCleanAcfAndBlock($tree, 1_700_000_000);
+
+        $result = (new DriftLinter())->lint($this->dir);
+
+        self::assertTrue($result->clean);
+    }
+
+    public function test_block_json_on_a_kind_less_definition_is_still_compared_normally(): void
+    {
+        // Absence of `kind` means "not yet backfilled", not "not a block" —
+        // the linter must not start failing un-migrated components.
+        $tree = $this->minimalTree();
+        $this->writeDefinition($tree);
+        $this->generateCleanAcfAndBlock($tree, 1_700_000_000);
+
+        $result = (new DriftLinter())->lint($this->dir);
+
+        self::assertTrue($result->clean);
+    }
+
     public function test_missing_acf_json_with_a_definition_present_is_an_error(): void
     {
         $this->writeDefinition($this->minimalTree());

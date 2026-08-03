@@ -122,6 +122,31 @@ final class DriftLinter
 
         $blockDiffs = [];
         if (is_file($blockJsonPath)) {
+            // The block.json half of Rule 4. fields-generate only writes a
+            // block.json for `kind: block` (or a kind-less, not-yet-backfilled
+            // definition), and it never deletes one — so a block.json sitting
+            // next to a `section`/`element`/`part`/`utility` definition is a
+            // stale leftover that no regeneration can bring back into line.
+            //
+            // Reporting it as ordinary drift would print a diff under the
+            // remediation "run fields-generate", which is the one command that
+            // provably cannot fix it: the user re-runs it, nothing changes, and
+            // the same diff comes back forever. Same shape, and the same
+            // reasoning, as the stale-acf.json branch above.
+            $kind = $tree['kind'] ?? null;
+            if (is_string($kind) && 'block' !== $kind) {
+                return DriftResult::error(
+                    $componentName,
+                    sprintf(
+                        'block.json is present but the definition declares `kind: %s` — only an '
+                        . 'editor-insertable `kind: block` component has one, so this block.json is '
+                        . 'stale. Delete it (fields-generate will not delete it for you). If the '
+                        . 'component really is a Gutenberg block, fix the `kind` instead.',
+                        $kind,
+                    ),
+                );
+            }
+
             $blockJsonRaw = file_get_contents($blockJsonPath);
             if (false === $blockJsonRaw) {
                 return DriftResult::error($componentName, "unable to read {$blockJsonPath}");
