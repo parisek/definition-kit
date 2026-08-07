@@ -7,6 +7,7 @@ use Parisek\DefinitionKit\Generator\AcfJsonWriter;
 use Parisek\DefinitionKit\Generator\BlockJsonGenerator;
 use Parisek\DefinitionKit\Generator\BlockJsonWriter;
 use Parisek\DefinitionKit\Generator\FieldsGenerator;
+use Parisek\DefinitionKit\Support\KeyStyle;
 use Parisek\DefinitionKit\Schema\FieldsSchemaValidator;
 use Symfony\Component\Yaml\Yaml;
 
@@ -20,7 +21,7 @@ foreach ([__DIR__ . '/../vendor/autoload.php', __DIR__ . '/../../../autoload.php
 /**
  * @return array{ok: bool, component: string, out?: string, error?: string}
  */
-function fields_generate_one(string $componentDir, bool $dryRun): array
+function fields_generate_one(string $componentDir, bool $dryRun, KeyStyle $keyStyle): array
 {
     $componentDir = rtrim($componentDir, '/');
     $componentName = basename($componentDir);
@@ -59,7 +60,7 @@ function fields_generate_one(string $componentDir, bool $dryRun): array
     }
 
     try {
-        $fieldGroup = (new FieldsGenerator())->generate($tree, $componentName, $existingModified ?? time());
+        $fieldGroup = (new FieldsGenerator(keyStyle: $keyStyle))->generate($tree, $componentName, $existingModified ?? time());
     } catch (\Throwable $e) {
         // Broad on purpose: AbstractTypeReverseMapper throws DomainException
         // for an unsupported abstract type/kind/shape/of combination — one
@@ -181,6 +182,12 @@ if (null !== $root && !is_dir($root)) {
     exit(2);
 }
 
+// The key style governs how a component slug is spelled inside derived ACF
+// keys. Resolved from the components root (not per component) because it is a
+// project-wide convention: two components in one project spelling their keys
+// differently is the exact split this setting exists to end.
+$keyStyle = KeyStyle::discoverFor($root ?? dirname(rtrim((string) $single, '/')));
+
 $results = [];
 if (null !== $root) {
     $dirs = glob(rtrim($root, '/') . '/*', GLOB_ONLYDIR) ?: [];
@@ -188,11 +195,11 @@ if (null !== $root) {
     foreach ($dirs as $dir) {
         $name = basename($dir);
         if (is_file("{$dir}/{$name}.yaml")) {
-            $results[] = fields_generate_one($dir, $dryRun);
+            $results[] = fields_generate_one($dir, $dryRun, $keyStyle);
         }
     }
 } else {
-    $results[] = fields_generate_one($single, $dryRun);
+    $results[] = fields_generate_one($single, $dryRun, $keyStyle);
 }
 
 $failures = 0;

@@ -4,6 +4,7 @@
 declare(strict_types=1);
 
 use Parisek\DefinitionKit\Migration\AcfJsonReader;
+use Parisek\DefinitionKit\Support\KeyStyle;
 use Parisek\DefinitionKit\Migration\BlockResidualCapturer;
 use Parisek\DefinitionKit\Migration\FieldsYamlWriter;
 
@@ -17,7 +18,7 @@ foreach ([__DIR__ . '/../vendor/autoload.php', __DIR__ . '/../../../autoload.php
 /**
  * @return array{ok: bool, component: string, out?: string, error?: string}
  */
-function fields_migrate_one(string $componentDir, bool $dryRun, bool $force): array
+function fields_migrate_one(string $componentDir, bool $dryRun, bool $force, KeyStyle $keyStyle): array
 {
     $componentDir = rtrim($componentDir, '/');
     $componentName = basename($componentDir);
@@ -93,7 +94,7 @@ function fields_migrate_one(string $componentDir, bool $dryRun, bool $force): ar
             // there is no ACF group here, so the definition should not claim
             // one. (It pins root `key` only when the real key differs from
             // `group_<slug>`; an absent key would pin '' and fail ^group_.)
-            'key' => 'group_' . $componentName,
+            'key' => 'group_' . $keyStyle->keySlug($componentName),
             'title' => is_array($blockDecodedForTitle) ? (string) ($blockDecodedForTitle['title'] ?? '') : '',
             'fields' => [],
         ];
@@ -102,7 +103,7 @@ function fields_migrate_one(string $componentDir, bool $dryRun, bool $force): ar
     $twigSource = is_file($twigPath) ? file_get_contents($twigPath) : null;
 
     try {
-        $tree = (new AcfJsonReader())->read($decoded, $componentName, $twigSource);
+        $tree = (new AcfJsonReader(keyStyle: $keyStyle))->read($decoded, $componentName, $twigSource);
     } catch (\Throwable $e) {
         // Broad on purpose: AbstractTypeMapper throws DomainException for an
         // unsupported ACF field type; a group/repeater with zero non-accordion
@@ -190,6 +191,12 @@ if (null !== $root && !is_dir($root)) {
     exit(2);
 }
 
+// The key style governs how a component slug is spelled inside derived ACF
+// keys. Resolved from the components root (not per component) because it is a
+// project-wide convention: two components in one project spelling their keys
+// differently is the exact split this setting exists to end.
+$keyStyle = KeyStyle::discoverFor($root ?? dirname(rtrim((string) $single, '/')));
+
 $results = [];
 if (null !== $root) {
     $dirs = glob(rtrim($root, '/') . '/*', GLOB_ONLYDIR) ?: [];
@@ -201,11 +208,11 @@ if (null !== $root) {
         // one at a time since 0.4.2.
         $name = basename($dir);
         if (is_file("{$dir}/acf.json") || is_file("{$dir}/block.json") || is_file("{$dir}/{$name}.twig")) {
-            $results[] = fields_migrate_one($dir, $dryRun, $force);
+            $results[] = fields_migrate_one($dir, $dryRun, $force, $keyStyle);
         }
     }
 } else {
-    $results[] = fields_migrate_one($single, $dryRun, $force);
+    $results[] = fields_migrate_one($single, $dryRun, $force, $keyStyle);
 }
 
 $failures = 0;

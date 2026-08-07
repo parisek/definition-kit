@@ -7,6 +7,7 @@ use Parisek\DefinitionKit\Baseline\FrameworkProps;
 use Parisek\DefinitionKit\Contract\ContractLinter;
 use Parisek\DefinitionKit\Contract\ContractResult;
 use Parisek\DefinitionKit\Lint\DriftLinter;
+use Parisek\DefinitionKit\Support\KeyStyle;
 
 foreach ([__DIR__ . '/../vendor/autoload.php', __DIR__ . '/../../../autoload.php'] as $autoload) {
     if (is_file($autoload)) {
@@ -16,7 +17,7 @@ foreach ([__DIR__ . '/../vendor/autoload.php', __DIR__ . '/../../../autoload.php
 }
 
 /** @return array{status: 'ok'|'drift'|'skip'|'fail', component: string, acfDrift?: list<string>, blockDrift?: list<string>, reason?: string} */
-function fields_lint_one(string $componentDir): array
+function fields_lint_one(string $componentDir, KeyStyle $keyStyle): array
 {
     $componentDir = rtrim($componentDir, '/');
     $componentName = basename($componentDir);
@@ -26,7 +27,7 @@ function fields_lint_one(string $componentDir): array
         return ['status' => 'skip', 'component' => $componentName, 'reason' => "no {$componentName}.yaml yet"];
     }
 
-    $result = (new DriftLinter())->lint($componentDir);
+    $result = (new DriftLinter(keyStyle: $keyStyle))->lint($componentDir);
 
     if (null !== $result->error) {
         return ['status' => 'fail', 'component' => $componentName, 'reason' => $result->error];
@@ -86,6 +87,9 @@ if (null !== $root && !is_dir($root)) {
 // in front of you, not about this package.
 $baselineRoot = $root ?? dirname(rtrim((string) $single, '/'));
 $baseline = FrameworkProps::discoverFor($baselineRoot);
+// Same root as the framework-props baseline above — one discovery location,
+// not two for a reader to keep straight.
+$keyStyle = KeyStyle::discoverFor($baselineRoot);
 $contractLinter = new ContractLinter($baseline['props']);
 if (null !== $baseline['path']) {
     echo "framework props: {$baseline['path']}\n";
@@ -100,13 +104,13 @@ if (null !== $root) {
     sort($dirs);
     foreach ($dirs as $dir) {
         if (!$contractOnly) {
-            $results[] = fields_lint_one($dir);
+            $results[] = fields_lint_one($dir, $keyStyle);
         }
         $contractResults[] = $contractLinter->lint($dir);
     }
 } else {
     if (!$contractOnly) {
-        $results[] = fields_lint_one($single);
+        $results[] = fields_lint_one($single, $keyStyle);
     }
     $contractResults[] = $contractLinter->lint($single);
 }

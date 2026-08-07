@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Parisek\DefinitionKit\Generator;
 
 use Parisek\DefinitionKit\Baseline\TypeDefaults;
+use Parisek\DefinitionKit\Support\KeyStyle;
 
 /**
  * The generator orchestrator: baseline ⊕ constraint sentinels ⊕
@@ -173,13 +174,25 @@ final class FieldsGenerator
      */
     private const RESERVED_WP_PROPS = ['key', 'name', 'type', 'fields', 'sub_fields', 'layouts', 'parent_repeater'];
 
+    private readonly RootFieldGroupBuilder $rootBuilder;
+
+    /**
+     * `$rootBuilder` is nullable rather than defaulted so that a caller
+     * passing only a `$keyStyle` still gets a root builder that honours it.
+     * With a `new RootFieldGroupBuilder()` default the group key would keep
+     * deriving under `slug` while the field keys moved to `snake` — a
+     * half-applied style that generates a valid file whose group key and
+     * field keys disagree, which nothing downstream would flag.
+     */
     public function __construct(
         private readonly TypeDefaults $typeDefaults = new TypeDefaults(),
         private readonly ConstraintSentinels $constraintSentinels = new ConstraintSentinels(),
         private readonly FieldReconstructor $fieldReconstructor = new FieldReconstructor(),
-        private readonly RootFieldGroupBuilder $rootBuilder = new RootFieldGroupBuilder(),
+        ?RootFieldGroupBuilder $rootBuilder = null,
         private readonly FieldProjectionFilter $projectionFilter = new FieldProjectionFilter(),
+        private readonly KeyStyle $keyStyle = KeyStyle::Slug,
     ) {
+        $this->rootBuilder = $rootBuilder ?? new RootFieldGroupBuilder($this->keyStyle);
     }
 
     /**
@@ -789,7 +802,7 @@ final class FieldsGenerator
             $seenAcfNames[$acfName] = true;
 
             $layoutChain = [...$nameChain, $acfName];
-            $layoutKey = (string) ($layoutDef['key'] ?? ('layout_' . $componentSlug . '_' . implode('_', $layoutChain)));
+            $layoutKey = (string) ($layoutDef['key'] ?? ('layout_' . $this->keyStyle->keySlug($componentSlug) . '_' . implode('_', $layoutChain)));
 
             $childFields = (array) ($layoutDef['fields'] ?? []);
             $childSiblingMap = $this->siblingKeyMap($childFields, $componentSlug, $layoutChain);
@@ -857,7 +870,7 @@ final class FieldsGenerator
         // by the time this method executes. Identity now has exactly ONE
         // path: the top-level `key:` prop, falling back to the derived
         // convention.
-        return (string) ($field['key'] ?? ('field_' . $componentSlug . '_' . implode('_', $nameChain)));
+        return (string) ($field['key'] ?? ('field_' . $this->keyStyle->keySlug($componentSlug) . '_' . implode('_', $nameChain)));
     }
 
     /**

@@ -10,6 +10,7 @@ use Parisek\DefinitionKit\Lint\ForwardedShapeLinter;
 use Parisek\DefinitionKit\Lint\KindLinter;
 use Parisek\DefinitionKit\Lint\TranslatableInertLinter;
 use Parisek\DefinitionKit\Schema\FieldsSchemaValidator;
+use Parisek\DefinitionKit\Support\KeyStyle;
 use Symfony\Component\Yaml\Yaml;
 
 foreach ([__DIR__ . '/../vendor/autoload.php', __DIR__ . '/../../../autoload.php'] as $autoload) {
@@ -95,8 +96,21 @@ foreach ($paths as $path) {
     // free computation (nothing is written to disk; only `fields-generate`
     // persists the result via AcfJsonWriter/BlockJsonWriter). Both the shape
     // check and the reference-resolution check therefore ride the same call.
+    // The style IS needed here, despite the reference check looking
+    // self-consistent. `visible_when` does resolve symmetrically — both sides
+    // come from one generator via deriveOrPinKey(). But `wp.conditional_logic`
+    // is a second path: AcfJsonReader emits it verbatim when raw ACF logic is
+    // too complex for the abstract vocabulary, and it carries LITERAL ACF
+    // keys. Under `snake` those literals are snake-spelled, so validating with
+    // a default-styled generator builds a slug-keyed tree, the reference
+    // resolves against nothing, and a correct component fails validation.
+    //
+    // Discovered from the component directory's parent — the components root —
+    // since this entrypoint takes file paths rather than a `--root`.
+    $keyStyle = KeyStyle::discoverFor(\dirname($path, 2));
+
     try {
-        (new FieldsGenerator())->generate($definition, basename($path, '.yaml'), 0);
+        (new FieldsGenerator(keyStyle: $keyStyle))->generate($definition, basename($path, '.yaml'), 0);
     } catch (GenerationValidationException $e) {
         $failed = true;
         echo "FAIL {$path}\n";

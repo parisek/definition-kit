@@ -8,6 +8,42 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 <!-- New entries go directly under this line. It is the anchor that keeps a branch's
      changelog edit from merging into a version that shipped without it. -->
 
+### Added
+
+- **`key_style: slug | snake` — a project-level setting for how a component
+  slug is spelled inside a derived ACF key.** `article-list` can now produce
+  either `field_article-list_title` (`slug`, the default and previous
+  behaviour) or `field_article_list_title` (`snake`). Declared in
+  `definition-kit.yaml` next to the components root or one directory up — the
+  same two locations `FrameworkProps::discoverFor()` already searches.
+
+  Before this, a project whose convention was snake_case had exactly one way to
+  express it: pin `key:` on every field of every multi-word component, forever.
+  One downstream measured 35 of its 42 multi-word components carrying pins that
+  encoded no design intent — they existed solely to override the derivation.
+
+  Both the generate side and the migrate side read the setting, so `migrate`
+  keeps omitting `key:` when a committed key matches the project's declared
+  style. Getting only one side would have been worse than not shipping it: a
+  snake_case project would migrate to definitions that pin every key, which is
+  the boilerplate the setting exists to remove.
+
+  **`slug` stays the default and the behaviour is unchanged without a config
+  file.** Components whose committed keys already match today's derivation
+  carry no `key:` precisely *because* they match it, so a changed default would
+  spuriously pin every one of them on the next migrate.
+
+  Scope is keys only. The Gutenberg block name (`acf/<slug>`) and the field
+  group's `location` param are the block's real identity in WordPress, not a
+  spelling choice, and stay verbatim under every style — folding them would
+  point a field group at a block that does not exist, and the fields would stop
+  appearing in the editor with no error anywhere.
+
+  An unrecognised `key_style` value throws and names the file rather than
+  falling back to the default: a silent fallback would rewrite every key in the
+  project on the next generate, and the drift-lint would report it as the
+  project's own doing rather than as a typo.
+
 ## [0.7.6] - 2026-08-03
 
 ### Added

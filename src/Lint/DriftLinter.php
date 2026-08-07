@@ -6,6 +6,7 @@ namespace Parisek\DefinitionKit\Lint;
 
 use Parisek\DefinitionKit\Generator\BlockJsonGenerator;
 use Parisek\DefinitionKit\Generator\FieldsGenerator;
+use Parisek\DefinitionKit\Support\KeyStyle;
 use Parisek\DefinitionKit\Schema\FieldsSchemaValidator;
 use Parisek\DefinitionKit\Support\StructuralDiff;
 use Symfony\Component\Yaml\Yaml;
@@ -30,12 +31,24 @@ use Symfony\Component\Yaml\Yaml;
  */
 final class DriftLinter
 {
+    private readonly FieldsGenerator $fieldsGenerator;
+
+    /**
+     * `$fieldsGenerator` is nullable for the same reason FieldsGenerator's
+     * own root builder is: a caller passing only a `$keyStyle` must not get
+     * a generator still deriving under the default, or the lint would
+     * compare the committed file against keys the project never asked for
+     * and report drift on every field.
+     */
     public function __construct(
         private readonly FieldsSchemaValidator $schemaValidator = new FieldsSchemaValidator(),
-        private readonly FieldsGenerator $fieldsGenerator = new FieldsGenerator(),
+        ?FieldsGenerator $fieldsGenerator = null,
         private readonly BlockJsonGenerator $blockJsonGenerator = new BlockJsonGenerator(),
         private readonly DriftAllowlist $allowlist = new DriftAllowlist(),
+        private readonly KeyStyle $keyStyle = KeyStyle::Slug,
     ) {
+        $this->fieldsGenerator = $fieldsGenerator
+            ?? new FieldsGenerator(keyStyle: $this->keyStyle);
     }
 
     public function lint(string $componentDir): DriftResult
