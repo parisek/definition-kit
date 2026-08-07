@@ -65,6 +65,31 @@ Add a composer script and a CI step so a hand-edit to a generated `acf.json`/`bl
 
 The round-trip contract: `generate(migrate(acf.json)) == acf.json`, modulo documented ACF-export-era residuals.
 
+## Project settings — `definition-kit.yaml`
+
+Optional. Place it next to the components root or one directory up (the same two locations the framework-props baseline is discovered in).
+
+```yaml
+key_style: snake   # slug (default) | snake
+```
+
+**`key_style`** decides how a component slug is spelled inside a *derived* ACF key. A component directory named `article-list` produces:
+
+| `key_style` | Group key | Field key |
+| --- | --- | --- |
+| `slug` (default) | `group_article-list` | `field_article-list_title` |
+| `snake` | `group_article_list` | `field_article_list_title` |
+
+Both work — an ACF key is an opaque identifier and templates read fields by `name`, never by key — so this is a spelling convention, not a correctness question. It exists because projects already disagree and neither side can be migrated cheaply: **renaming a key orphans stored content** (block attributes bind `_<field>` to the key string), so an existing spelling is frozen wherever content exists. Without the setting, a snake_case project had to pin `key:` on every field of every multi-word component, forever — boilerplate encoding no design intent.
+
+Three things worth knowing:
+
+- **It governs keys only.** The Gutenberg block name (`acf/<slug>`) and the field group's `location` param stay verbatim under every style — they are the block's identity in WordPress, and folding them would point the group at a block that does not exist.
+- **`slug` is the default and stays it.** Components whose committed keys match today's derivation carry no `key:` *because* they match; a changed default would spuriously pin every one of them on the next migrate.
+- **Changing it on a project that already has content is not a config change.** It is a content migration — the setting decides what new keys are derived, it does not rewrite what is stored.
+
+An unrecognised value throws and names the file. Falling back to the default would rewrite every key on the next generate, and the drift-lint would report it as your doing rather than as a typo.
+
 ## Development
 
 ```bash

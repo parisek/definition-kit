@@ -95,6 +95,13 @@ foreach ($paths as $path) {
     // free computation (nothing is written to disk; only `fields-generate`
     // persists the result via AcfJsonWriter/BlockJsonWriter). Both the shape
     // check and the reference-resolution check therefore ride the same call.
+    // No `keyStyle:` here on purpose — this entrypoint is style-agnostic by
+    // construction, and threading one in would only look thorough. The check
+    // it performs is that every `conditional_logic` reference resolves inside
+    // the generated tree; both sides of that comparison come from the same
+    // generator instance via deriveOrPinKey(), so they agree under either
+    // style. A style would change which keys are emitted, never whether they
+    // resolve to each other.
     try {
         (new FieldsGenerator())->generate($definition, basename($path, '.yaml'), 0);
     } catch (GenerationValidationException $e) {

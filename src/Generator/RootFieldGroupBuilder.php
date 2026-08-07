@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Parisek\DefinitionKit\Generator;
 
+use Parisek\DefinitionKit\Support\KeyStyle;
+
 /**
  * Builds the root ACF field-group object (the props sitting alongside
  * `fields` in acf.json — key/title/location/menu_order/position/etc.)
@@ -38,6 +40,11 @@ final class RootFieldGroupBuilder
         'acfml_field_group_mode' => 'advanced',
     ];
 
+    public function __construct(
+        private readonly KeyStyle $keyStyle = KeyStyle::Slug,
+    ) {
+    }
+
     /**
      * @param array<string,mixed> $definitionTree
      * @param list<array<string,mixed>> $orderedRawFields
@@ -60,9 +67,14 @@ final class RootFieldGroupBuilder
         return array_merge(
             self::ROOT_DEFAULTS,
             [
-                'key' => (string) ($definitionTree['key'] ?? ('group_' . $componentSlug)),
+                'key' => (string) ($definitionTree['key'] ?? ('group_' . $this->keyStyle->keySlug($componentSlug))),
                 'title' => (string) ($definitionTree['name'] ?? ''),
                 'fields' => $fields,
+                // NOT key-styled, deliberately. This names the Gutenberg block
+                // WordPress actually registers (`acf/<slug>`, from block.json),
+                // so it is the block's identity rather than a spelling
+                // convention. Folding hyphens here would point the group at a
+                // block that does not exist and the fields would stop appearing.
                 'location' => [[['param' => 'block', 'operator' => '==', 'value' => "acf/{$componentSlug}"]]],
             ],
             $rootWp,

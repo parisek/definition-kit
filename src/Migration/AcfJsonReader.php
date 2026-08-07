@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Parisek\DefinitionKit\Migration;
 
 use Parisek\DefinitionKit\Baseline\TypeDefaults;
+use Parisek\DefinitionKit\Support\KeyStyle;
 
 /**
  * Reads a decoded acf.json plus (optionally) the component's twig source
@@ -33,6 +34,7 @@ final class AcfJsonReader
         private readonly TwigMetadataReader $twigMetadataReader = new TwigMetadataReader(),
         private readonly WpmlTranslatableMapper $wpmlMapper = new WpmlTranslatableMapper(),
         private readonly AccordionResidualCapturer $accordionCapturer = new AccordionResidualCapturer(),
+        private readonly KeyStyle $keyStyle = KeyStyle::Slug,
     ) {
     }
 
@@ -88,7 +90,7 @@ final class AcfJsonReader
         }
 
         $groupKey = (string) ($acfJson['key'] ?? '');
-        $expectedGroupKey = 'group_' . $componentSlug;
+        $expectedGroupKey = 'group_' . $this->keyStyle->keySlug($componentSlug);
         if ($groupKey !== $expectedGroupKey) {
             $root['key'] = $groupKey;
         }
@@ -334,7 +336,7 @@ final class AcfJsonReader
             $consumed[] = 'layouts';
         }
 
-        $expectedKey = 'field_' . $componentSlug . '_' . implode('_', [...$nameChain, (string) $acfField['name']]);
+        $expectedKey = 'field_' . $this->keyStyle->keySlug($componentSlug) . '_' . implode('_', [...$nameChain, (string) $acfField['name']]);
         if ((string) $acfField['key'] !== $expectedKey) {
             $out['key'] = (string) $acfField['key'];
         }
