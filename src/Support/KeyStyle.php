@@ -59,12 +59,21 @@ enum KeyStyle: string
             }
 
             $parsed = Yaml::parseFile($candidate);
-            if (!\is_array($parsed) || !isset($parsed['key_style'])) {
-                // A config file that exists but says nothing about keys is not
-                // an error — it may carry other settings, or be a placeholder.
-                return self::Slug;
+            if (!\is_array($parsed) || !\array_key_exists('key_style', $parsed)) {
+                // A config file that says nothing about keys is not an error —
+                // it may carry other settings, or be a placeholder. Keep
+                // LOOKING rather than returning the default: a nearer file
+                // that happens not to mention keys must not mask a declaration
+                // one directory up. Returning here made an empty
+                // `definition-kit.yaml` beside the components root silently
+                // override the theme-level one, and the only symptom would
+                // have been the drift-lint reporting every key as changed.
+                continue;
             }
 
+            // `array_key_exists`, not `isset`, on purpose: an explicit
+            // `key_style: null` is a typo worth reporting, not an omission.
+            // `isset` treats it as absent and would silently pick the default.
             $declared = $parsed['key_style'];
             $style = \is_string($declared) ? self::tryFrom($declared) : null;
             if (null === $style) {
