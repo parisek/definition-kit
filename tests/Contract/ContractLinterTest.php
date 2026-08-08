@@ -511,4 +511,105 @@ final class ContractLinterTest extends TestCase
 
         self::assertSame(ContractResult::UNANALYSED, $this->lint($dir)->status);
     }
+
+    // -- issue #56: namespace-aliased template paths -------------------------
+
+    /**
+     * Builds `<root>/static/templates/component/<name>/…` — the
+     * `STATIC_PATH/templates` shape `deriveNamespaceMap()` recognises — and
+     * writes the component's yaml/twig into it. Returns the component dir.
+     */
+    private function namespacedComponent(string $name, string $yaml, string $twig): string
+    {
+        $dir = "{$this->root}/static/templates/component/{$name}";
+        mkdir($dir, 0777, true);
+        file_put_contents("{$dir}/{$name}.yaml", $yaml);
+        file_put_contents("{$dir}/{$name}.twig", $twig);
+
+        return $dir;
+    }
+
+    public function testANamespacedMacroImportIsFollowedAndItsReadsSurface(): void
+    {
+        $partsDir = "{$this->root}/static/templates/macro";
+        mkdir($partsDir, 0777, true);
+        file_put_contents(
+            "{$partsDir}/parts.twig",
+            '{% macro split(content) %}{{ content.title }}{{ content.ratings }}{% endmacro %}',
+        );
+
+        $dir = $this->namespacedComponent('page-header', <<<'YAML'
+        name: Page Header
+        fields:
+          title: { type: text, label: Title, role: field }
+        YAML, '{% import "@macro/parts.twig" as parts %}{{ parts.split(content) }}');
+
+        // Before #56 the resolver could never open `@macro/parts.twig`, so
+        // this always fell back to the tier-1 note with no reads at all —
+        // `ratings` (and even `title`) stayed invisible.
+        $result = $this->lint($dir);
+        self::assertSame(['ratings'], $result->violations);
+    }
+
+    public function testAnUnknownNamespaceDeclinesRatherThanGuesses(): void
+    {
+        $dir = $this->namespacedComponent('page-header', <<<'YAML'
+        name: Page Header
+        fields:
+          title: { type: text, label: Title, role: field }
+        YAML, '{% import "@vendor/parts.twig" as parts %}{{ parts.split(content) }}');
+
+        // `@vendor` names nothing in the derived map. A literal directory
+        // named `@vendor` two levels up happens to exist and would satisfy
+        // the pre-fix un-namespaced walk (it joins the path as written,
+        // `@` and all, against each ancestor) — proving decline is a real
+        // choice here, not just an absence of coincidence. It would attribute
+        // `ratings` to a file the template never named.
+        $vendorDir = "{$this->root}/static/templates/component/@vendor";
+        mkdir($vendorDir, 0777, true);
+        file_put_contents("{$vendorDir}/parts.twig", '{% macro split(content) %}{{ content.ratings }}{% endmacro %}');
+
+        $result = $this->lint($dir);
+        self::assertSame([], $result->violations);
+        self::assertSame([TwigPropExtractor::NOTE_UNANALYSED_MACRO], $result->noteKinds());
+    }
+
+    public function testAnExplicitNamespaceMapOverridesTheDerivedOne(): void
+    {
+        // A layout the derivation cannot recognise on its own: the macro
+        // lives outside `static/templates/macro` entirely.
+        $exoticDir = "{$this->root}/vendor-macros";
+        mkdir($exoticDir, 0777, true);
+        file_put_contents(
+            "{$exoticDir}/parts.twig",
+            '{% macro split(content) %}{{ content.ratings }}{% endmacro %}',
+        );
+
+        $dir = $this->namespacedComponent('page-header', <<<'YAML'
+        name: Page Header
+        fields:
+          title: { type: text, label: Title, role: field }
+        YAML, '{% import "@macro/parts.twig" as parts %}{{ parts.split(content) }}');
+
+        $linter = new ContractLinter(namespaces: ['macro' => $exoticDir]);
+        $result = $linter->lint($dir);
+
+        self::assertSame(['ratings'], $result->violations);
+    }
+
+    public function testAnUnNamespacedRelativeIncludeStillResolvesTheOldWay(): void
+    {
+        // Same shape as testASiblingIncludeIsResolvedRelativeToTheComponentTree
+        // but rooted under `static/templates/component/`, so a namespace map
+        // is derivable — proving its presence doesn't break the un-namespaced
+        // walk that path never touches.
+        $this->namespacedComponent('icon', "name: Icon\nfields:\n  glyph: { type: text, label: G, role: field }\n", '{{ content.glyph }}');
+        $dir = $this->namespacedComponent('hero', <<<'YAML'
+        name: Hero
+        fields:
+          title: { type: text, label: Nadpis, role: field }
+        YAML, '{{ content.title }}{% include "icon/icon.twig" %}');
+
+        self::assertSame(['glyph'], $this->lint($dir)->violations);
+    }
 }
