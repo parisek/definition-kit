@@ -220,4 +220,112 @@ final class TwigPropExtractorTest extends TestCase
             unlink($path);
         }
     }
+
+    // -- issue #55: whole-object macro handoff -------------------------------
+
+    public function testBareContentIntoAResolvableMacroIsFollowed(): void
+    {
+        $reads = $this->extract(
+            '{% import "parts.twig" as parts %}{{ content.title }}{{ parts.split(content) }}',
+            ['parts.twig' => '{% macro split(content) %}{{ content.perex }}{{ content.image }}{% endmacro %}'],
+        );
+
+        self::assertSame(['image', 'perex', 'title'], $reads->reads);
+        self::assertTrue($reads->isFullyAnalysed());
+    }
+
+    public function testFromImportIsFollowedToo(): void
+    {
+        $reads = $this->extract(
+            '{% from "parts.twig" import split %}{{ split(content) }}',
+            ['parts.twig' => '{% macro split(content) %}{{ content.perex }}{% endmacro %}'],
+        );
+
+        self::assertSame(['perex'], $reads->reads);
+        self::assertTrue($reads->isFullyAnalysed());
+    }
+
+    public function testBareContentIntoAnUnresolvableMacroIsNoted(): void
+    {
+        // No `resolveTemplate` mapping for parts.twig — the import can't be
+        // followed, so the handoff must be visible as a note rather than
+        // silently vanishing.
+        $reads = $this->extract(
+            '{% import "parts.twig" as parts %}{{ content.title }}{{ parts.split(content) }}',
+        );
+
+        self::assertSame(['title'], $reads->reads);
+        self::assertSame([TwigPropExtractor::NOTE_UNANALYSED_MACRO], $reads->noteKinds());
+        self::assertFalse($reads->isFullyAnalysed());
+    }
+
+    public function testAMacroNameNotFoundInTheImportedTemplateIsNoted(): void
+    {
+        $reads = $this->extract(
+            '{% import "parts.twig" as parts %}{{ parts.missing(content) }}',
+            ['parts.twig' => '{% macro split(content) %}{{ content.perex }}{% endmacro %}'],
+        );
+
+        self::assertSame([], $reads->reads);
+        self::assertSame([TwigPropExtractor::NOTE_UNANALYSED_MACRO], $reads->noteKinds());
+    }
+
+    public function testASubPathArgumentIsUnchangedBehaviour(): void
+    {
+        // parts.heading_title(content.title) is already correct today: the
+        // read is recorded at the call site, and the macro body only ever
+        // sees a scalar, so it must not be walked at all.
+        $reads = $this->extract(
+            '{% import "parts.twig" as parts %}{{ parts.heading_title(content.title) }}',
+            ['parts.twig' => '{% macro heading_title(title) %}{{ title }}{% endmacro %}'],
+        );
+
+        self::assertSame(['title'], $reads->reads);
+        self::assertTrue($reads->isFullyAnalysed());
+    }
+
+    public function testAMacroThatItselfCallsAnotherMacroHitsTheDepthGuard(): void
+    {
+        // Mirrors the real page-header-* components: the top-level macro is
+        // followed (tier 2), but its own whole-object handoff to a second
+        // macro is a second level of nesting and falls back to tier 1,
+        // exactly like NOTE_NESTED_INCLUDE does for includes.
+        $reads = $this->extract(
+            '{% import "parts.twig" as parts %}{{ parts.split(content) }}',
+            ['parts.twig' => <<<'TWIG'
+            {% macro split(content) %}
+                {{ content.perex }}
+                {% import "buttons.twig" as buttons %}
+                {{ buttons.render(content) }}
+            {% endmacro %}
+            TWIG,
+                'buttons.twig' => '{% macro render(content) %}{{ content.primary_button }}{% endmacro %}',
+            ],
+        );
+
+        self::assertSame(['perex'], $reads->reads);
+        self::assertSame([TwigPropExtractor::NOTE_UNANALYSED_MACRO], $reads->noteKinds());
+        self::assertFalse($reads->isFullyAnalysed());
+    }
+
+    public function testTheRealPageHeaderComponentReportsTheMacroReadsOrNotesTheGap(): void
+    {
+        // Regression pin for issue #55 itself: a bare `content` handed to a
+        // macro import must never leave `isFullyAnalysed()` true while
+        // hiding reads — either the extra reads show up, or a note does.
+        $reads = $this->extract(
+            '{% import "parts.twig" as parts %}{{ content.title }}{{ parts.page_header_split(content, "lg:w-7/12", "text", true) }}',
+            ['parts.twig' => <<<'TWIG'
+            {% macro page_header_split(content, text_width, buttons_position, side_slots) %}
+                {{ content.perex }}
+                {% if content.image %}{{ content.image }}{% endif %}
+            {% endmacro %}
+            TWIG],
+        );
+
+        self::assertContains('title', $reads->reads);
+        self::assertTrue(
+            in_array('perex', $reads->reads, true) || in_array(TwigPropExtractor::NOTE_UNANALYSED_MACRO, $reads->noteKinds(), true),
+        );
+    }
 }

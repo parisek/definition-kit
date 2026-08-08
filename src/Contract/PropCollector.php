@@ -29,6 +29,25 @@ final class PropCollector
     public array $aliases = [];
 
     /**
+     * `{% import "…" as x %}` bindings: the bound name => the template path
+     * it names. Module-scoped, same rationale as $aliases.
+     *
+     * @var array<string,string>
+     */
+    public array $macroImports = [];
+
+    /**
+     * `{% from "…" import … %}` template paths, in encounter order. Twig
+     * leaves the reference's own template variable name null for these (the
+     * compiler resolves each `macro_*` call positionally), so a macro call
+     * that isn't reachable through a named import is tried against each of
+     * these in turn.
+     *
+     * @var list<string>
+     */
+    public array $macroFromImports = [];
+
+    /**
      * Embedded modules by index, so an `{% embed %}` can be paired with the
      * module Twig parsed its body into. The embed node carries the `only`
      * flag; the path of the template being embedded is on the module.

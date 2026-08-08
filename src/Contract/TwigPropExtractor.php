@@ -11,8 +11,11 @@ use Twig\Node\EmbedNode;
 use Twig\Node\Expression\ConstantExpression;
 use Twig\Node\Expression\FunctionExpression;
 use Twig\Node\Expression\GetAttrExpression;
+use Twig\Node\Expression\MacroReferenceExpression;
 use Twig\Node\Expression\Variable\ContextVariable;
+use Twig\Node\Expression\Variable\LocalVariable;
 use Twig\Node\ForNode;
+use Twig\Node\ImportNode;
 use Twig\Node\IncludeNode;
 use Twig\Node\ModuleNode;
 use Twig\Node\Node;
@@ -72,6 +75,7 @@ final class TwigPropExtractor
     public const NOTE_NESTED_INCLUDE = 'unanalysed-nested-include';
     public const NOTE_UNRESOLVED_INCLUDE = 'unresolved-include';
     public const NOTE_PARSE_ERROR = 'unparsable-template';
+    public const NOTE_UNANALYSED_MACRO = 'unanalysed-macro-handoff';
 
     /** @var \Closure(string): ?string */
     private \Closure $resolveTemplate;
@@ -199,6 +203,18 @@ final class TwigPropExtractor
 
         if ($node instanceof FunctionExpression && 'include' === $node->getAttribute('name')) {
             $this->walkIncludeFunction($node, $collector, $bindings, $depth, $origin);
+
+            return;
+        }
+
+        if ($node instanceof ImportNode) {
+            $this->walkImport($node, $collector);
+
+            return;
+        }
+
+        if ($node instanceof MacroReferenceExpression) {
+            $this->walkMacroReference($node, $collector, $bindings, $depth, $origin);
 
             return;
         }
@@ -433,6 +449,175 @@ final class TwigPropExtractor
             : null;
     }
 
+    /**
+     * `{% import "…" as parts %}` binds a NAME to a template; `{% from "…"
+     * import a, b as c %}` binds macro names directly without a template
+     * variable (Twig's parser leaves that variable's name null and resolves
+     * every `macro_*` reference in the module against it positionally). Both
+     * are recorded so a later `MacroReferenceExpression` can be resolved.
+     */
+    private function walkImport(ImportNode $node, PropCollector $collector): void
+    {
+        $template = $this->constantPath($node->getNode('expr'));
+        if (null === $template) {
+            // A dynamically-named import (`{% import tpl_var as x %}`) is not
+            // constant-resolvable. Any macro call through it will fail to
+            // resolve too and fall back to a NOTE_UNANALYSED_MACRO note.
+            return;
+        }
+
+        if ('from' === $node->getNodeTag()) {
+            $collector->macroFromImports[] = $template;
+
+            return;
+        }
+
+        $varNode = $node->getNode('var');
+        $nameNode = $varNode->hasNode('var') ? $varNode->getNode('var') : $varNode;
+        $name = (string) $nameNode->getAttribute('name');
+
+        if ('' !== $name) {
+            $collector->macroImports[$name] = $template;
+        }
+    }
+
+    /**
+     * A macro call is only interesting here for the arguments that hand over
+     * the bare `content` object (or an alias standing for it) whole — every
+     * other argument is walked normally, exactly like any other expression,
+     * because either it is not content-rooted at all, or it is a sub-path
+     * read that is already fully recorded at this call site (see class
+     * docblock § scope note).
+     *
+     * @param array<string,string> $bindings
+     */
+    private function walkMacroReference(
+        MacroReferenceExpression $node,
+        PropCollector $collector,
+        array $bindings,
+        int $depth,
+        string $origin,
+    ): void {
+        $bindings = $collector->bindings($bindings);
+
+        $macroName = (string) $node->getAttribute('name');
+        $shortName = str_starts_with($macroName, 'macro_') ? substr($macroName, 6) : $macroName;
+
+        $templateVar = $node->getNode('template');
+        $templateVarName = $templateVar->hasAttribute('name') ? $templateVar->getAttribute('name') : null;
+
+        $argumentIndex = 0;
+        foreach ($node->getNode('arguments') as $position => $child) {
+            // Arguments compile as flattened (positional-key, value) pairs —
+            // only the odd slots are the actual expressions.
+            if (0 === (int) $position % 2) {
+                continue;
+            }
+
+            $path = $this->bareContentPath($child, $bindings);
+            if ('' === $path) {
+                $this->followMacro($shortName, $templateVarName, $argumentIndex, $collector, $depth, $origin);
+            } else {
+                $this->walk($child, $collector, $bindings, $depth, $origin);
+            }
+
+            ++$argumentIndex;
+        }
+    }
+
+    /**
+     * Resolves a whole-object macro handoff (tier 2 of issue #55): finds the
+     * macro's template via the recorded import bindings, locates the
+     * `MacroNode` by name, maps the receiving argument position to its
+     * parameter name, and walks the macro body with that parameter bound to
+     * the content root — so `content.perex` becomes readable as `perex`
+     * inside the macro exactly as it would be at the call site.
+     *
+     * Anything this cannot pin down statically — an unresolved template, a
+     * macro name not found in it, an argument position past the macro's
+     * declared parameters, a second level of nesting — falls back to tier 1:
+     * a note, so the incompleteness is visible instead of silent.
+     */
+    private function followMacro(
+        string $shortName,
+        ?string $templateVarName,
+        int $argumentIndex,
+        PropCollector $collector,
+        int $depth,
+        string $origin,
+    ): void {
+        if ($depth >= 1) {
+            $collector->note(self::NOTE_UNANALYSED_MACRO, sprintf(
+                '%s hands its whole content object to %s(), one level inside an already-followed include/macro. '
+                . 'Resolving a second level of nesting would mean evaluating the template rather than reading it.',
+                $origin,
+                $shortName,
+            ));
+
+            return;
+        }
+
+        $candidates = null !== $templateVarName
+            ? (isset($collector->macroImports[$templateVarName]) ? [$collector->macroImports[$templateVarName]] : [])
+            : $collector->macroFromImports;
+
+        foreach ($candidates as $template) {
+            $source = ($this->resolveTemplate)($template);
+            if (null === $source) {
+                continue;
+            }
+
+            $macroModule = $this->parse($source, $template, $collector);
+            if (null === $macroModule || !$macroModule->hasNode('macros')) {
+                continue;
+            }
+
+            $macrosNode = $macroModule->getNode('macros');
+            if (!$macrosNode->hasNode($shortName)) {
+                continue;
+            }
+
+            $macroNode = $macrosNode->getNode($shortName);
+            $paramName = $this->macroParamNameAt($macroNode, $argumentIndex);
+            if (null === $paramName) {
+                continue;
+            }
+
+            $this->walk($macroNode->getNode('body'), $collector, [$paramName => ''], $depth + 1, $template);
+
+            return;
+        }
+
+        $collector->note(self::NOTE_UNANALYSED_MACRO, sprintf(
+            '%s hands its whole content object to %s(), which could not be resolved statically '
+            . '(unresolved import, macro not found, or an unrecognised argument shape). Its reads are part '
+            . 'of this component\'s contract and are therefore missing from the result.',
+            $origin,
+            $shortName,
+        ));
+    }
+
+    /** The name of the macro's Nth declared parameter, or null past its arity. */
+    private function macroParamNameAt(Node $macroNode, int $argumentIndex): ?string
+    {
+        if (!$macroNode->hasNode('arguments')) {
+            return null;
+        }
+
+        $names = [];
+        foreach ($macroNode->getNode('arguments') as $position => $child) {
+            // Same flattened-pairs shape as a call site: even slots are the
+            // parameter names, odd slots are their default values.
+            if (0 === (int) $position % 2) {
+                $names[] = $child;
+            }
+        }
+
+        $nameNode = $names[$argumentIndex] ?? null;
+
+        return $nameNode instanceof LocalVariable ? (string) $nameNode->getAttribute('name') : null;
+    }
+
     private function constantPath(Node $node): ?string
     {
         if (!$node instanceof ConstantExpression) {
@@ -487,7 +672,37 @@ final class TwigPropExtractor
         }
 
         if (isset($bindings[$root])) {
-            return implode('.', [$bindings[$root], ...$segments]);
+            // An empty-string binding means the variable stands for the
+            // whole `content` object itself (a macro parameter that
+            // received the bare `content` handoff, see walkMacroReference),
+            // not a sub-path of it — so it contributes no prefix segment.
+            $prefix = $bindings[$root];
+
+            return '' === $prefix ? implode('.', $segments) : implode('.', [$prefix, ...$segments]);
+        }
+
+        return null;
+    }
+
+    /**
+     * The content path a variable stands for when it is passed bare (not as
+     * part of a `.` chain) — e.g. the `content` argument of a macro call, or
+     * an alias bound to the whole object. Returns `''` for the object root
+     * itself, a dotted sub-path, or null when the node isn't content-rooted
+     * at all.
+     *
+     * @param array<string,string> $bindings
+     */
+    private function bareContentPath(Node $node, array $bindings): ?string
+    {
+        if ($node instanceof ContextVariable) {
+            $name = (string) $node->getAttribute('name');
+
+            return self::ROOT === $name ? '' : ($bindings[$name] ?? null);
+        }
+
+        if ($node instanceof GetAttrExpression) {
+            return $this->resolvePath($node, $bindings);
         }
 
         return null;
