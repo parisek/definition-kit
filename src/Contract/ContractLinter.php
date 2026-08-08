@@ -54,13 +54,17 @@ final class ContractLinter
     private array $shapes = [];
 
     /**
-     * @param array<string,string> $namespaces explicit `@namespace => absolute
+     * @param array<string,string> $namespaces explicit `namespace => absolute
      *   directory` overrides, for a project whose layout does not match the
      *   `<templates>/component` convention `deriveNamespaceMap()` assumes —
      *   the same escape hatch `parisek/styleguide`'s own `namespaces` config
      *   provides its Twig loader (issue #56). Wins over the derived entry for
      *   any key it also names; every other conventional namespace is still
-     *   derived.
+     *   derived. Keys are matched with or without a leading `@` (`macro` and
+     *   `@macro` both resolve `@macro/…` includes) — a template always
+     *   writes the `@`-prefixed form, and accepting either spelling here
+     *   avoids a silent no-op override when a caller mirrors that spelling
+     *   into this array instead of the bare form the internal lookup uses.
      */
     public function __construct(
         private readonly FrameworkProps $frameworkProps = new FrameworkProps(),
@@ -422,7 +426,17 @@ final class ContractLinter
      */
     private function templateResolver(string $componentDir): \Closure
     {
-        $namespaceMap = [...$this->deriveNamespaceMap($componentDir), ...$this->namespaces];
+        $explicitNamespaces = [];
+        foreach ($this->namespaces as $key => $namespaceDir) {
+            // Accept both `macro` and `@macro` as the key spelling (see the
+            // constructor docblock) — the internal lookup below always
+            // strips the `@` off the path it is resolving, so a caller who
+            // mirrored the `@`-prefixed spelling into this array would
+            // otherwise silently fail to override anything.
+            $explicitNamespaces[ltrim((string) $key, '@')] = $namespaceDir;
+        }
+
+        $namespaceMap = [...$this->deriveNamespaceMap($componentDir), ...$explicitNamespaces];
 
         return static function (string $path) use ($componentDir, $namespaceMap): ?string {
             if (str_starts_with($path, '@')) {
@@ -440,9 +454,7 @@ final class ContractLinter
                     return null;
                 }
 
-                $full = rtrim($namespaceMap[$namespace], '/') . '/' . ltrim($rest, '/');
-
-                return is_file($full) ? (file_get_contents($full) ?: null) : null;
+                return self::readWithinRoot($namespaceMap[$namespace], $rest);
             }
 
             $candidates = [$componentDir];
@@ -464,6 +476,55 @@ final class ContractLinter
 
             return null;
         };
+    }
+
+    /**
+     * Reads `$root/$rest`, refusing to return anything that resolves outside
+     * `$root` once symlinks and `..` segments are canonicalised.
+     *
+     * A namespace maps to an absolute directory the project configured (or
+     * `deriveNamespaceMap()` inferred); the `$rest` of the include path is
+     * attacker-reachable in the sense that it is copied verbatim out of a
+     * twig source file the linter is asked to analyse. Two escapes are
+     * possible and `realpath()` is the only thing that closes both at once:
+     * a `..`-laden `$rest` (`@macro/../../../../etc/hosts`) walks the joined
+     * path outside `$root` with no symlink involved; a symlinked directory
+     * sitting inside `$root` (a `component`/`static`/`icons` dir that is
+     * itself a link, or one further down the resolved path) walks outside it
+     * with no `..` involved. `is_file()`/`file_get_contents()` on the raw
+     * concatenation check neither.
+     *
+     * `realpath()` returns `false` for a path that does not exist, which
+     * also covers the case where `$root` itself does not exist — so this
+     * doubles as the existence check `is_file()` used to provide.
+     */
+    private static function readWithinRoot(string $root, string $rest): ?string
+    {
+        $realRoot = realpath($root);
+        if (false === $realRoot) {
+            return null;
+        }
+
+        $full = rtrim($root, '/') . '/' . ltrim($rest, '/');
+        $realFull = realpath($full);
+        if (false === $realFull) {
+            return null;
+        }
+
+        if ($realFull !== $realRoot && !str_starts_with($realFull, $realRoot . DIRECTORY_SEPARATOR)) {
+            // Resolved outside the namespace's own directory — decline
+            // exactly as an unknown namespace does, rather than surface a
+            // read the template's namespace never authorised.
+            return null;
+        }
+
+        if (!is_file($realFull)) {
+            return null;
+        }
+
+        $source = file_get_contents($realFull);
+
+        return false !== $source ? $source : null;
     }
 
     /**

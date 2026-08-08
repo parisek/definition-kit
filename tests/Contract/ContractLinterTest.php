@@ -612,4 +612,109 @@ final class ContractLinterTest extends TestCase
 
         self::assertSame(['glyph'], $this->lint($dir)->violations);
     }
+
+    public function testANamespacedPathTraversalCannotEscapeItsNamespaceDirectory(): void
+    {
+        // The namespace directory must exist for the namespace to be in the
+        // derived map at all — an absent directory declines for an
+        // unrelated reason (unknown namespace) and would make this test
+        // pass without the traversal guard doing anything.
+        $macroDir = "{$this->root}/static/templates/macro";
+        mkdir($macroDir, 0777, true);
+
+        // Lives inside $this->root but outside the macro namespace's own
+        // directory — exactly what the containment check must keep
+        // `@macro/…` from reaching, `..` segments or not.
+        file_put_contents("{$this->root}/secret.twig", '{% macro split(content) %}{{ content.secret }}{% endmacro %}');
+
+        $dir = $this->namespacedComponent('page-header', <<<'YAML'
+        name: Page Header
+        fields:
+          title: { type: text, label: Title, role: field }
+        YAML, '{% import "@macro/../../../secret.twig" as parts %}{{ parts.split(content) }}');
+
+        $result = $this->lint($dir);
+
+        // Resolution declines exactly as it does for an unknown namespace —
+        // the include is unanalysed, `secret` never surfaces as a violation.
+        self::assertSame([], $result->violations);
+        self::assertSame([TwigPropExtractor::NOTE_UNANALYSED_MACRO], $result->noteKinds());
+    }
+
+    public function testANamespacedSymlinkCannotEscapeItsNamespaceDirectory(): void
+    {
+        if (!function_exists('symlink')) {
+            self::markTestSkipped('symlink() is unavailable on this platform.');
+        }
+
+        $macroDir = "{$this->root}/static/templates/macro";
+        mkdir($macroDir, 0777, true);
+
+        // Outside the macro namespace directory, no `..` involved — reached
+        // only via a symlink planted inside it.
+        $secretDir = "{$this->root}/secret-target";
+        mkdir($secretDir, 0777, true);
+        file_put_contents("{$secretDir}/parts.twig", '{% macro split(content) %}{{ content.secret }}{% endmacro %}');
+
+        $linked = symlink($secretDir, "{$macroDir}/linked");
+        self::assertTrue($linked, 'test setup requires a working symlink()');
+
+        $dir = $this->namespacedComponent('page-header', <<<'YAML'
+        name: Page Header
+        fields:
+          title: { type: text, label: Title, role: field }
+        YAML, '{% import "@macro/linked/parts.twig" as parts %}{{ parts.split(content) }}');
+
+        $result = $this->lint($dir);
+
+        self::assertSame([], $result->violations);
+        self::assertSame([TwigPropExtractor::NOTE_UNANALYSED_MACRO], $result->noteKinds());
+    }
+
+    public function testANamespaceWithAnEmptyRemainderDeclinesWithoutError(): void
+    {
+        $macroDir = "{$this->root}/static/templates/macro";
+        mkdir($macroDir, 0777, true);
+
+        $dir = $this->namespacedComponent('page-header', <<<'YAML'
+        name: Page Header
+        fields:
+          title: { type: text, label: Title, role: field }
+        YAML, '{% import "@macro" as parts %}{{ parts.split(content) }}');
+
+        $result = $this->lint($dir);
+
+        self::assertSame([], $result->violations);
+        self::assertSame([TwigPropExtractor::NOTE_UNANALYSED_MACRO], $result->noteKinds());
+    }
+
+    public function testAnExplicitNamespaceOverrideKeyIsAcceptedWithOrWithoutTheAtSign(): void
+    {
+        // Two callers, two spellings — the documented `@namespace` form and
+        // the bare form the internal lookup actually uses (issue: the
+        // docblock and the code disagreed on which one was correct). Both
+        // must override the derived `macro` entry the same way.
+        $exoticDir = "{$this->root}/vendor-macros";
+        mkdir($exoticDir, 0777, true);
+        file_put_contents(
+            "{$exoticDir}/parts.twig",
+            '{% macro split(content) %}{{ content.ratings }}{% endmacro %}',
+        );
+
+        $yaml = <<<'YAML'
+        name: Page Header
+        fields:
+          title: { type: text, label: Title, role: field }
+        YAML;
+        $twig = '{% import "@macro/parts.twig" as parts %}{{ parts.split(content) }}';
+
+        $bareKeyDir = $this->namespacedComponent('page-header-bare', $yaml, $twig);
+        $atKeyDir = $this->namespacedComponent('page-header-at', $yaml, $twig);
+
+        $bareResult = (new ContractLinter(namespaces: ['macro' => $exoticDir]))->lint($bareKeyDir);
+        $atResult = (new ContractLinter(namespaces: ['@macro' => $exoticDir]))->lint($atKeyDir);
+
+        self::assertSame(['ratings'], $bareResult->violations);
+        self::assertSame(['ratings'], $atResult->violations);
+    }
 }
