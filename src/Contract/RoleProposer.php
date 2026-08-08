@@ -70,7 +70,12 @@ final class RoleProposer
         $sidecarEvidence = $this->sidecarEvidence->evidence("{$componentDir}/{$name}.php");
         $sidecar = $sidecarEvidence['roles'];
         $sidecarDerivedFrom = $sidecarEvidence['derivedFrom'];
-        $reads = (new TwigPropExtractor())->extractFile($twigPath);
+        // A resolver-less extractor cannot follow a single include or macro
+        // handoff — every one comes back as a note instead of a read, so
+        // props hidden behind them would silently never get a role proposed.
+        // ContractLinter resolves the same way (its own templateResolver());
+        // the two must agree on what "readable" means for the same template.
+        $reads = (new TwigPropExtractor($this->templateResolver($componentDir)))->extractFile($twigPath);
 
         $roles = [];
         $derivedFrom = [];
@@ -150,7 +155,41 @@ final class RoleProposer
             $baselineProps,
             $hints,
             $this->apply($definition, $roles, $derivedFrom),
+            notes: $reads->notes,
         );
+    }
+
+    /**
+     * Same resolution strategy as `ContractLinter::templateResolver()` —
+     * walking up from the component's own directory, since this package has
+     * no configuration for the theme's template root. Proposing and checking
+     * must resolve includes/macro handoffs identically, or a prop one of them
+     * can follow and the other cannot would get a role from stale evidence.
+     *
+     * @return \Closure(string): ?string
+     */
+    private function templateResolver(string $componentDir): \Closure
+    {
+        return static function (string $path) use ($componentDir): ?string {
+            $candidates = [$componentDir];
+            $dir = $componentDir;
+            for ($i = 0; $i < 4; $i++) {
+                $dir = dirname($dir);
+                $candidates[] = $dir;
+            }
+
+            foreach ($candidates as $candidate) {
+                $full = $candidate . '/' . ltrim($path, '/');
+                if (is_file($full)) {
+                    $source = file_get_contents($full);
+                    if (false !== $source) {
+                        return $source;
+                    }
+                }
+            }
+
+            return null;
+        };
     }
 
     /**

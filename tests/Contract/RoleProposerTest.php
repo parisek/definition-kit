@@ -428,4 +428,54 @@ final class RoleProposerTest extends TestCase
 
         self::assertNotNull((new RoleProposer())->propose($dir)->skipped);
     }
+
+    /**
+     * Review finding on #57: `RoleProposer` used to build its own
+     * `TwigPropExtractor` with no resolver at all, so an include or a
+     * whole-object macro handoff could never be followed — every prop
+     * hidden behind one silently never became a role-proposal candidate,
+     * with nothing telling the caller the run was incomplete.
+     * `ContractLinter` resolves templates by walking up from the
+     * component's own directory; `RoleProposer` must do the same so the
+     * two agree on what "readable" means for the same twig.
+     */
+    public function testAWholeObjectMacroHandoffIsFollowedAndItsPropIsProposable(): void
+    {
+        $this->component('button', [
+            'button.twig' => '{% macro render(content) %}{{ content.label }}{% endmacro %}',
+        ]);
+        $card = $this->component('card', [
+            'card.yaml' => "name: Card\nfields: {}\n",
+            'card.twig' => '{% import "button/button.twig" as b %}{{ b.render(content) }}',
+        ]);
+
+        $proposal = (new RoleProposer())->propose($card, $this->callSites());
+
+        self::assertTrue(
+            $proposal->isFullyAnalysed(),
+            'the macro handoff must be followed rather than reported as an unresolved note',
+        );
+        self::assertContains('label', $proposal->unresolved);
+    }
+
+    /**
+     * Companion to the above: when the resolver genuinely cannot follow a
+     * handoff (the imported template does not exist on disk), that
+     * incompleteness must reach the caller through `notes`/
+     * `isFullyAnalysed()` rather than being swallowed — a proposal run
+     * that looks complete while it silently wasn't is the exact defect
+     * `PropReads::notes` exists to prevent.
+     */
+    public function testAnUnresolvableMacroHandoffIsSurfacedAsANote(): void
+    {
+        $card = $this->component('orphan-card', [
+            'orphan-card.yaml' => "name: Orphan Card\nfields: {}\n",
+            'orphan-card.twig' => '{% import "missing/missing.twig" as b %}{{ b.render(content) }}',
+        ]);
+
+        $proposal = (new RoleProposer())->propose($card, $this->callSites());
+
+        self::assertFalse($proposal->isFullyAnalysed());
+        self::assertNotSame([], $proposal->notes);
+    }
 }

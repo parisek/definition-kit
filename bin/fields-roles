@@ -136,6 +136,7 @@ $blank = 0;
 $skipped = 0;
 $written = 0;
 $failed = 0;
+$unanalysed = 0;
 
 foreach ($dirs as $dir) {
     $proposal = $proposer->propose($dir, $callSites);
@@ -146,15 +147,28 @@ foreach ($dirs as $dir) {
         continue;
     }
 
+    if (!$proposal->isFullyAnalysed()) {
+        $unanalysed++;
+    }
+
     $proposed += $proposal->proposedCount();
     $blank += count($proposal->unresolved);
 
-    if (!$proposal->hasChanges() && [] === $proposal->unresolved) {
+    if (!$proposal->hasChanges() && [] === $proposal->unresolved && $proposal->isFullyAnalysed()) {
         echo "OK   {$proposal->component}: every prop already carries a role\n";
         continue;
     }
 
     echo "{$proposal->component}\n";
+
+    // TwigPropExtractor's notes can only HIDE reads, never invent them — see
+    // its class docblock. A role proposed here is still real evidence, but a
+    // note means the twig may carry props this run never saw, so they were
+    // never candidates for a role in the first place. Surfacing that beats
+    // a proposal run that looks complete while it silently wasn't.
+    foreach ($proposal->notes as $note) {
+        echo "  ! {$note['kind']}: {$note['detail']}\n";
+    }
 
     foreach ($proposal->roles as $prop => $role) {
         $from = isset($proposal->derivedFrom[$prop]) ? " (from: {$proposal->derivedFrom[$prop]})" : '';
@@ -187,12 +201,13 @@ $considered = $proposed + $blank;
 $rate = $considered > 0 ? round(100 * $blank / $considered) : 0;
 
 echo sprintf(
-    "\n%d component(s): %d role(s) proposed, %d left blank (%d%%), %d skipped\n",
+    "\n%d component(s): %d role(s) proposed, %d left blank (%d%%), %d skipped, %d not fully analysed\n",
     count($dirs),
     $proposed,
     $blank,
     $rate,
     $skipped,
+    $unanalysed,
 );
 
 if (!$write) {

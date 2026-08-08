@@ -22,6 +22,10 @@ final class RoleProposal
      * @param list<string> $baselineProps props omitted because the framework injects them
      * @param array<string,string> $hints unresolved path => what is known about it anyway
      * @param array<string,mixed>|null $definition the definition with the proposals applied
+     * @param list<array{kind: string, detail: string}> $notes what `TwigPropExtractor` could not resolve
+     *        statically for this component's twig (unresolved includes/macro handoffs, dynamic access, …).
+     *        Carried through rather than swallowed: a role proposed from a partial read set was proposed
+     *        from data that may be missing reads, not from a clean analysis.
      */
     public function __construct(
         public readonly string $component,
@@ -32,7 +36,14 @@ final class RoleProposal
         public readonly array $hints = [],
         public readonly ?array $definition = null,
         public readonly ?string $skipped = null,
+        public readonly array $notes = [],
     ) {
+    }
+
+    /** False when `TwigPropExtractor` left something unresolved for this component's twig. */
+    public function isFullyAnalysed(): bool
+    {
+        return [] === $this->notes;
     }
 
     public function proposedCount(): int

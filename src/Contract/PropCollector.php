@@ -29,6 +29,34 @@ final class PropCollector
     public array $aliases = [];
 
     /**
+     * `{% import "…" as x %}` bindings: the bound name => the template path
+     * it names. Module-scoped, same rationale as $aliases.
+     *
+     * @var array<string,string>
+     */
+    public array $macroImports = [];
+
+    /**
+     * `{% from "…" import a, b as c %}` bindings, keyed by the object
+     * identity (`spl_object_id`) of the per-statement internal
+     * `TemplateVariable` node Twig's own parser threads onto the compiled
+     * `MacroReferenceExpression`'s `template` slot for that alias
+     * (`FromTokenParser` creates one `TemplateVariable` per `from`
+     * statement and `FunctionExpressionParser` reuses that exact object
+     * for every call through the alias).
+     *
+     * Twig resolves a `from`-imported macro call to a *specific* `from`
+     * statement this way — by object identity, not by name or encounter
+     * order — which is the only sound way to tell apart two `from`
+     * imports of the same macro short name (e.g. `card` from two
+     * different templates, one aliased). Trying candidates in encounter
+     * order, as this used to, can silently follow the wrong template.
+     *
+     * @var array<int,string>
+     */
+    public array $macroFromImportsByRef = [];
+
+    /**
      * Embedded modules by index, so an `{% embed %}` can be paired with the
      * module Twig parsed its body into. The embed node carries the `only`
      * flag; the path of the template being embedded is on the module.
