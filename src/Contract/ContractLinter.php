@@ -53,18 +53,34 @@ final class ContractLinter
     /** @var array<string,ComponentShapeResolver> components root => resolver */
     private array $shapes = [];
 
+    /**
+     * @param array<string,string> $namespaces explicit `namespace => absolute
+     *   directory` overrides, for a project whose layout does not match the
+     *   `<templates>/component` convention `deriveNamespaceMap()` assumes —
+     *   the same escape hatch `parisek/styleguide`'s own `namespaces` config
+     *   provides its Twig loader (issue #56). Wins over the derived entry for
+     *   any key it also names; every other conventional namespace is still
+     *   derived. Keys are matched with or without a leading `@` (`macro` and
+     *   `@macro` both resolve `@macro/…` includes) — a template always
+     *   writes the `@`-prefixed form, and accepting either spelling here
+     *   avoids a silent no-op override when a caller mirrors that spelling
+     *   into this array instead of the bare form the internal lookup uses.
+     */
     public function __construct(
         private readonly FrameworkProps $frameworkProps = new FrameworkProps(),
+        private readonly array $namespaces = [],
     ) {
     }
 
     /**
      * A linter honouring the baseline that governs this components root — the
      * project's own `framework-props-baseline.yaml` when it has one.
+     *
+     * @param array<string,string> $namespaces see the constructor
      */
-    public static function forComponentsRoot(string $componentsRoot): self
+    public static function forComponentsRoot(string $componentsRoot, array $namespaces = []): self
     {
-        return new self(FrameworkProps::discoverFor($componentsRoot)['props']);
+        return new self(FrameworkProps::discoverFor($componentsRoot)['props'], $namespaces);
     }
 
     public function lint(string $componentDir): ContractResult
@@ -396,18 +412,51 @@ final class ContractLinter
     }
 
     /**
-     * Resolves an include path as written in a component twig.
+     * Resolves an include/import path as written in a component twig.
      *
-     * Templates are included by a path relative to the theme's template root
-     * (`component/button/button.twig`), which this package has no configuration
-     * for. Walking up from the component's own directory finds it without one,
-     * and stops well before it could wander outside the theme.
+     * Two shapes reach this closure: an un-namespaced relative path
+     * (`component/button/button.twig`), for which walking up from the
+     * component's own directory finds the file without any configuration;
+     * and a namespace-aliased path (`@macro/parts/parts.twig`), which is the
+     * only form real projects write and — before issue #56 — this resolver
+     * could never open, silently reducing macro-following (issue #55) to
+     * dead code outside this package's own test fixtures.
      *
      * @return \Closure(string): ?string
      */
     private function templateResolver(string $componentDir): \Closure
     {
-        return static function (string $path) use ($componentDir): ?string {
+        $explicitNamespaces = [];
+        foreach ($this->namespaces as $key => $namespaceDir) {
+            // Accept both `macro` and `@macro` as the key spelling (see the
+            // constructor docblock) — the internal lookup below always
+            // strips the `@` off the path it is resolving, so a caller who
+            // mirrored the `@`-prefixed spelling into this array would
+            // otherwise silently fail to override anything.
+            $explicitNamespaces[ltrim((string) $key, '@')] = $namespaceDir;
+        }
+
+        $namespaceMap = [...$this->deriveNamespaceMap($componentDir), ...$explicitNamespaces];
+
+        return static function (string $path) use ($componentDir, $namespaceMap): ?string {
+            if (str_starts_with($path, '@')) {
+                $slash = strpos($path, '/');
+                $namespace = false !== $slash ? substr($path, 1, $slash - 1) : substr($path, 1);
+                $rest = false !== $slash ? substr($path, $slash + 1) : '';
+
+                // An unknown namespace declines rather than guesses — the
+                // same rule this code already applies to an ambiguous macro
+                // binding (#55). Falling back to the un-namespaced walk below
+                // would risk reading `@foo/button/button.twig` as a relative
+                // path that happens to exist by coincidence a few directories
+                // up, attributing reads to a file the template never named.
+                if (!isset($namespaceMap[$namespace])) {
+                    return null;
+                }
+
+                return self::readWithinRoot($namespaceMap[$namespace], $rest);
+            }
+
             $candidates = [$componentDir];
             $dir = $componentDir;
             for ($i = 0; $i < 4; $i++) {
@@ -427,5 +476,104 @@ final class ContractLinter
 
             return null;
         };
+    }
+
+    /**
+     * Reads `$root/$rest`, refusing to return anything that resolves outside
+     * `$root` once symlinks and `..` segments are canonicalised.
+     *
+     * A namespace maps to an absolute directory the project configured (or
+     * `deriveNamespaceMap()` inferred); the `$rest` of the include path is
+     * attacker-reachable in the sense that it is copied verbatim out of a
+     * twig source file the linter is asked to analyse. Two escapes are
+     * possible and `realpath()` is the only thing that closes both at once:
+     * a `..`-laden `$rest` (`@macro/../../../../etc/hosts`) walks the joined
+     * path outside `$root` with no symlink involved; a symlinked directory
+     * sitting inside `$root` (a `component`/`static`/`icons` dir that is
+     * itself a link, or one further down the resolved path) walks outside it
+     * with no `..` involved. `is_file()`/`file_get_contents()` on the raw
+     * concatenation check neither.
+     *
+     * `realpath()` returns `false` for a path that does not exist, which
+     * also covers the case where `$root` itself does not exist — so this
+     * doubles as the existence check `is_file()` used to provide.
+     */
+    private static function readWithinRoot(string $root, string $rest): ?string
+    {
+        $realRoot = realpath($root);
+        if (false === $realRoot) {
+            return null;
+        }
+
+        $full = rtrim($root, '/') . '/' . ltrim($rest, '/');
+        $realFull = realpath($full);
+        if (false === $realFull) {
+            return null;
+        }
+
+        if ($realFull !== $realRoot && !str_starts_with($realFull, $realRoot . DIRECTORY_SEPARATOR)) {
+            // Resolved outside the namespace's own directory — decline
+            // exactly as an unknown namespace does, rather than surface a
+            // read the template's namespace never authorised.
+            return null;
+        }
+
+        if (!is_file($realFull)) {
+            return null;
+        }
+
+        $source = file_get_contents($realFull);
+
+        return false !== $source ? $source : null;
+    }
+
+    /**
+     * The conventional `@namespace => directory` map `parisek/styleguide`'s
+     * `Styleguide::registerConventionalNamespaces()` wires onto its Twig
+     * loader, derived from the components root this linter already knows —
+     * without asking a project to restate a mapping it never configured.
+     *
+     * Only derived when `$componentDir`'s parent is itself named `component`,
+     * matching the `<templates>/component/<slug>` shape every convention
+     * below assumes. A components root laid out any other way gets an empty
+     * map here — every namespace then declines in `templateResolver()` —
+     * rather than a guess built on a shape that does not hold; the
+     * constructor's `$namespaces` parameter is the escape hatch for that
+     * project.
+     *
+     * `@icons`/`@images` are similarly conditional: they live under
+     * `static_path`, a sibling of `templates/` — derivable only when the
+     * templates root is itself named `templates` (`STATIC_PATH/templates`,
+     * the convention every shipped project follows). Off that convention,
+     * this method cannot locate `static_path` with any confidence and omits
+     * both rather than guess; they remain reachable via `$namespaces`.
+     *
+     * @return array<string,string>
+     */
+    private function deriveNamespaceMap(string $componentDir): array
+    {
+        $componentsRoot = rtrim(dirname(rtrim($componentDir, '/')), '/');
+
+        if ('component' !== basename($componentsRoot)) {
+            return [];
+        }
+
+        $templatesRoot = dirname($componentsRoot);
+
+        $map = [
+            'component' => $componentsRoot,
+            'macro' => $templatesRoot . '/macro',
+            'page' => $templatesRoot . '/page',
+            'doc' => $templatesRoot . '/doc',
+            'static' => $templatesRoot,
+        ];
+
+        if ('templates' === basename($templatesRoot)) {
+            $staticRoot = dirname($templatesRoot);
+            $map['icons'] = $staticRoot . '/images/icons';
+            $map['images'] = $staticRoot . '/images';
+        }
+
+        return $map;
     }
 }
