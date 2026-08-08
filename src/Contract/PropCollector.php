@@ -37,15 +37,24 @@ final class PropCollector
     public array $macroImports = [];
 
     /**
-     * `{% from "…" import … %}` template paths, in encounter order. Twig
-     * leaves the reference's own template variable name null for these (the
-     * compiler resolves each `macro_*` call positionally), so a macro call
-     * that isn't reachable through a named import is tried against each of
-     * these in turn.
+     * `{% from "…" import a, b as c %}` bindings, keyed by the object
+     * identity (`spl_object_id`) of the per-statement internal
+     * `TemplateVariable` node Twig's own parser threads onto the compiled
+     * `MacroReferenceExpression`'s `template` slot for that alias
+     * (`FromTokenParser` creates one `TemplateVariable` per `from`
+     * statement and `FunctionExpressionParser` reuses that exact object
+     * for every call through the alias).
      *
-     * @var list<string>
+     * Twig resolves a `from`-imported macro call to a *specific* `from`
+     * statement this way — by object identity, not by name or encounter
+     * order — which is the only sound way to tell apart two `from`
+     * imports of the same macro short name (e.g. `card` from two
+     * different templates, one aliased). Trying candidates in encounter
+     * order, as this used to, can silently follow the wrong template.
+     *
+     * @var array<int,string>
      */
-    public array $macroFromImports = [];
+    public array $macroFromImportsByRef = [];
 
     /**
      * Embedded modules by index, so an `{% embed %}` can be paired with the
