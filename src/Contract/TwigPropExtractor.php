@@ -4,9 +4,7 @@ declare(strict_types=1);
 
 namespace Parisek\DefinitionKit\Contract;
 
-use Twig\Environment;
 use Twig\Error\SyntaxError;
-use Twig\Loader\ArrayLoader;
 use Twig\Node\EmbedNode;
 use Twig\Node\Expression\ConstantExpression;
 use Twig\Node\Expression\FunctionExpression;
@@ -20,9 +18,6 @@ use Twig\Node\IncludeNode;
 use Twig\Node\ModuleNode;
 use Twig\Node\Node;
 use Twig\Node\SetNode;
-use Twig\TwigFilter;
-use Twig\TwigFunction;
-use Twig\TwigTest;
 
 /**
  * Extracts the props a component's twig reads off `content` (issue #27,
@@ -69,6 +64,8 @@ use Twig\TwigTest;
  */
 final class TwigPropExtractor
 {
+    use TwigWalkerSupport;
+
     public const ROOT = 'content';
 
     public const NOTE_DYNAMIC_ACCESS = 'unanalysable-dynamic-access';
@@ -148,32 +145,9 @@ final class TwigPropExtractor
 
     private function parse(string $source, string $name, PropCollector $collector): ?ModuleNode
     {
-        $loader = new ArrayLoader([$name => $source]);
-        $env = new Environment($loader, ['cache' => false]);
-
-        // A component twig is written against a project's own Twig
-        // environment — Timber's functions, a theme's filters. This one knows
-        // none of them, and an unknown callable is a parse error in Twig. The
-        // extractor does not care what any of them DO; it needs the tree.
-        // Unknown TAGS still fail, and are reported: a tag can change control
-        // flow, so guessing past one would produce a confidently wrong answer.
-        $env->registerUndefinedFunctionCallback(
-            static fn (string $callable): TwigFunction => new TwigFunction($callable, static fn (): string => ''),
-        );
-        $env->registerUndefinedFilterCallback(
-            static fn (string $callable): TwigFilter => new TwigFilter($callable, static fn (): string => ''),
-        );
-        $env->registerUndefinedTestCallback(
-            static fn (string $callable): TwigTest => new TwigTest($callable, static fn (): bool => true),
-        );
-
-        try {
-            return $env->parse($env->tokenize($loader->getSourceContext($name)));
-        } catch (SyntaxError $e) {
-            $collector->note(self::NOTE_PARSE_ERROR, sprintf('%s: %s', $name, $e->getRawMessage()));
-
-            return null;
-        }
+        return $this->parseModule($source, $name, static function (SyntaxError $e, string $parsedName) use ($collector): void {
+            $collector->note(self::NOTE_PARSE_ERROR, sprintf('%s: %s', $parsedName, $e->getRawMessage()));
+        });
     }
 
     /**
@@ -697,68 +671,22 @@ final class TwigPropExtractor
 
     private function constantPath(Node $node): ?string
     {
-        if (!$node instanceof ConstantExpression) {
-            return null;
-        }
-
-        $value = $node->getAttribute('value');
-
-        return is_string($value) ? $value : null;
+        return $this->constantTemplatePath($node);
     }
 
     /**
      * The dotted path a `content.…` chain names, or null when the chain is
-     * rooted elsewhere or goes through a non-constant accessor.
+     * rooted elsewhere or goes through a non-constant accessor. An
+     * empty-string binding means the variable stands for the whole `content`
+     * object itself (a macro parameter that received the bare `content`
+     * handoff, see walkMacroReference), not a sub-path of it — handled by
+     * `resolveContentPath()` in the shared trait.
      *
      * @param array<string,string> $bindings
      */
     private function resolvePath(GetAttrExpression $node, array $bindings): ?string
     {
-        $segments = [];
-        $current = $node;
-
-        while ($current instanceof GetAttrExpression) {
-            $attribute = $current->getNode('attribute');
-            if (!$attribute instanceof ConstantExpression) {
-                return null;
-            }
-
-            $value = $attribute->getAttribute('value');
-            if (!is_string($value) && !is_int($value)) {
-                return null;
-            }
-
-            // `content.items[0].title` — an array index is not a prop name.
-            // The prop is the one it indexes into, and `title` is a field of
-            // its rows, so the index is dropped and the chain closes up.
-            if (is_string($value) && !is_numeric($value)) {
-                array_unshift($segments, $value);
-            }
-
-            $current = $current->getNode('node');
-        }
-
-        if (!$current instanceof ContextVariable) {
-            return null;
-        }
-
-        $root = (string) $current->getAttribute('name');
-
-        if (self::ROOT === $root) {
-            return [] === $segments ? null : implode('.', $segments);
-        }
-
-        if (isset($bindings[$root])) {
-            // An empty-string binding means the variable stands for the
-            // whole `content` object itself (a macro parameter that
-            // received the bare `content` handoff, see walkMacroReference),
-            // not a sub-path of it — so it contributes no prefix segment.
-            $prefix = $bindings[$root];
-
-            return '' === $prefix ? implode('.', $segments) : implode('.', [$prefix, ...$segments]);
-        }
-
-        return null;
+        return $this->resolveContentPath($node, $bindings);
     }
 
     /**

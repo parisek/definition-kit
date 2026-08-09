@@ -1,0 +1,11 @@
+{# Mirrors the real project's `page/404/styleguide.twig` — a page fixture
+   whose ONLY content is a raw `{% include %}` of its own sibling template,
+   instead of a `page_*(...)` call. `include` is a Twig tag, not a function
+   `Styleguide::renderObserved()` can wrap, so this reaches the `unobservable`
+   list, not `calls` (same mechanism as the `component/unobservable-include`
+   fixture — see that fixture's styleguide.twig). This is the regression
+   fixture for the summary-tally leak found in issue #521's follow-up: a
+   `page`-kind unanalysable notice is printed per-finding but was never
+   folded into the run's OK/notice tally because that tally only walked
+   `componentDirectories()`. #}
+{% include '@page/leaky-page/leaky-page.twig' %}

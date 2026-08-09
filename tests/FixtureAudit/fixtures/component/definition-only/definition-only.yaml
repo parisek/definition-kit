@@ -1,0 +1,6 @@
+name: Definition Only
+category: Block
+fields:
+  - key: title
+    role: field
+    required: false

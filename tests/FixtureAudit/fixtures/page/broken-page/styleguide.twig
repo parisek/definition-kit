@@ -1,0 +1,8 @@
+{# MUST-FIX 2 regression fixture (fields-fixtures-auditor review): a
+   `page`-kind fixture that genuinely fails to render (division by zero,
+   same mechanism `component/broken` uses) and makes zero `page_*(...)`
+   calls of its own. Before the fix, `Auditor::renderFixture()` only
+   recorded a render failure when `$kind === 'component'`, so this fixture's
+   failure was silently dropped — never reported, and never able to flip the
+   CLI's exit code. See `AuditorTest::testNonComponentRenderFailureIsReportedAndFlipsExitCode()`. #}
+{{ 1 / 0 }}

@@ -1,0 +1,6 @@
+name: "gate-alias (fields-contract fixture)"
+fields:
+  toggle:
+    role: field
+  fallback:
+    role: field

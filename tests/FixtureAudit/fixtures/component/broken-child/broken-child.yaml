@@ -1,0 +1,4 @@
+name: "broken-child (fields-contract fixture)"
+fields:
+  label:
+    role: field

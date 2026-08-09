@@ -1,0 +1,6 @@
+{{ component_uniform_repeater({
+	items: [
+		{ title: 'Row 1', always_present: { src: 'a.jpg', _placeholderOpts: { seed: 1, subject: 'x' } }, varying: 'yes', ungated_uniform: 'x', present_varying_truthiness: true },
+		{ title: 'Row 2', always_present: { src: 'b.jpg', _placeholderOpts: { seed: 2, subject: 'y' } }, ungated_uniform: 'y', present_varying_truthiness: false },
+	],
+}) }}

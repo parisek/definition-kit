@@ -1,0 +1,4 @@
+name: "nullkey (fields-contract fixture)"
+fields:
+  flag:
+    role: field

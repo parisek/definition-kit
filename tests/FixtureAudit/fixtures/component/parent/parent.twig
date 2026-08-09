@@ -1,0 +1,6 @@
+{# name: "parent (fields-contract fixture)" #}
+{% if content.items %}
+	{% for item in content.items %}
+		{{ component_child({ label: item.label }) }}
+	{% endfor %}
+{% endif %}

@@ -1,0 +1,1 @@
+{% for item in content.items %}{{ item.title }}{% if item.always_present.src %} {{ item.always_present.src }}{% endif %}{% if item.never_present %} {{ item.never_present }}{% endif %}{% if item.varying %} {{ item.varying }}{% endif %} {{ item.ungated_uniform }}{% if item.present_varying_truthiness %} {{ item.present_varying_truthiness }}{% endif %}{% endfor %}
