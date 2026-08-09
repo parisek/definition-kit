@@ -10,6 +10,24 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`bin/fields-fixtures` — the fixture-coverage axis.** The mirror of what
+  `fields-lint --contract-only` answers. That one asks whether a template reads a
+  prop its definition omits; this asks whether any fixture ever *supplies* what a
+  definition declares and a template reads. A `{% if content.x %}` branch that no
+  fixture satisfies renders nothing, so no check asserting on rendered output can
+  reach it — the class of defect this closes was invisible to visual regression,
+  behaviour contracts and render-integrity alike.
+
+  Renders every fixture through `parisek/styleguide`'s observation API and
+  compares what each component was actually handed against what its template
+  reads and its `<name>.yaml` declares. Reports notices, never errors.
+
+  **`parisek/styleguide` therefore moves from `require-dev` to `require`.** In a
+  consuming project it is already a production dependency while this package is
+  dev-only, so the direction adds nothing to production. This is not a decision
+  to merge the two packages.
+
+
 - **`key_style: slug | snake` — a project-level setting for how a component
   slug is spelled inside a derived ACF key.** `article-list` can now produce
   either `field_article-list_title` (`slug`, the default and previous
@@ -43,6 +61,43 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   falling back to the default: a silent fallback would rewrite every key in the
   project on the next generate, and the drift-lint would report it as the
   project's own doing rather than as a typo.
+
+### Fixed
+
+- **`TwigPropExtractor` sees the props a macro reads.** It had no macro handling
+  at all: a template handing the whole `content` object to a macro reported only
+  the props read outside it — and reported `isFullyAnalysed() === true`. On a real
+  23-line component that meant four reads out of nineteen, with no note.
+
+  The silence is what made it a bug rather than a limitation. `ContractLinter`
+  states its own soundness as "notes can only HIDE reads, never invent them […]
+  the notes ride along so a clean result is not mistaken for a complete one" —
+  which holds only while an unfollowed construct leaves a note. This one left
+  none.
+
+  Macros are followed now, and a hand-off that cannot be followed emits
+  `NOTE_UNANALYSED_MACRO`. Where a mapping from a call site to a parameter, or
+  from an alias to a template, cannot be established with certainty, the
+  extractor declines rather than guessing: a declared gap is survivable, an
+  invented read is not, and neither is a silent one.
+
+- **`ContractLinter::templateResolver()` resolves `@namespace/…` paths.** It
+  walked up four directories and tried `$dir . '/' . $path`, which never matched
+  a leading Twig namespace — and `@macro/…`, `@component/…` are the only forms a
+  real theme writes, so macro following was dead code in practice.
+
+  Resolution is now namespace-aware, derived from the components root, with an
+  explicit override for layouts that do not match. An unknown namespace declines
+  rather than falling through to the directory walk, which could otherwise
+  resolve `@vendor/parts.twig` against an unrelated ancestor and attribute reads
+  to a file the template never referenced.
+
+  It also stays inside its namespace. The old resolver was safe by accident — its
+  four-level walk bounded its reach — while the namespace branch jumped straight
+  to an absolute directory and read `../../../../etc/hosts` happily. Both root and
+  target are `realpath()`d and the target must be at or below the root, which
+  covers `..` and symlinks with one mechanism.
+
 
 ## [0.7.6] - 2026-08-03
 
