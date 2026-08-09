@@ -1,0 +1,355 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+// Fixture-coverage audit — the `F` axis of the field contract check (moved
+// from `portadesign/tailwind-base`, issue #54 — see `Auditor`'s class
+// docblock for the full history and the render harness it now uses).
+//
+// A separate `bin/` entry rather than a `--fixtures` mode on `fields-lint`
+// (per the migration plan): this tool RENDERS every fixture through
+// `Parisek\Styleguide\Styleguide`, `fields-lint` never does — different
+// inputs, different failure modes, different runtime cost.
+//
+// Usage:
+//   fields-fixtures --templates=<path> --static=<path> [--config=<path>] [--locale=<locale>] [--json]
+//
+// Flag names deliberately do NOT collapse to `fields-lint`'s single
+// `--root=` — that flag names ONE components directory; this tool needs
+// THREE independent roots to construct `Styleguide` exactly as a
+// consuming project's own render entry point does:
+//
+//   --templates=  the components/pages root ($templates in styleguide.yaml
+//                 terms) — required.
+//   --static=     the project's static root (images, styleguide.yaml's own
+//                 directory, everything `Styleguide` resolves relative
+//                 paths against) — required.
+//   --config=     the styleguide.yaml path — optional, defaults to
+//                 <static>/styleguide.yaml.
+//   --locale=     locale passed to `Styleguide`'s constructor — optional,
+//                 defaults to `cs` (this package's own house locale; a
+//                 project relying on locale-sensitive i18n output should
+//                 pass its own).
+//   --json        machine-readable structural output (findings + statuses),
+//                 for calibration tests asserting on the raw shape rather
+//                 than a formatted report — see tests/FixtureAudit/AuditorTest.php.
+
+use Parisek\DefinitionKit\FixtureAudit\Auditor;
+use Parisek\DefinitionKit\FixtureAudit\Finding;
+
+foreach ([__DIR__ . '/../vendor/autoload.php', __DIR__ . '/../../../autoload.php'] as $autoload) {
+    if (is_file($autoload)) {
+        require $autoload;
+        break;
+    }
+}
+
+$args = array_slice($argv, 1);
+$templatesPath = null;
+$staticPath = null;
+$configYaml = null;
+$locale = 'cs';
+// MUST-FIX 4 (fields-fixtures-auditor review): these three used to be
+// hardcoded to tailwind-base's own styleguide route shape inside `Auditor`'s
+// constructor (see its docblock) — a project whose styleguide entry mounts
+// fixtures under a different route, or that genuinely wants an empty
+// context, had no way to say so. Defaults match the historical hardcoded
+// values, so an invocation that doesn't pass these flags behaves exactly as
+// before.
+$homeUrl = '/styleguide/render/';
+$frontPageUrl = '/styleguide/render/page/homepage';
+$templateUrl = '';
+$asJson = false;
+
+$usage = "usage: fields-fixtures --templates=<path> --static=<path> [--config=<path>] [--locale=<locale>] "
+    . "[--home-url=<url>] [--front-page-url=<url>] [--template-url=<url>] [--json]\n";
+
+foreach ($args as $arg) {
+    if (str_starts_with($arg, '--templates=')) {
+        $templatesPath = rtrim(substr($arg, 12), '/');
+        continue;
+    }
+    if (str_starts_with($arg, '--static=')) {
+        $staticPath = rtrim(substr($arg, 9), '/');
+        continue;
+    }
+    if (str_starts_with($arg, '--config=')) {
+        $configYaml = substr($arg, 9);
+        continue;
+    }
+    if (str_starts_with($arg, '--locale=')) {
+        $locale = substr($arg, 9);
+        continue;
+    }
+    if (str_starts_with($arg, '--home-url=')) {
+        $homeUrl = substr($arg, 11);
+        continue;
+    }
+    if (str_starts_with($arg, '--front-page-url=')) {
+        $frontPageUrl = substr($arg, 17);
+        continue;
+    }
+    if (str_starts_with($arg, '--template-url=')) {
+        $templateUrl = substr($arg, 15);
+        continue;
+    }
+    if ('--json' === $arg) {
+        $asJson = true;
+        continue;
+    }
+    // An unrecognised option must never be silently ignored — same
+    // discipline as fields-lint/fields-generate's own arg parsing.
+    fwrite(STDERR, "unknown option: {$arg}\n" . $usage);
+    exit(2);
+}
+
+if (null === $templatesPath || null === $staticPath) {
+    fwrite(STDERR, $usage);
+    exit(2);
+}
+
+if (!is_dir($templatesPath)) {
+    fwrite(STDERR, "not a directory: {$templatesPath}\n");
+    exit(2);
+}
+if (!is_dir($staticPath)) {
+    fwrite(STDERR, "not a directory: {$staticPath}\n");
+    exit(2);
+}
+// Nice-to-have (fields-fixtures-auditor review): a non-empty locale is
+// meaningful input (it becomes `default_locale`/`langcode` and, via
+// `KeyStyle`-adjacent conventions elsewhere in this package, part of i18n
+// output) — an empty `--locale=` is never a legitimate value, and catching
+// it here is cheaper than tracing it back from whatever downstream
+// misbehaviour an empty locale eventually causes.
+if ('' === trim($locale)) {
+    fwrite(STDERR, "locale must not be empty\n" . $usage);
+    exit(2);
+}
+
+$configYaml ??= $staticPath . '/styleguide.yaml';
+// Deliberately NOT validated for existence here (unlike --templates/
+// --static above): a missing styleguide.yaml is a tolerated, meaningful
+// state — `Styleguide` falls back to defaults rather than erroring (this
+// package's own test fixtures rely on exactly that, passing a
+// deliberately nonexistent --config to isolate the calibration cases from
+// a real project's styleguide.yaml). A genuinely malformed (present but
+// unparsable) config is still caught by MUST-FIX 3's top-level try/catch
+// below.
+
+// MUST-FIX 3 (fields-fixtures-auditor review): `new Auditor(...)` parses
+// `$configYaml` immediately (it builds a `Styleguide` in its constructor),
+// and `renderAllFixtures()` walks the whole fixture tree — a malformed or
+// unreadable config, or any other setup failure, used to propagate as an
+// uncaught exception with a raw stack trace instead of the same
+// arg-error-shaped `exit(2)` every other failure path in this script (and
+// its sibling `bin/*` commands, see `fields-generate`/`fields-migrate`/
+// `fields-roles`) already uses.
+try {
+    $auditor = new Auditor($templatesPath, $staticPath, $configYaml, $locale, $homeUrl, $frontPageUrl, $templateUrl);
+    $auditor->renderAllFixtures();
+} catch (\Throwable $e) {
+    fwrite(STDERR, "fields-fixtures: " . $e->getMessage() . "\n");
+    exit(2);
+}
+
+// A sanity check against a silently empty/near-empty F — e.g. --templates
+// pointed at a tree with no real components. `Styleguide::renderObserved()`
+// wires its recorder unconditionally into component_*/page_* themselves and
+// throws a LogicException on every single call when it can't (see
+// Auditor::unanalysable()'s docblock) rather than silently returning an
+// empty trace, so the historical risk this guarded — a registration race
+// silently losing and producing a false-clean empty report — is no longer
+// reachable through this class. What's left is a plain "did we get any
+// results at all" check, kept because it's cheap and still catches a
+// genuinely misconfigured --templates path.
+if (0 === $auditor->recorder->totalCalls()) {
+    fwrite(STDERR, "fields-fixtures: invariant violated — zero component_*/page_* calls were captured "
+        . "across the whole fixture tree. Verify --templates points at a real tree with rendered "
+        . "components. Refusing to report a false-clean result.\n");
+    exit(1);
+}
+
+$findings = $auditor->computeFindings();
+$statuses = $auditor->renderStatuses();
+// MUST-FIX 2 (fields-fixtures-auditor review): failures across EVERY
+// fixture kind (`component`, `page`, `doc`) — `$statuses` above only ever
+// enumerates `componentDirectories()`, so a broken page/doc fixture was
+// previously invisible to both the printed report and the exit code.
+$anyFailures = $auditor->anyRenderFailures();
+
+if ($asJson) {
+    echo json_encode([
+        'findings' => array_map(static fn(Finding $f): array => [
+            'file' => $f->file,
+            'line' => $f->line,
+            'severity' => $f->severity,
+            'kind' => $f->kind,
+            'path' => $f->path,
+            'detail' => $f->detail,
+            'component' => $f->component,
+        ], $findings),
+        'statuses' => $statuses,
+        // MUST-FIX 2: every fixture-kind failure, not just components — see
+        // `$anyFailures` above.
+        'renderFailures' => $anyFailures,
+    ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";
+
+    exit([] !== $anyFailures ? 1 : 0);
+}
+
+/** @var array<string, list<Finding>> $byComponent */
+$byComponent = [];
+foreach ($findings as $finding) {
+    $byComponent[$finding->component][] = $finding;
+}
+
+$lastFile = null;
+foreach ($findings as $finding) {
+    if ($finding->file !== $lastFile) {
+        echo $finding->file . ':' . $finding->line . "\n";
+        $lastFile = $finding->file;
+    }
+    printf(
+        "  %-6s %-20s %-18s %s\n",
+        $finding->severity,
+        $finding->kind,
+        $finding->path,
+        $finding->detail,
+    );
+}
+
+foreach ($statuses as $name => $status) {
+    if ('called' === $status) {
+        continue; // no dedicated line unless it also carries findings — tallied below
+    }
+    echo 'component/' . $name . "\n";
+    $label = match ($status) {
+        'render-failed' => 'error',
+        default => 'skip',
+    };
+    $reason = match ($status) {
+        'render-failed' => (string) $auditor->renderFailureReason($name),
+        'never-called' => 'no styleguide renders this component',
+        'rendered-not-called' => 'own fixture rendered but never called component_' . str_replace('-', '_', $name),
+        // A directory with no <name>.twig has nothing to compare a
+        // declaration or a render trace against — every field would
+        // trivially read as "declared, never read", a category error, not a
+        // finding. Classified distinctly rather than silently skipped (see
+        // Auditor::renderStatuses()'s docblock).
+        'not-auditable' => sprintf('no %s.twig — not a template-backed component, excluded from the audit', $name),
+        default => '',
+    };
+    $tag = match ($status) {
+        'render-failed' => 'render-failed',
+        'never-called' => 'never-rendered',
+        'not-auditable' => 'not-auditable',
+        default => 'rendered-not-called',
+    };
+    printf("  %-6s %-32s %s\n", $label, $tag, $reason);
+}
+
+// Distinct from OK/SKIP/ERROR (deliberately does not flip a component's own
+// render-status tally below) — a component/fixture Styleguide::renderObserved()
+// flagged as unanalysable (an unobservable {% include %} bypassed its
+// recorder) is neither a clean pass nor a render failure; it's a declared
+// blind spot in the evidence itself. See Auditor::unanalysable()'s docblock.
+//
+// It IS still a notice-severity finding, though, and every one of these
+// lines is printed to the report the same as any other finding — so it must
+// still be counted into `$notices` below. `unanalysable()` is keyed by
+// `kind/slug` (e.g. "page/404", "component/child"), not just `component/*`,
+// so a page- or doc-kind entry here has no row at all in `$statuses` (that
+// map only ever enumerates `componentDirectories()`) — counting these here,
+// independent of the per-component loop below, is what keeps the summary
+// honest for every kind, not just components.
+$unanalysableNotices = 0;
+foreach ($auditor->unanalysable() as $key => $reasons) {
+    echo $key . "\n";
+    foreach ($reasons as $reason) {
+        printf("  %-6s %-32s %s\n", 'notice', 'unanalysable', $reason);
+        $unanalysableNotices++;
+    }
+}
+
+// MUST-FIX 2 (fields-fixtures-auditor review): a `page`/`doc` fixture that
+// fails to render has no row in `$statuses` at all (that map only ever
+// enumerates `componentDirectories()`, same reason `$unanalysableOnly` above
+// exists) — printed and counted here, independent of the per-component ERROR
+// loop below, so it is neither silently dropped from the report nor from the
+// exit code.
+$nonComponentErrors = 0;
+foreach ($anyFailures as $key => $reason) {
+    if (str_starts_with($key, 'component/')) {
+        continue; // already reported (and counted into $errors) by the per-component loop below
+    }
+    echo $key . "\n";
+    printf("  %-6s %-32s %s\n", 'error', 'render-failed', $reason);
+    $nonComponentErrors++;
+}
+
+echo "\n";
+
+$errors = 0;
+$notices = $unanalysableNotices;
+$ok = 0;
+$withNotices = 0;
+$skip = 0;
+$notAuditable = 0;
+
+foreach ($statuses as $name => $status) {
+    if ('not-auditable' === $status) {
+        $notAuditable++;
+        continue;
+    }
+
+    $componentFindings = $byComponent[$name] ?? [];
+    $notices += count($componentFindings);
+
+    if ('render-failed' === $status) {
+        $errors++;
+        printf("%-15s ERROR\n", $name);
+        continue;
+    }
+    if (in_array($status, ['never-called', 'rendered-not-called'], true)) {
+        $skip++;
+        printf("%-15s SKIP\n", $name);
+        continue;
+    }
+
+    if ([] !== $componentFindings) {
+        $withNotices++;
+        printf("%-15s OK  %d notice%s\n", $name, count($componentFindings), 1 === count($componentFindings) ? '' : 's');
+    } else {
+        $ok++;
+        printf("%-15s OK\n", $name);
+    }
+}
+
+$unanalysableOnly = 0;
+foreach (array_keys($auditor->unanalysable()) as $key) {
+    if (!str_starts_with($key, 'component/') || !isset($statuses[substr($key, strlen('component/'))])) {
+        $unanalysableOnly++;
+    }
+}
+
+$total = count($statuses) - $notAuditable;
+printf(
+    "%d components: %d OK, %d with notices, %d SKIP  \xc2\xb7  %d errors, %d notices%s%s%s\n",
+    $total,
+    $ok,
+    $withNotices,
+    $skip,
+    $errors,
+    $notices,
+    $notAuditable > 0 ? sprintf("  \xc2\xb7  %d not auditable (excluded)", $notAuditable) : '',
+    $unanalysableOnly > 0 ? sprintf("  \xc2\xb7  %d non-component fixture%s flagged unanalysable", $unanalysableOnly, 1 === $unanalysableOnly ? '' : 's') : '',
+    $nonComponentErrors > 0 ? sprintf("  \xc2\xb7  %d non-component fixture%s failed to render", $nonComponentErrors, 1 === $nonComponentErrors ? '' : 's') : '',
+);
+
+// MUST-FIX 2: a non-component (page/doc) render failure must fail the build
+// exactly as a component one does — [] !== $anyFailures is a superset of
+// $errors > 0 (every component failure is also recorded in $anyFailures),
+// so this single check replaces both without double-counting.
+exit([] !== $anyFailures ? 1 : 0);

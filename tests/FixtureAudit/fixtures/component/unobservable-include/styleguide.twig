@@ -1,0 +1,8 @@
+{# This fixture demonstrates the `component/child` component via a raw
+   `{% include %}` instead of `component_child(...)` — a genuine, resolvable
+   render (unlike `bad-include`, which targets a missing template and fails
+   to render at all). Recorded by `Styleguide::renderObserved()`'s
+   `unobservable` list rather than its `calls` list, because `include` is a
+   Twig tag, not a function the package can wrap — see
+   `fields-contract.spec.js`'s "unobservable include" calibration test. #}
+{% include '@component/child/child.twig' with { content: { label: 'via-raw-include' } } %}

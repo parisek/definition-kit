@@ -1,0 +1,20 @@
+name: "uniform-repeater (fields-contract fixture)"
+fields:
+  items:
+    role: field
+    type: repeater
+    required: true
+    fields:
+      title:
+        role: field
+        required: true
+      always_present:
+        role: field
+      never_present:
+        role: field
+      varying:
+        role: field
+      ungated_uniform:
+        role: field
+      present_varying_truthiness:
+        role: field

@@ -22,13 +22,13 @@
     "require": {
         "php": "^8.3",
         "opis/json-schema": "^2.3",
+        "parisek/styleguide": "^1.11",
         "symfony/yaml": "^6.4 || ^7.0",
         "twig/twig": "^3.10"
     },
     "require-dev": {
         "ergebnis/composer-normalize": "^2.0",
         "parisek/acf-json-schema": "^0.6",
-        "parisek/styleguide": "^1.7",
         "phpstan/phpstan": "^2.0",
         "phpunit/phpunit": "^11.0 || ^12.0"
     },
@@ -43,6 +43,7 @@
         }
     },
     "bin": [
+        "bin/fields-fixtures",
         "bin/fields-generate",
         "bin/fields-lint",
         "bin/fields-migrate",

@@ -1,0 +1,13 @@
+name: "flexible (fields-contract fixture)"
+fields:
+  blocks:
+    role: field
+    layouts:
+      text:
+        fields:
+          body:
+            role: field
+      image:
+        fields:
+          src:
+            role: field

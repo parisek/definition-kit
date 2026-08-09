@@ -1,0 +1,10 @@
+name: "gate-parent (fields-contract fixture)"
+fields:
+  items:
+    role: field
+    fields:
+      previous:
+        role: field
+        fields:
+          disabled:
+            role: field

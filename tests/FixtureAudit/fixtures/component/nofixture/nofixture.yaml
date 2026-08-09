@@ -1,0 +1,4 @@
+name: "nofixture (fields-contract fixture)"
+fields:
+  x:
+    role: field
