@@ -35,7 +35,7 @@ use Parisek\DefinitionKit\Support\StructuralDiff;
  */
 final class BlockResidualCapturer
 {
-    private const CONFIG_SECTIONS = ['acf', 'supports', 'attributes'];
+    private const CONFIG_SECTIONS = ['description', 'keywords', 'acf', 'supports', 'attributes'];
 
     public function __construct(private readonly BlockJsonGenerator $generator = new BlockJsonGenerator())
     {
