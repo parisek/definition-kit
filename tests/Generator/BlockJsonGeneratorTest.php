@@ -126,6 +126,36 @@ final class BlockJsonGeneratorTest extends TestCase
         self::assertSame(['full'], $block['supports']['align']);
     }
 
+    public function test_wp_block_overlay_carries_description_and_keywords(): void
+    {
+        // Both are editor-facing block metadata -- the description panel in the
+        // inserter and its search aliases -- so they are authored per block and
+        // cannot be derived. They were absent from the overlay list while the
+        // derivation hardcoded them to null, so every regeneration silently
+        // deleted whatever a project had written. Found on sloneek, where four
+        // block.json files had to be kept out of the generator to survive.
+        $tree = [
+            'name' => 'Demo',
+            'wp' => ['block' => [
+                'description' => 'Tip, upozornění nebo citace uvnitř textu článku.',
+                'keywords' => ['tip', 'citace', 'callout'],
+            ]],
+        ];
+        $block = $this->generator->generate($tree, 'demo');
+
+        self::assertSame('Tip, upozornění nebo citace uvnitř textu článku.', $block['description']);
+        self::assertSame(['tip', 'citace', 'callout'], $block['keywords']);
+    }
+
+    public function test_absent_description_and_keywords_still_derive_to_null(): void
+    {
+        // The overlay must not change the no-wp.block case: a project that
+        // never authored either prop keeps the null ACF itself emits.
+        $block = $this->generator->generate(['name' => 'Demo'], 'demo');
+        self::assertNull($block['description']);
+        self::assertNull($block['keywords']);
+    }
+
     public function test_wp_block_overlay_captured_null_attributes_removes_the_key(): void
     {
         // A captured `attributes: null` means the original block.json carried

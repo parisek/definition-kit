@@ -7,11 +7,18 @@ namespace Parisek\DefinitionKit\Generator;
 /**
  * Generates block.json from a definition tree's root metadata. A census
  * over all 49 mairateam block.json files proves almost every prop is
- * fixed boilerplate (apiVersion/category/description/icon/acf are
- * byte-identical across the whole corpus); the one genuine axis of
- * variation (`supports.align` + `attributes.align`) derives cleanly from
- * the `render:` root metadata dávka 2's TwigMetadataReader already
- * captures.
+ * fixed boilerplate (apiVersion/category/icon/acf are byte-identical
+ * across the whole corpus); the one genuine axis of variation
+ * (`supports.align` + `attributes.align`) derives cleanly from the
+ * `render:` root metadata dávka 2's TwigMetadataReader already captures.
+ *
+ * `description` was in that boilerplate list until sloneek falsified it:
+ * four of its blocks carry real, distinct descriptions and keywords, and
+ * both were being overwritten with null on every regeneration. The census
+ * held for one corpus, not for the format -- both props are editor-facing
+ * (the inserter's description panel and its search aliases), so they are
+ * authored per block and now overlay from `wp.block` like any other
+ * non-derivable section.
  *
  * Two props are NOT derivable from the definition and are therefore
  * preserved verbatim from an existing block.json, with the generated value
@@ -92,7 +99,7 @@ final class BlockJsonGenerator
         // no styleguide-shaped preview) must keep it even when regenerating
         // from scratch, where preservation-from-disk has no file to read.
         $wpBlock = (array) (($definitionTree['wp'] ?? [])['block'] ?? []);
-        foreach (['acf', 'supports', 'attributes', 'example'] as $section) {
+        foreach (['description', 'keywords', 'acf', 'supports', 'attributes', 'example'] as $section) {
             if (array_key_exists($section, $wpBlock)) {
                 $block[$section] = $wpBlock[$section];
             }

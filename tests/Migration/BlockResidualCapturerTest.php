@@ -86,13 +86,30 @@ final class BlockResidualCapturerTest extends TestCase
         self::assertArrayNotHasKey('attributes', $wpBlock);
     }
 
-    public function test_only_the_three_config_sections_are_ever_captured(): void
+
+    public function test_authored_description_and_keywords_are_captured(): void
     {
-        // A divergent title / description / icon must never leak into wp.block —
-        // those are fully derived and owned by the generator.
+        // The migration half of the same defect the generator overlay fixes: a
+        // real block.json carrying editor copy must round-trip into wp.block,
+        // or the very next regeneration nulls it out again.
+        $real = $this->derived();
+        $real['description'] = 'Tip, upozornění nebo citace uvnitř textu článku.';
+        $real['keywords'] = ['tip', 'citace'];
+
+        $wpBlock = $this->capturer->capture(['name' => 'Demo'], 'demo', $real);
+
+        self::assertSame('Tip, upozornění nebo citace uvnitř textu článku.', $wpBlock['description']);
+        self::assertSame(['tip', 'citace'], $wpBlock['keywords']);
+    }
+
+    public function test_only_the_config_sections_are_ever_captured(): void
+    {
+        // A divergent title / icon must never leak into wp.block — those are
+        // fully derived and owned by the generator. `description` is NOT among
+        // them: it is editor-facing and authored per block, so a real
+        // block.json that carries one must have it captured.
         $real = $this->derived();
         $real['title'] = 'Something Else';
-        $real['description'] = 'nonsense';
         $real['acf']['postTypes'] = ['page'];
 
         $wpBlock = $this->capturer->capture(['name' => 'Demo'], 'demo', $real);

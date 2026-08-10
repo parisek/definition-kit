@@ -8,6 +8,37 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 <!-- New entries go directly under this line. It is the anchor that keeps a branch's
      changelog edit from merging into a version that shipped without it. -->
 
+### Fixed
+
+- **`block.json` no longer overwrites `description` and `keywords` with null.**
+  Both are editor-facing metadata — the description panel in the block inserter
+  and its search aliases — so they are authored per block and cannot be derived.
+  `BlockJsonGenerator` hardcoded both to `null` and omitted them from the
+  `wp.block` overlay list, so a project that authored either lost it on every
+  regeneration. The input side already accepted them and the output schema never
+  forbade them; only the mapping between the two was missing.
+
+  Found on `sloneek`, where four `block.json` files had to be excluded from the
+  generator to keep their copy — which re-seeds exactly the hand-maintained-
+  generated-file drift the tool exists to remove.
+
+  The class docblock claimed `description` was fixed boilerplate, "byte-identical
+  across the whole corpus". That census was one corpus (49 mairateam blocks), not
+  a property of the format; the claim is corrected rather than deleted, so the
+  next reader does not restore the old list.
+
+  `BlockResidualCapturer` gained the same two sections. The generator fix alone
+  only helped components whose definition already carried the props; a project
+  migrating an existing `block.json` still lost its editor copy at capture time
+  and again on the next regeneration.
+
+  The schema's own `description` documentation promised a projection into
+  `block.json.description` that was never implemented. It is corrected rather
+  than implemented: the two fields serve different audiences and different
+  length budgets — the inserter panel needs one short sentence, while the
+  component-level field is where full editorial context lives — so projecting
+  one into the other would push paragraphs into the editor UI.
+
 ## [0.8.0] - 2026-08-09
 
 ### Added

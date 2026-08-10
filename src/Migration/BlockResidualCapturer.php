@@ -15,9 +15,18 @@ use Parisek\DefinitionKit\Support\StructuralDiff;
  *
  * Self-diff: run the generator on the very tree being migrated, then compare —
  * per top-level config section — against the real block.json. The non-derivable
- * surface is exactly three sections: `acf` (holds `postTypes`), `supports`,
- * `attributes`. `name`/`title`/`description`/`icon`/`example`/`apiVersion`
- * stay fully derived and are never captured.
+ * surface is five sections: `description`, `keywords`, `acf` (holds
+ * `postTypes`), `supports`, `attributes`. `name`/`title`/`icon`/`apiVersion`
+ * stay fully derived and are never captured. `example` is a half-case: its
+ * value is never captured, but an explicit `null` one is — see the end of
+ * `capture()` for why a deliberate "no meaningful preview" decision has
+ * nowhere else to live.
+ *
+ * `description`/`keywords` were on the derived list until a migration proved
+ * they are not. Both are editor-facing — the inserter's description panel and
+ * its search aliases — so they are authored per block like `postTypes`, and a
+ * project that had written either lost it at capture time and again on every
+ * regeneration, because the generator hardcodes both to null.
  *
  * Direction matters. Only the DATA-LOSS direction is captured — a section the
  * real block.json HAS whose value the generator did not reproduce. The opposite
@@ -35,7 +44,7 @@ use Parisek\DefinitionKit\Support\StructuralDiff;
  */
 final class BlockResidualCapturer
 {
-    private const CONFIG_SECTIONS = ['acf', 'supports', 'attributes'];
+    private const CONFIG_SECTIONS = ['description', 'keywords', 'acf', 'supports', 'attributes'];
 
     public function __construct(private readonly BlockJsonGenerator $generator = new BlockJsonGenerator())
     {
@@ -61,7 +70,7 @@ final class BlockResidualCapturer
             }
         }
 
-        // `example` needs a different comparison from the three sections
+        // `example` needs a different comparison from the config sections
         // above. BlockJsonGenerator PRESERVES an existing block.json's
         // example verbatim (issue #13), and it is handed the real file on
         // line 52 -- so $derived['example'] always equals the real one and a
