@@ -16,8 +16,11 @@ use Parisek\DefinitionKit\Support\StructuralDiff;
  * Self-diff: run the generator on the very tree being migrated, then compare —
  * per top-level config section — against the real block.json. The non-derivable
  * surface is five sections: `description`, `keywords`, `acf` (holds
- * `postTypes`), `supports`, `attributes`. `name`/`title`/`icon`/`example`/
- * `apiVersion` stay fully derived and are never captured.
+ * `postTypes`), `supports`, `attributes`. `name`/`title`/`icon`/`apiVersion`
+ * stay fully derived and are never captured. `example` is a half-case: its
+ * value is never captured, but an explicit `null` one is — see the end of
+ * `capture()` for why a deliberate "no meaningful preview" decision has
+ * nowhere else to live.
  *
  * `description`/`keywords` were on the derived list until a migration proved
  * they are not. Both are editor-facing — the inserter's description panel and
