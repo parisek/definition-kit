@@ -27,6 +27,18 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   a property of the format; the claim is corrected rather than deleted, so the
   next reader does not restore the old list.
 
+  `BlockResidualCapturer` gained the same two sections. The generator fix alone
+  only helped components whose definition already carried the props; a project
+  migrating an existing `block.json` still lost its editor copy at capture time
+  and again on the next regeneration.
+
+  The schema's own `description` documentation promised a projection into
+  `block.json.description` that was never implemented. It is corrected rather
+  than implemented: the two fields serve different audiences and different
+  length budgets — the inserter panel needs one short sentence, while the
+  component-level field is where full editorial context lives — so projecting
+  one into the other would push paragraphs into the editor UI.
+
 ## [0.8.0] - 2026-08-09
 
 ### Added

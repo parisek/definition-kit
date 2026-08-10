@@ -76,7 +76,7 @@
         },
         "description": {
             "type": "string",
-            "description": "What this component is, written for the EDITOR — it projects into block.json's `description` and is what a human reads in the Gutenberg inserter. One sentence, plain language, no implementation detail. Deliberately not the agent's copy: an AI agent reads `mcp:`, a developer reads `dev:`. The same triad exists at component, layout and field level, so the audience of a line is readable from its key instead of guessed from its wording."
+            "description": "What this component is, written for the EDITOR. It does NOT project into block.json's `description`: that one renders in the Gutenberg inserter panel and has to stay a short single sentence, while this field is where a component's full editorial context lives and runs to paragraphs in practice. Projecting one into the other was documented here and never implemented; the block-facing text is authored explicitly as `wp.block.description` instead, so the two audiences can diverge without either being truncated to fit the other. One sentence, plain language, no implementation detail. Deliberately not the agent's copy: an AI agent reads `mcp:`, a developer reads `dev:`. The same triad exists at component, layout and field level, so the audience of a line is readable from its key instead of guessed from its wording."
         },
         "mcp": {
             "$ref": "#/$defs/multivalueAnnotation",
