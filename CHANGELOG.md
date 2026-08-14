@@ -8,6 +8,36 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 <!-- New entries go directly under this line. It is the anchor that keeps a branch's
      changelog edit from merging into a version that shipped without it. -->
 
+### Fixed
+
+- **`fields-lint` no longer flags `acf_fc_layout` as an undeclared prop.**
+  `acf_fc_layout` is ACF's own discriminator on every flexible_content row —
+  not an author-declared field, and there is no `role:` in the taxonomy that
+  could describe it, so the linter's own suggested fix ("declare it under
+  `fields:`") could never be followed. A template reading `<field>.acf_fc_layout`
+  where `<field>` is declared `type: flexible_content` is now accounted for
+  without any change to the definition.
+
+  The inverse is now also caught, which it was not before: reading
+  `acf_fc_layout` off a `repeater` or `group` field is a real defect — the key
+  does not exist there, the comparison it feeds is always false, and the
+  branch it guards can never render. `ContractLinter` reports this as its own
+  finding (`impossible-acf-fc-layout-read`), distinct from the generic
+  "no role accounts for it" message, because the fix is different: remove the
+  dead branch, not declare an undeclarable prop.
+
+  Also added: when the compared literal (`content.items.acf_fc_layout == '…'`)
+  names none of the flexible_content field's declared `layouts:` keys, that
+  branch is dead code too and is now reported (`dead-layout-literal`). This
+  reuses the same declared-layout list the linter already reads, and only
+  covers the one comparison shape a static parse can resolve without
+  evaluating the template: `<path> == '<string-literal>'`. `!=` is not
+  covered — a non-matching literal there means the opposite ("always true"),
+  a different diagnosis this check does not attempt.
+
+  Found on `sloneek` — the last unresolved false positive standing between
+  `fields-lint` and being gated in `check:all` (#63).
+
 ## [0.8.1] - 2026-08-10
 
 ### Fixed

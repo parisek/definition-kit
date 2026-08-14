@@ -134,13 +134,23 @@ final class ContractLinter
         }
 
         $violations = [];
+        $discriminatorNotes = [];
         foreach ($reads->reads as $read) {
-            if (!$this->isAccountedFor($read, $fields, $shapes)) {
+            $outcome = $this->isAccountedFor($read, $fields, $shapes);
+            if (null !== $outcome['note']) {
+                $discriminatorNotes[] = $outcome['note'];
+            }
+            if (!$outcome['accounted']) {
                 $violations[] = $read;
             }
         }
 
-        $notes = [...$reads->notes, ...$forwardNotes];
+        $discriminatorNotes = [
+            ...$discriminatorNotes,
+            ...$this->deadLayoutLiteralNotes($reads->comparisons, $fields, $shapes),
+        ];
+
+        $notes = [...$reads->notes, ...$forwardNotes, ...$discriminatorNotes];
 
         if ([] === $fields) {
             // `fields: {}` and a template that reads nothing but framework
@@ -310,29 +320,95 @@ final class ContractLinter
     /**
      * @param array<string,mixed> $fields
      */
-    private function isAccountedFor(string $read, array $fields, ComponentShapeResolver $shapes): bool
+    /**
+     * @param array<string,mixed> $fields
+     * @return array{accounted: bool, note: ?array{kind: string, detail: string}}
+     */
+    private function isAccountedFor(string $read, array $fields, ComponentShapeResolver $shapes): array
     {
         $segments = explode('.', $read);
 
         if ($this->frameworkProps->isFrameworkProp($segments[0])) {
-            return true;
+            return ['accounted' => true, 'note' => null];
         }
 
         $level = $fields;
+        // The field whose children $level currently enumerates — null at the
+        // root. Needed only to answer "is `acf_fc_layout` legal here", which
+        // depends on the immediately enclosing field's own declared type,
+        // not on anything $level itself carries (a merged flexible_content
+        // `layouts:` never lists `acf_fc_layout` — it is ACF's discriminator,
+        // not an author-declared row field, so it can never appear as a key
+        // there; see issue #63).
+        //
+        // Known, deliberately unfixed limitation (Codex review, PR #64): when
+        // two layouts of the SAME flexible_content field declare a
+        // same-named sub-field with different `type:`s (one flexible_content,
+        // one not), $parentField below is whichever layout's declaration
+        // childrenOf() merged in last — pre-existing "last write wins"
+        // ambiguity in the layout merge, not new to this check. A dangling
+        // `acf_fc_layout` read reached only through the OTHER layout's
+        // shape of that field can go unreported. Fixing it needs the merge
+        // itself to carry per-layout provenance, which is a larger change to
+        // childrenOf() than this bugfix's scope; the shape is narrow enough
+        // (two layouts, same field name, different container types) that no
+        // real component has hit it yet.
+        $parentField = null;
 
         foreach ($segments as $index => $segment) {
+            // Only special-cased as the FINAL segment. `acf_fc_layout.typo`
+            // or `acf_fc_layout['x']` is not a bare discriminator read — it
+            // has no ACF meaning under either branch below, and treating it
+            // as one would accept a malformed read the pre-fix code caught
+            // (Codex review, issue #63 PR #64).
+            $isLastSegment = $index === array_key_last($segments);
+            if ('acf_fc_layout' === $segment && $isLastSegment && is_array($parentField)) {
+                if ('flexible_content' === ($parentField['type'] ?? null)) {
+                    return ['accounted' => true, 'note' => null];
+                }
+
+                // The enclosing field is declared but is not
+                // flexible_content: acf_fc_layout does not exist there, the
+                // comparison it feeds is always false, and the branch it
+                // guards can never render. Distinct from — and more useful
+                // than — "no role accounts for this prop", because that
+                // message asks the author to declare something that cannot
+                // be declared.
+                $parentPath = implode('.', array_slice($segments, 0, $index));
+
+                // Reported via the note, not the generic violation list — the
+                // plain "no role accounts for this prop" message asks the
+                // author to declare `acf_fc_layout`, which is impossible.
+                // `accounted: true` here keeps it out of that list;
+                // isFailure() still fails the component off the note kind.
+                return [
+                    'accounted' => true,
+                    'note' => [
+                        'kind' => ContractResult::NOTE_IMPOSSIBLE_DISCRIMINATOR,
+                        'detail' => sprintf(
+                            "reads `content.%s`, but `%s` is `%s`, not `flexible_content` — "
+                            . 'acf_fc_layout only exists on flexible_content rows, so this '
+                            . 'comparison is always false and the branch it guards can never render',
+                            $read,
+                            $parentPath,
+                            $parentField['type'] ?? 'unknown',
+                        ),
+                    ],
+                ];
+            }
+
             $field = $level[$segment] ?? null;
 
             if (!is_array($field)) {
                 // Unknown at a level the definition enumerates. At the root
                 // that is an undeclared input; deeper, it is an undeclared row
                 // field of an enumerated repeater — both are real.
-                return false;
+                return ['accounted' => false, 'note' => null];
             }
 
             $isLast = $index === array_key_last($segments);
             if ($isLast) {
-                return true;
+                return ['accounted' => true, 'note' => null];
             }
 
             $children = $this->childrenOf($field, $shapes);
@@ -340,13 +416,113 @@ final class ContractLinter
                 // A declared leaf, or a field whose structure the definition
                 // never claimed to enumerate. Everything below it belongs to
                 // that value, not to the component's contract.
-                return true;
+                return ['accounted' => true, 'note' => null];
+            }
+
+            $level = $children;
+            $parentField = $field;
+        }
+
+        return ['accounted' => true, 'note' => null];
+    }
+
+    /**
+     * Part 3 of issue #63: `<field>.acf_fc_layout == '<literal>'` where
+     * `<field>` is `type: flexible_content` and `<literal>` names none of its
+     * declared `layouts:` keys. The branch can never be taken — the
+     * definition already lists every layout that can occur.
+     *
+     * Deliberately narrow: only fires when the path resolves to a declared
+     * flexible_content field's own `acf_fc_layout` and the comparator's
+     * `TwigPropExtractor` could statically resolve the literal. Anything the
+     * extractor did not capture (computed comparisons, a level the
+     * definition does not enumerate) is silently out of scope rather than
+     * guessed at.
+     *
+     * @param list<array{path: string, literal: string}> $comparisons
+     * @param array<string,mixed> $fields
+     * @return list<array{kind: string, detail: string}>
+     */
+    private function deadLayoutLiteralNotes(array $comparisons, array $fields, ComponentShapeResolver $shapes): array
+    {
+        $notes = [];
+
+        foreach ($comparisons as $comparison) {
+            $segments = explode('.', $comparison['path']);
+            if ('acf_fc_layout' !== end($segments)) {
+                continue;
+            }
+
+            $fieldPath = array_slice($segments, 0, -1);
+            $field = $this->fieldAt($fieldPath, $fields, $shapes);
+
+            if (null === $field || 'flexible_content' !== ($field['type'] ?? null)) {
+                // Not a flexible_content field — either unresolvable (nothing
+                // to check) or already reported by isAccountedFor() above as
+                // an impossible discriminator, which is the more relevant
+                // finding for that shape.
+                continue;
+            }
+
+            $layouts = is_array($field['layouts'] ?? null) ? $field['layouts'] : [];
+            if (array_key_exists($comparison['literal'], $layouts)) {
+                continue;
+            }
+
+            $notes[] = [
+                'kind' => ContractResult::NOTE_DEAD_LAYOUT_LITERAL,
+                'detail' => sprintf(
+                    "content.%s == '%s' can never be true — declared layouts for `%s` are: %s",
+                    $comparison['path'],
+                    $comparison['literal'],
+                    implode('.', $fieldPath),
+                    [] === $layouts ? '(none)' : implode(', ', array_keys($layouts)),
+                ),
+            ];
+        }
+
+        return $notes;
+    }
+
+    /**
+     * Walks a dotted field path against a definition's `fields:` map,
+     * following flexible_content `layouts:` the same way `childrenOf()`
+     * does for repeaters/groups — but returning the field itself rather than
+     * its children, since the caller needs the field's own `type`/`layouts`.
+     *
+     * @param list<string> $path
+     * @param array<string,mixed> $fields
+     * @return array<string,mixed>|null
+     */
+    private function fieldAt(array $path, array $fields, ComponentShapeResolver $shapes): ?array
+    {
+        $level = $fields;
+        $field = null;
+
+        foreach ($path as $index => $segment) {
+            $field = $level[$segment] ?? null;
+            if (!is_array($field)) {
+                return null;
+            }
+
+            if ($index === array_key_last($path)) {
+                return $field;
+            }
+
+            // Delegates to childrenOf() rather than re-walking `fields:` /
+            // `layouts:` here — it already follows `of:` forwards through
+            // ComponentShapeResolver, which a hand-rolled duplicate here
+            // previously did not (issue #63 PR #64 review): a dead layout
+            // literal underneath a forwarded shape went unchecked.
+            $children = $this->childrenOf($field, $shapes);
+            if (null === $children) {
+                return null;
             }
 
             $level = $children;
         }
 
-        return true;
+        return $field;
     }
 
     /**

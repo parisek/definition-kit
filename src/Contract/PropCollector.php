@@ -22,6 +22,19 @@ final class PropCollector
     /** @var list<string> */
     public array $reads = [];
 
+    /**
+     * `<path> == '<literal>'` comparisons against a string constant, keyed
+     * by nothing — order of encounter, duplicates kept out by the caller
+     * (`!=` is deliberately not captured — see `TwigPropExtractor::walk()`).
+     * Feeds the flexible_content layout-literal check: the
+     * definition already lists the valid `layouts:` keys, so a literal that
+     * matches none of them is dead code the parser can name without
+     * evaluating the template.
+     *
+     * @var list<array{path: string, literal: string}>
+     */
+    public array $comparisons = [];
+
     /** @var list<array{kind: string, detail: string}> */
     public array $notes = [];
 
@@ -68,6 +81,17 @@ final class PropCollector
     public function read(string $path): void
     {
         $this->reads[] = $path;
+    }
+
+    public function compare(string $path, string $literal): void
+    {
+        foreach ($this->comparisons as $existing) {
+            if ($existing['path'] === $path && $existing['literal'] === $literal) {
+                return;
+            }
+        }
+
+        $this->comparisons[] = ['path' => $path, 'literal' => $literal];
     }
 
     public function note(string $kind, string $detail): void

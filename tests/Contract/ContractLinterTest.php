@@ -717,4 +717,205 @@ final class ContractLinterTest extends TestCase
         self::assertSame(['ratings'], $bareResult->violations);
         self::assertSame(['ratings'], $atResult->violations);
     }
+
+    // --- acf_fc_layout (issue #63) ------------------------------------------
+
+    public function testFlexibleContentLayoutDiscriminatorIsAccountedForWithoutDeclaration(): void
+    {
+        // `acf_fc_layout` is ACF's own discriminator on every flexible_content
+        // row. It cannot be declared under `fields:` — it has no role in the
+        // taxonomy — so a template branching on it must not be a violation.
+        $dir = $this->component('team-gallery', <<<'YAML'
+        name: Team gallery
+        fields:
+          items:
+            type: flexible_content
+            label: Items
+            role: field
+            layouts:
+              image: { fields: { photo: { type: media, kind: image, label: Photo } } }
+              quote: { fields: { text: { type: text, label: Text } } }
+        YAML, '{% for item in content.items %}'
+            . '{% if item.acf_fc_layout == "image" %}{{ item.photo }}'
+            . '{% elseif item.acf_fc_layout == "quote" %}{{ item.text }}'
+            . '{% endif %}{% endfor %}');
+
+        $result = $this->lint($dir);
+
+        self::assertSame(ContractResult::TYPED, $result->status);
+        self::assertSame([], $result->violations);
+        self::assertFalse($result->isFailure());
+    }
+
+    public function testAcfFcLayoutReadOnARepeaterIsAnImpossibleComparisonNotAnUndeclaredProp(): void
+    {
+        // The inverse of the above: `acf_fc_layout` does not exist on a
+        // repeater row. The comparison is always false, so this is a defect —
+        // and a different, clearer one than "no role accounts for it".
+        $dir = $this->component('list', <<<'YAML'
+        name: List
+        fields:
+          items:
+            type: repeater
+            label: Items
+            role: field
+            fields:
+              value: { type: text, label: Value }
+        YAML, '{% for item in content.items %}'
+            . '{% if item.acf_fc_layout == "video" %}{{ item.value }}{% endif %}'
+            . '{% endfor %}');
+
+        $result = $this->lint($dir);
+
+        self::assertSame([], $result->violations, 'not a plain undeclared-prop violation');
+        self::assertContains(ContractResult::NOTE_IMPOSSIBLE_DISCRIMINATOR, $result->noteKinds());
+        self::assertTrue($result->isFailure());
+    }
+
+    public function testAcfFcLayoutReadOnAGroupIsAlsoAnImpossibleComparison(): void
+    {
+        $dir = $this->component('card', <<<'YAML'
+        name: Card
+        fields:
+          meta:
+            type: group
+            label: Meta
+            role: field
+            fields:
+              label: { type: text, label: Label }
+        YAML, '{% if content.meta.acf_fc_layout == "video" %}{{ content.meta.label }}{% endif %}');
+
+        $result = $this->lint($dir);
+
+        self::assertContains(ContractResult::NOTE_IMPOSSIBLE_DISCRIMINATOR, $result->noteKinds());
+        self::assertTrue($result->isFailure());
+    }
+
+    public function testALayoutLiteralMatchingNoDeclaredLayoutIsDeadCode(): void
+    {
+        $dir = $this->component('team-gallery', <<<'YAML'
+        name: Team gallery
+        fields:
+          items:
+            type: flexible_content
+            label: Items
+            role: field
+            layouts:
+              image: { fields: { photo: { type: media, kind: image, label: Photo } } }
+              quote: { fields: { text: { type: text, label: Text } } }
+        YAML, '{% for item in content.items %}'
+            . '{% if item.acf_fc_layout == "video" %}{{ item.photo }}{% endif %}'
+            . '{% endfor %}');
+
+        $result = $this->lint($dir);
+
+        self::assertContains(ContractResult::NOTE_DEAD_LAYOUT_LITERAL, $result->noteKinds());
+        self::assertTrue($result->isFailure());
+    }
+
+    public function testALayoutLiteralMatchingADeclaredLayoutIsClean(): void
+    {
+        $dir = $this->component('team-gallery', <<<'YAML'
+        name: Team gallery
+        fields:
+          items:
+            type: flexible_content
+            label: Items
+            role: field
+            layouts:
+              image: { fields: { photo: { type: media, kind: image, label: Photo } } }
+              quote: { fields: { text: { type: text, label: Text } } }
+        YAML, '{% for item in content.items %}'
+            . '{% if item.acf_fc_layout == "image" %}{{ item.photo }}{% endif %}'
+            . '{% endfor %}');
+
+        $result = $this->lint($dir);
+
+        self::assertNotContains(ContractResult::NOTE_DEAD_LAYOUT_LITERAL, $result->noteKinds());
+        self::assertSame(ContractResult::TYPED, $result->status);
+        self::assertFalse($result->isFailure());
+    }
+
+    public function testAPathPastAcfFcLayoutIsStillAnUndeclaredPropNotAWaivedRead(): void
+    {
+        // Codex review, issue #63 PR #64: the discriminator exemption must
+        // only fire when `acf_fc_layout` is the FINAL segment. A read past
+        // it (a typo'd sub-access, an accidental subscript) has no ACF
+        // meaning under flexible_content either, and the pre-fix code
+        // already caught it as undeclared — the fix must not waive it.
+        $dir = $this->component('team-gallery', <<<'YAML'
+        name: Team gallery
+        fields:
+          items:
+            type: flexible_content
+            label: Items
+            role: field
+            layouts:
+              image: { fields: { photo: { type: media, kind: image, label: Photo } } }
+        YAML, '{% for item in content.items %}{{ item.acf_fc_layout.typo }}{% endfor %}');
+
+        $result = $this->lint($dir);
+
+        self::assertSame(['items.acf_fc_layout.typo'], $result->violations);
+    }
+
+    public function testANotEqualComparisonAgainstAcfFcLayoutIsNotMisreportedAsDeadCode(): void
+    {
+        // Codex review, issue #63 PR #64: `!=` was originally recorded
+        // identically to `==`, so "literal matches no declared layout"
+        // (always false for `==`) was wrongly reported for `!=` too, where
+        // a non-matching literal makes the condition always TRUE, not dead.
+        // Part 3 only claims the `==` shape; `!=` must produce no comparison
+        // finding at all rather than a wrong one.
+        $dir = $this->component('team-gallery', <<<'YAML'
+        name: Team gallery
+        fields:
+          items:
+            type: flexible_content
+            label: Items
+            role: field
+            layouts:
+              image: { fields: { photo: { type: media, kind: image, label: Photo } } }
+        YAML, '{% for item in content.items %}'
+            . '{% if item.acf_fc_layout != "nonexistent" %}{{ item.photo }}{% endif %}'
+            . '{% endfor %}');
+
+        $result = $this->lint($dir);
+
+        self::assertNotContains(ContractResult::NOTE_DEAD_LAYOUT_LITERAL, $result->noteKinds());
+    }
+
+    public function testADeadLayoutLiteralIsCaughtThroughAForwardedComponent(): void
+    {
+        // Codex review, issue #63 PR #64: deadLayoutLiteralNotes() used a
+        // hand-rolled walker that did not follow `of:` targets the way
+        // isAccountedFor()/childrenOf() do, so a dead literal reached through
+        // a forwarded component's own flexible_content field went unchecked.
+        // (`of: component:<slug>#<field>` cannot target a flexible_content
+        // field at all — ComponentShapeResolver only walks `fields:`, not
+        // `layouts:`, down a suffixed path — so this exercises the
+        // whole-component forward instead, which is the reachable shape.)
+        $this->component('team-gallery', <<<'YAML'
+        name: Team gallery
+        fields:
+          items:
+            type: flexible_content
+            label: Items
+            role: field
+            layouts:
+              image: { fields: { photo: { type: media, kind: image, label: Photo } } }
+        YAML, '{% for item in content.items %}{{ item.photo }}{% endfor %}');
+
+        $dir = $this->component('header', <<<'YAML'
+        name: Header
+        fields:
+          forwarded: { type: group, label: Forwarded, role: parent, of: component:team-gallery }
+        YAML, '{% for item in content.forwarded.items %}'
+            . '{% if item.acf_fc_layout == "video" %}{{ item.photo }}{% endif %}'
+            . '{% endfor %}');
+
+        $result = $this->lint($dir);
+
+        self::assertContains(ContractResult::NOTE_DEAD_LAYOUT_LITERAL, $result->noteKinds());
+    }
 }

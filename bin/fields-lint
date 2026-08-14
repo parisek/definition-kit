@@ -165,9 +165,15 @@ foreach ($contractResults as $contract) {
     switch ($contract->status) {
         case ContractResult::TYPED:
             $typed++;
-            echo $contract->isFailure()
-                ? "  BROKEN REF {$contract->component}\n"
-                : "  OK        {$contract->component}\n";
+            $noteKinds = $contract->noteKinds();
+            if (in_array(ContractResult::NOTE_IMPOSSIBLE_DISCRIMINATOR, $noteKinds, true)
+                || in_array(ContractResult::NOTE_DEAD_LAYOUT_LITERAL, $noteKinds, true)) {
+                echo "  DEAD BRANCH {$contract->component}\n";
+            } elseif ($contract->isFailure()) {
+                echo "  BROKEN REF {$contract->component}\n";
+            } else {
+                echo "  OK        {$contract->component}\n";
+            }
             break;
         case ContractResult::VIOLATIONS:
             $typed++;
