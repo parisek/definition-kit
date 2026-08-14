@@ -23,9 +23,10 @@ final class PropCollector
     public array $reads = [];
 
     /**
-     * `<path> == '<literal>'` (or `!=`) comparisons against a string
-     * constant, keyed by nothing — order of encounter, duplicates kept out
-     * by the caller. Feeds the flexible_content layout-literal check: the
+     * `<path> == '<literal>'` comparisons against a string constant, keyed
+     * by nothing — order of encounter, duplicates kept out by the caller
+     * (`!=` is deliberately not captured — see `TwigPropExtractor::walk()`).
+     * Feeds the flexible_content layout-literal check: the
      * definition already lists the valid `layouts:` keys, so a literal that
      * matches none of them is dead code the parser can name without
      * evaluating the template.

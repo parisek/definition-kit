@@ -30,8 +30,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   names none of the flexible_content field's declared `layouts:` keys, that
   branch is dead code too and is now reported (`dead-layout-literal`). This
   reuses the same declared-layout list the linter already reads, and only
-  covers the one comparison shape (`<path> == '<string>'` / `!=`) a static
-  parse can resolve without evaluating the template.
+  covers the one comparison shape a static parse can resolve without
+  evaluating the template: `<path> == '<string-literal>'`. `!=` is not
+  covered — a non-matching literal there means the opposite ("always true"),
+  a different diagnosis this check does not attempt.
 
   Found on `sloneek` — the last unresolved false positive standing between
   `fields-lint` and being gated in `check:all` (#63).

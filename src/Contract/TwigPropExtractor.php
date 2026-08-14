@@ -7,7 +7,6 @@ namespace Parisek\DefinitionKit\Contract;
 use Twig\Error\SyntaxError;
 use Twig\Node\EmbedNode;
 use Twig\Node\Expression\Binary\EqualBinary;
-use Twig\Node\Expression\Binary\NotEqualBinary;
 use Twig\Node\Expression\ConstantExpression;
 use Twig\Node\Expression\FunctionExpression;
 use Twig\Node\Expression\GetAttrExpression;
@@ -201,7 +200,13 @@ final class TwigPropExtractor
             return;
         }
 
-        if ($node instanceof EqualBinary || $node instanceof NotEqualBinary) {
+        if ($node instanceof EqualBinary) {
+            // NotEqualBinary is deliberately NOT handled here. "literal does
+            // not match any declared layout" only means "always dead" for
+            // `==` — for `!=` it would mean the opposite (always true), a
+            // different diagnosis this walker does not attempt (Codex review,
+            // issue #63 PR #64). Recording it identically to `==` produced a
+            // wrong "can never be true" message on an always-true condition.
             $this->walkComparison($node, $collector, $bindings);
             // Falls through to the generic recursion below — the comparison
             // check is additive, not a substitute for the ordinary read
@@ -215,12 +220,12 @@ final class TwigPropExtractor
     }
 
     /**
-     * `<path> == '<literal>'` / `!=`, one side a content path, the other a
-     * string constant — the one shape statically resolvable without
-     * evaluating the template. Anything else (two dynamic values, a
-     * non-string constant, a computed key) is left alone; this is not
-     * general expression evaluation, only the narrow pattern flexible_content
-     * layout discrimination is written in.
+     * `<path> == '<literal>'`, one side a content path, the other a string
+     * constant — the one shape statically resolvable without evaluating the
+     * template. Anything else (two dynamic values, a non-string constant, a
+     * computed key, `!=`, `in`/`not in`) is left alone; this is not general
+     * expression evaluation, only the narrow pattern flexible_content layout
+     * discrimination is written in.
      *
      * @param array<string,string> $bindings
      */

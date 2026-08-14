@@ -145,7 +145,10 @@ final class ContractLinter
             }
         }
 
-        $discriminatorNotes = [...$discriminatorNotes, ...$this->deadLayoutLiteralNotes($reads->comparisons, $fields)];
+        $discriminatorNotes = [
+            ...$discriminatorNotes,
+            ...$this->deadLayoutLiteralNotes($reads->comparisons, $fields, $shapes),
+        ];
 
         $notes = [...$reads->notes, ...$forwardNotes, ...$discriminatorNotes];
 
@@ -337,10 +340,29 @@ final class ContractLinter
         // `layouts:` never lists `acf_fc_layout` — it is ACF's discriminator,
         // not an author-declared row field, so it can never appear as a key
         // there; see issue #63).
+        //
+        // Known, deliberately unfixed limitation (Codex review, PR #64): when
+        // two layouts of the SAME flexible_content field declare a
+        // same-named sub-field with different `type:`s (one flexible_content,
+        // one not), $parentField below is whichever layout's declaration
+        // childrenOf() merged in last — pre-existing "last write wins"
+        // ambiguity in the layout merge, not new to this check. A dangling
+        // `acf_fc_layout` read reached only through the OTHER layout's
+        // shape of that field can go unreported. Fixing it needs the merge
+        // itself to carry per-layout provenance, which is a larger change to
+        // childrenOf() than this bugfix's scope; the shape is narrow enough
+        // (two layouts, same field name, different container types) that no
+        // real component has hit it yet.
         $parentField = null;
 
         foreach ($segments as $index => $segment) {
-            if ('acf_fc_layout' === $segment && is_array($parentField)) {
+            // Only special-cased as the FINAL segment. `acf_fc_layout.typo`
+            // or `acf_fc_layout['x']` is not a bare discriminator read — it
+            // has no ACF meaning under either branch below, and treating it
+            // as one would accept a malformed read the pre-fix code caught
+            // (Codex review, issue #63 PR #64).
+            $isLastSegment = $index === array_key_last($segments);
+            if ('acf_fc_layout' === $segment && $isLastSegment && is_array($parentField)) {
                 if ('flexible_content' === ($parentField['type'] ?? null)) {
                     return ['accounted' => true, 'note' => null];
                 }
@@ -421,7 +443,7 @@ final class ContractLinter
      * @param array<string,mixed> $fields
      * @return list<array{kind: string, detail: string}>
      */
-    private function deadLayoutLiteralNotes(array $comparisons, array $fields): array
+    private function deadLayoutLiteralNotes(array $comparisons, array $fields, ComponentShapeResolver $shapes): array
     {
         $notes = [];
 
@@ -432,7 +454,7 @@ final class ContractLinter
             }
 
             $fieldPath = array_slice($segments, 0, -1);
-            $field = $this->fieldAt($fieldPath, $fields);
+            $field = $this->fieldAt($fieldPath, $fields, $shapes);
 
             if (null === $field || 'flexible_content' !== ($field['type'] ?? null)) {
                 // Not a flexible_content field — either unresolvable (nothing
@@ -472,34 +494,32 @@ final class ContractLinter
      * @param array<string,mixed> $fields
      * @return array<string,mixed>|null
      */
-    private function fieldAt(array $path, array $fields): ?array
+    private function fieldAt(array $path, array $fields, ComponentShapeResolver $shapes): ?array
     {
         $level = $fields;
         $field = null;
 
-        foreach ($path as $segment) {
+        foreach ($path as $index => $segment) {
             $field = $level[$segment] ?? null;
             if (!is_array($field)) {
                 return null;
             }
 
-            if (isset($field['fields']) && is_array($field['fields'])) {
-                $level = $field['fields'];
-                continue;
+            if ($index === array_key_last($path)) {
+                return $field;
             }
 
-            if (isset($field['layouts']) && is_array($field['layouts'])) {
-                $merged = [];
-                foreach ($field['layouts'] as $layout) {
-                    if (is_array($layout) && isset($layout['fields']) && is_array($layout['fields'])) {
-                        $merged = [...$merged, ...$layout['fields']];
-                    }
-                }
-                $level = $merged;
-                continue;
+            // Delegates to childrenOf() rather than re-walking `fields:` /
+            // `layouts:` here — it already follows `of:` forwards through
+            // ComponentShapeResolver, which a hand-rolled duplicate here
+            // previously did not (issue #63 PR #64 review): a dead layout
+            // literal underneath a forwarded shape went unchecked.
+            $children = $this->childrenOf($field, $shapes);
+            if (null === $children) {
+                return null;
             }
 
-            $level = [];
+            $level = $children;
         }
 
         return $field;
