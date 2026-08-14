@@ -35,6 +35,27 @@ final class ContractResult
     public const NOTE_UNRESOLVED_FORWARD = 'unresolved-forwarded-shape';
 
     /**
+     * `<field>.acf_fc_layout` read where `<field>` is declared but is not
+     * `type: flexible_content` (issue #63). ACF only puts the discriminator
+     * on flexible_content rows, so the comparison this key feeds is always
+     * false and the branch it guards can never render — a real defect, and a
+     * different one from "no role accounts for this prop": the prop cannot
+     * be declared into existence, because the type it is read from does not
+     * carry it.
+     */
+    public const NOTE_IMPOSSIBLE_DISCRIMINATOR = 'impossible-acf-fc-layout-read';
+
+    /**
+     * `<field>.acf_fc_layout == '<literal>'` where `<field>` is
+     * `type: flexible_content` and `<literal>` matches none of its declared
+     * `layouts:` keys (issue #63, part 3). The branch this comparison guards
+     * can never be taken — the definition already lists every layout that
+     * can occur, so a literal outside that set is dead code the checker can
+     * name without evaluating the template.
+     */
+    public const NOTE_DEAD_LAYOUT_LITERAL = 'dead-layout-literal';
+
+    /**
      * @param list<string> $violations props read but accounted for by nothing
      * @param list<array{kind: string, detail: string}> $notes limits the extractor hit
      */
@@ -61,7 +82,14 @@ final class ContractResult
      */
     public function isFailure(): bool
     {
-        return self::VIOLATIONS === $this->status
-            || in_array(self::NOTE_UNRESOLVED_FORWARD, $this->noteKinds(), true);
+        if (self::VIOLATIONS === $this->status) {
+            return true;
+        }
+
+        $kinds = $this->noteKinds();
+
+        return in_array(self::NOTE_UNRESOLVED_FORWARD, $kinds, true)
+            || in_array(self::NOTE_IMPOSSIBLE_DISCRIMINATOR, $kinds, true)
+            || in_array(self::NOTE_DEAD_LAYOUT_LITERAL, $kinds, true);
     }
 }

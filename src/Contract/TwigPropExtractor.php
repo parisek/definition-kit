@@ -6,6 +6,8 @@ namespace Parisek\DefinitionKit\Contract;
 
 use Twig\Error\SyntaxError;
 use Twig\Node\EmbedNode;
+use Twig\Node\Expression\Binary\EqualBinary;
+use Twig\Node\Expression\Binary\NotEqualBinary;
 use Twig\Node\Expression\ConstantExpression;
 use Twig\Node\Expression\FunctionExpression;
 use Twig\Node\Expression\GetAttrExpression;
@@ -110,7 +112,7 @@ final class TwigPropExtractor
         $reads = array_values(array_unique($collector->reads));
         sort($reads);
 
-        return new PropReads($reads, $collector->notes);
+        return new PropReads($reads, $collector->notes, $collector->comparisons);
     }
 
     private function collectFrom(string $source, string $name, PropCollector $collector, int $depth): void
@@ -199,8 +201,65 @@ final class TwigPropExtractor
             return;
         }
 
+        if ($node instanceof EqualBinary || $node instanceof NotEqualBinary) {
+            $this->walkComparison($node, $collector, $bindings);
+            // Falls through to the generic recursion below — the comparison
+            // check is additive, not a substitute for the ordinary read
+            // extraction both operands still need (e.g. the path itself, or
+            // a nested expression on either side).
+        }
+
         foreach ($node as $child) {
             $this->walk($child, $collector, $bindings, $depth, $origin);
+        }
+    }
+
+    /**
+     * `<path> == '<literal>'` / `!=`, one side a content path, the other a
+     * string constant — the one shape statically resolvable without
+     * evaluating the template. Anything else (two dynamic values, a
+     * non-string constant, a computed key) is left alone; this is not
+     * general expression evaluation, only the narrow pattern flexible_content
+     * layout discrimination is written in.
+     *
+     * @param array<string,string> $bindings
+     */
+    private function walkComparison(Node $node, PropCollector $collector, array $bindings): void
+    {
+        if (!$node->hasNode('left') || !$node->hasNode('right')) {
+            return;
+        }
+
+        $left = $node->getNode('left');
+        $right = $node->getNode('right');
+        $resolvedBindings = $collector->bindings($bindings);
+
+        if ($left instanceof GetAttrExpression && $right instanceof ConstantExpression) {
+            $this->recordComparison($left, $right, $collector, $resolvedBindings);
+
+            return;
+        }
+
+        if ($right instanceof GetAttrExpression && $left instanceof ConstantExpression) {
+            $this->recordComparison($right, $left, $collector, $resolvedBindings);
+        }
+    }
+
+    /** @param array<string,string> $bindings */
+    private function recordComparison(
+        GetAttrExpression $pathNode,
+        ConstantExpression $literalNode,
+        PropCollector $collector,
+        array $bindings,
+    ): void {
+        $value = $literalNode->getAttribute('value');
+        if (!is_string($value)) {
+            return;
+        }
+
+        $path = $this->resolvePath($pathNode, $bindings);
+        if (null !== $path) {
+            $collector->compare($path, $value);
         }
     }
 

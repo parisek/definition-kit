@@ -19,10 +19,13 @@ final class PropReads
     /**
      * @param list<string> $reads dotted paths relative to `content`, e.g. `title`, `items.value`
      * @param list<array{kind: string, detail: string}> $notes what could not be resolved
+     * @param list<array{path: string, literal: string}> $comparisons `<path> == '<literal>'`/`!=` reads
+     *   against a string constant, statically resolvable without evaluating the template
      */
     public function __construct(
         public readonly array $reads,
         public readonly array $notes = [],
+        public readonly array $comparisons = [],
     ) {
     }
 
