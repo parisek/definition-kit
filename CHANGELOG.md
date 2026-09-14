@@ -15,7 +15,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `fields-migrate` also refuses to write one. acf.json does not carry the key,
   so the twig front-comment must supply it. A page may still omit it.
 - **`asana`, `web` and `drupal` have a format** on components and pages.
-  `asana` is an absolute http(s) URL on asana.com, case-insensitive. `web` and
+  `asana` is an absolute http(s) URL whose host is asana.com or a subdomain,
+  case-insensitive. `web` and
   `drupal` are site-relative paths that start with `/`, not `//`. A value
   that does not match now fails validation.
 - **Schema errors name the key.** `FieldsSchemaValidator` fills in opis's
@@ -262,7 +263,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `fields-migrate` also refuses to write one. acf.json does not carry the key,
   so the twig front-comment must supply it. A page may still omit it.
 - **`asana`, `web` and `drupal` have a format** on components and pages.
-  `asana` is an absolute http(s) URL on asana.com, case-insensitive. `web` and
+  `asana` is an absolute http(s) URL whose host is asana.com or a subdomain,
+  case-insensitive. `web` and
   `drupal` are site-relative paths that start with `/`, not `//`. A value
   that does not match now fails validation.
 - **Schema errors name the key.** `FieldsSchemaValidator` fills in opis's

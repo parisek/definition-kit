@@ -94,7 +94,7 @@ Add a composer script and a CI step so a hand-edit to a generated `acf.json`/`bl
 - **Abstract types** (`text`/`richtext`/`number`/`boolean`/`select`/`media`/`link`/`reference`/`group`/`repeater`/`date`) decouple the definition from ACF field-type names.
 - Properties equal to the shared **type-defaults baseline** (`schemas/acf-defaults-baseline.yaml`) are dropped on migrate and re-added on generate — the definition holds only what's meaningful.
 - Semantic annotations — `label`, `description` (editor instructions), `mcp` (AI-agent guidance), `translatable`, constraints (`maxlength`/`min`/`max`/`step`/`accept`), `visible_when`, `add_label`, `placeholder`, `options` — carry authored intent.
-- **Root metadata:** `name`, `category` and `fields` are required. `asana` is an absolute http(s) URL on asana.com. `web` and `drupal` are site-relative paths: they start with `/`, not `//`. Pages use the same formats for these keys.
+- **Root metadata:** `name`, `category` and `fields` are required. `asana` is an absolute http(s) URL whose host is asana.com or a subdomain. `web` and `drupal` are site-relative paths: they start with `/`, not `//`. Pages use the same formats for these keys.
 - A per-field / root **`wp:` escape hatch** captures genuinely CMS-specific residue verbatim (e.g. block `postTypes`/`supports`, accordion `wpml`) so the round-trip stays lossless without polluting the semantic surface.
 
 The round-trip contract: `generate(migrate(acf.json)) == acf.json`, modulo documented ACF-export-era residuals.

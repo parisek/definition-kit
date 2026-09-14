@@ -51,8 +51,8 @@
         },
         "asana": {
             "type": "string",
-            "pattern": "^[Hh][Tt][Tt][Pp][Ss]?://.*[Aa][Ss][Aa][Nn][Aa]\\.[Cc][Oo][Mm]",
-            "description": "Link to the tracking task. An absolute http(s) URL on asana.com; scheme and host match case-insensitively. The pattern spells out case classes instead of a `(?i)` flag, which ECMA-262 regex does not support."
+            "pattern": "^[Hh][Tt][Tt][Pp][Ss]?://([A-Za-z0-9-]+\\.)*[Aa][Ss][Aa][Nn][Aa]\\.[Cc][Oo][Mm](:[0-9]+)?([/?#]|$)",
+            "description": "Link to the tracking task. An absolute http(s) URL whose host is asana.com or a subdomain of it; scheme and host match case-insensitively. The pattern checks the host, not the whole string, so `https://example.com/asana.com` fails. It spells out case classes instead of a `(?i)` flag, which ECMA-262 regex does not support."
         },
         "figma": {
             "type": "string",

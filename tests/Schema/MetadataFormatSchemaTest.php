@@ -17,7 +17,8 @@ use Symfony\Component\Yaml\Yaml;
  * the rule can retire (tailwind-base ADR-0017).
  *
  * - `category`: required and non-empty on a component; optional on a page.
- * - `asana`: absolute http(s) URL that contains asana.com, case-insensitive.
+ * - `asana`: absolute http(s) URL on asana.com or a subdomain, case-insensitive.
+ *   The rule only searched for the substring; the schema checks the host.
  * - `web`, `drupal`: site-relative path, starts with `/` and not with `//`.
  */
 final class MetadataFormatSchemaTest extends TestCase
@@ -64,6 +65,7 @@ final class MetadataFormatSchemaTest extends TestCase
         yield 'http' => ['http://asana.com/0/1'];
         yield 'uppercase scheme and host' => ['HTTPS://APP.ASANA.COM/0/1'];
         yield 'query string' => ['https://app.asana.com/0/1?focus=true'];
+        yield 'bare host' => ['https://asana.com'];
     }
 
     /** @return iterable<string, array{string}> */
@@ -72,6 +74,10 @@ final class MetadataFormatSchemaTest extends TestCase
         yield 'no scheme' => ['app.asana.com/0/1'];
         yield 'other scheme' => ['ftp://app.asana.com/0/1'];
         yield 'other domain' => ['https://example.com/task/1'];
+        yield 'asana.com only in the path' => ['https://example.com/asana.com/task'];
+        yield 'asana.com as a host suffix' => ['https://notasana.com/task'];
+        yield 'asana.com as userinfo' => ['https://asana.com@example.com/task'];
+        yield 'asana.com as a host prefix' => ['https://asana.com.example.com/task'];
         yield 'relative path' => ['/0/1'];
         yield 'empty' => [''];
     }
