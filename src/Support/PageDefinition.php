@@ -28,10 +28,11 @@ final class PageDefinition
 
     public static function isPageDirectory(string $dir): bool
     {
-        $dir = rtrim($dir, '/');
-        $real = realpath($dir);
+        // A mistyped path is not a page. Classifying it by name alone made
+        // the projection commands report a clean SKIP for a missing directory.
+        $real = realpath(rtrim($dir, '/'));
 
-        return 'page' === basename(\dirname(false !== $real ? $real : $dir));
+        return false !== $real && is_dir($real) && 'page' === basename(\dirname($real));
     }
 
     public static function isPageYaml(string $path): bool

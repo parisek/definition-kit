@@ -148,6 +148,15 @@ final class PageDefinitionCliTest extends TestCase
     }
 
     #[Test]
+    public function a_missing_directory_under_page_is_not_skipped_as_a_page(): void
+    {
+        [$out, $code] = $this->runBin('fields-generate', ["{$this->root}/page/hmoe"]);
+
+        self::assertSame(1, $code, $out);
+        self::assertStringNotContainsString('SKIP', $out);
+    }
+
+    #[Test]
     public function roles_skips_a_page(): void
     {
         $this->writePageYaml("name: Home\n");
