@@ -20,8 +20,28 @@ namespace Parisek\DefinitionKit\Support;
  */
 final class PageDefinition
 {
-    /** The header `fields-migrate` writes on top of a page YAML. */
+    /** The header `fields-migrate` writes on top of `page/<id>/<id>.yaml`. */
     public const SCHEMA_HEADER = '# yaml-language-server: $schema=../../../../vendor/parisek/definition-kit/schemas/page.schema.json';
+
+    /**
+     * The `$schema` header for a page YAML written into $pageDir.
+     *
+     * `page/<id>/` needs four `../` to reach the theme's vendor/ (id, page,
+     * templates, static). Each directory level between the page root and
+     * $pageDir adds one, so `page/<group>/<id>/` needs five.
+     */
+    public static function schemaHeaderFor(string $pageDir): string
+    {
+        $real = realpath(rtrim($pageDir, '/'));
+        $depth = 1;
+        if (false !== $real) {
+            for ($dir = \dirname($real); \dirname($dir) !== $dir && 'page' !== basename($dir); $dir = \dirname($dir)) {
+                $depth++;
+            }
+        }
+
+        return '# yaml-language-server: $schema=' . str_repeat('../', $depth + 3) . 'vendor/parisek/definition-kit/schemas/page.schema.json';
+    }
 
     /** Component keys a page must not carry. */
     public const COMPONENT_ONLY_KEYS = ['fields', 'kind', 'wp', 'key', 'mcp'];

@@ -256,6 +256,10 @@ final class PageDefinitionCliTest extends TestCase
         self::assertSame(0, $code, $out);
         self::assertStringContainsString('OK   post', $out);
         self::assertFileExists("{$this->root}/page/blog/post/post.yaml");
+        self::assertStringStartsWith(
+            '# yaml-language-server: $schema=../../../../../vendor/parisek/definition-kit/schemas/page.schema.json',
+            (string) file_get_contents("{$this->root}/page/blog/post/post.yaml"),
+        );
         self::assertFileExists("{$this->root}/page/home/home.yaml");
         self::assertFileDoesNotExist("{$this->root}/page/_partials/_partials.yaml");
     }

@@ -78,7 +78,7 @@ function fields_migrate_one(string $componentDir, bool $dryRun, bool $force, Key
             return ['ok' => false, 'component' => $componentName, 'error' => "no {$componentName}.twig at {$componentDir}"];
         }
         try {
-            $page = (new PageMetadataMigrator())->migrate((string) file_get_contents($twigPath));
+            $page = (new PageMetadataMigrator())->migrate((string) file_get_contents($twigPath), PageDefinition::schemaHeaderFor($componentDir));
         } catch (\RuntimeException $e) {
             return ['ok' => false, 'component' => $componentName, 'error' => $e->getMessage()];
         }

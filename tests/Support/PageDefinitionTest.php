@@ -50,4 +50,18 @@ final class PageDefinitionTest extends TestCase
         self::assertTrue(PageDefinition::isPageYaml("{$this->root}/page/_partials/header.yaml"));
         self::assertFalse(PageDefinition::isPageYaml("{$this->root}/page/_partials/notes.yaml"));
     }
+
+    #[Test]
+    public function the_schema_header_climbs_one_level_per_directory_below_the_page_root(): void
+    {
+        self::assertSame(
+            '# yaml-language-server: $schema=../../../../vendor/parisek/definition-kit/schemas/page.schema.json',
+            PageDefinition::schemaHeaderFor("{$this->root}/page/home"),
+        );
+        self::assertSame(PageDefinition::SCHEMA_HEADER, PageDefinition::schemaHeaderFor("{$this->root}/page/home/"));
+        self::assertSame(
+            '# yaml-language-server: $schema=../../../../../vendor/parisek/definition-kit/schemas/page.schema.json',
+            PageDefinition::schemaHeaderFor("{$this->root}/page/group/nested"),
+        );
+    }
 }

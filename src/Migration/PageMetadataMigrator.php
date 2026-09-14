@@ -37,7 +37,7 @@ final class PageMetadataMigrator
      * @throws MigrationValidationException when there is no front-comment, it is
      *                                      not YAML, or it does not validate
      */
-    public function migrate(string $twigSource): array
+    public function migrate(string $twigSource, string $schemaHeader = PageDefinition::SCHEMA_HEADER): array
     {
         // The FIRST comment anywhere, as ComponentParser::parseTwigComment()
         // finds it: a page may open with `{% extends %}` before its metadata.
@@ -87,7 +87,7 @@ final class PageMetadataMigrator
         }
 
         return [
-            'yaml' => PageDefinition::SCHEMA_HEADER . "\n" . Yaml::dump($tree, 10, 2, Yaml::DUMP_MULTI_LINE_LITERAL_BLOCK),
+            'yaml' => $schemaHeader . "\n" . Yaml::dump($tree, 10, 2, Yaml::DUMP_MULTI_LINE_LITERAL_BLOCK),
             'twig' => substr($twigSource, 0, $m[0][1]) . substr($twigSource, $m[0][1] + strlen($m[0][0])),
         ];
     }
