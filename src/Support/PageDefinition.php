@@ -37,7 +37,10 @@ final class PageDefinition
 
     public static function isPageYaml(string $path): bool
     {
-        return self::isPageDirectory(\dirname($path));
+        // Only the definition itself, `page/<id>/<id>.yaml`, not a sidecar
+        // YAML that happens to live in the same directory.
+        return basename($path) === basename(\dirname($path)) . '.yaml'
+            && self::isPageDirectory(\dirname($path));
     }
 
     /**
