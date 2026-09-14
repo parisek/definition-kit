@@ -33,6 +33,15 @@ final class FieldsSchemaValidator
         $this->schemaJson = $contents;
     }
 
+    /**
+     * A validator for `page/<id>/<id>.yaml`. A page is a different type from
+     * a component, so it has its own schema file, not a mode in this one.
+     */
+    public static function forPage(): self
+    {
+        return new self(__DIR__ . '/../../schemas/page.schema.json');
+    }
+
     public function validateFile(string $yamlPath): ValidationResult
     {
         if (!is_file($yamlPath) || !is_readable($yamlPath)) {
