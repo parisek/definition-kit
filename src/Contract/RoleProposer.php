@@ -6,6 +6,7 @@ namespace Parisek\DefinitionKit\Contract;
 
 use Parisek\DefinitionKit\Baseline\DerivedProps;
 use Parisek\DefinitionKit\Baseline\FrameworkProps;
+use Parisek\DefinitionKit\Support\PageDefinition;
 use Symfony\Component\Yaml\Yaml;
 
 /**
@@ -55,6 +56,9 @@ final class RoleProposer
         $yamlPath = "{$componentDir}/{$name}.yaml";
         $twigPath = "{$componentDir}/{$name}.twig";
 
+        if (PageDefinition::isPageDirectory($componentDir)) {
+            return new RoleProposal($name, skipped: PageDefinition::SKIP_REASON);
+        }
         if (!is_file($yamlPath)) {
             return new RoleProposal($name, skipped: "no {$name}.yaml — run fields-migrate first");
         }
