@@ -1,4 +1,5 @@
 name: Demo Invalid Unknown Property
+category: Content
 fields:
   title:
     type: text

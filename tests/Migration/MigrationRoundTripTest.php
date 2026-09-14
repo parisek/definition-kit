@@ -128,6 +128,10 @@ final class MigrationRoundTripTest extends TestCase
         foreach (['newsletter-signup', 'store-locator'] as $name) {
             $fixtureDir = __DIR__ . "/../fixtures/migration/corpus-sample/{$name}";
             $tree = $this->migrate($fixtureDir, $name);
+            // The corpus sample ships acf.json without a twig front-comment, so
+            // nothing supplies the required `category`. The test is about the
+            // migrated field tree, so it adds the key the twig would carry.
+            $tree['category'] = 'Content';
             $outPath = sys_get_temp_dir() . "/{$name}-roundtrip-" . uniqid('', true) . '.fields.yaml';
             (new FieldsYamlWriter())->write($tree, $outPath); // throws MigrationValidationException on failure
             @unlink($outPath);

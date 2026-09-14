@@ -53,7 +53,7 @@ final class DriftLinterTest extends TestCase
     /** @return array<string,mixed> */
     private function minimalTree(): array
     {
-        return ['name' => 'Demo card', 'fields' => ['title' => ['type' => 'text', 'label' => 'Title']]];
+        return ['name' => 'Demo card', 'category' => 'Content', 'fields' => ['title' => ['type' => 'text', 'label' => 'Title']]];
     }
 
     public function test_component_whose_acf_json_equals_generate_of_definition_is_clean(): void
@@ -240,6 +240,7 @@ final class DriftLinterTest extends TestCase
     {
         return [
             'name' => 'Demo card',
+            'category' => 'Content',
             'fields' => [
                 'config' => [
                     'type' => 'group',
@@ -283,7 +284,7 @@ final class DriftLinterTest extends TestCase
 
     public function test_invalid_definition_is_reported_as_an_error_not_a_crash(): void
     {
-        file_put_contents("{$this->dir}/demo-card.yaml", "name: Demo card\n"); // missing required `fields`
+        file_put_contents("{$this->dir}/demo-card.yaml", "name: Demo card\ncategory: Content\n"); // missing required `fields`
         file_put_contents("{$this->dir}/acf.json", '{}');
 
         $result = (new DriftLinter())->lint($this->dir);
@@ -334,6 +335,7 @@ final class DriftLinterTest extends TestCase
         // a missing prop carrying real authored content.
         $tree = [
             'name' => 'Reference - detail',
+            'category' => 'Content',
             'key' => 'group_reference_detail',
             'fields' => [
                 'spacing' => [

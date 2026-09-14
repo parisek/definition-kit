@@ -8,6 +8,25 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 <!-- New entries go directly under this line. It is the anchor that keeps a branch's
      changelog edit from merging into a version that shipped without it. -->
 
+### Changed
+
+- **Breaking: a component definition must declare `category`.** The schema
+  now rejects a component `<name>.yaml` without a non-empty `category`.
+  `fields-migrate` also refuses to write one. acf.json does not carry the key,
+  so the twig front-comment must supply it. A page may still omit it.
+- **`asana`, `web` and `drupal` have a format** on components and pages.
+  `asana` is an absolute http(s) URL whose host is asana.com or a subdomain,
+  case-insensitive. `web` and `drupal` are either a site-relative path that
+  starts with `/`, not `//`, or an absolute http(s) URL with a host. A value
+  that does not match now fails validation.
+- **Schema errors name the key.** `FieldsSchemaValidator` fills in opis's
+  message placeholders, so a missing key reads `The required properties
+  (category) are missing`, not `({missing})`.
+
+  From tailwind-base: the skeleton's `ComponentMetadataRule` lint rule made
+  these checks. tailwind-base ADR-0017 needs them in the schema before that
+  rule can retire. Closes #67.
+
 ## [0.10.0] - 2026-09-14
 
 ### Added

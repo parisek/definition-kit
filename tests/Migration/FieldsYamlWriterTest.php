@@ -14,6 +14,7 @@ final class FieldsYamlWriterTest extends TestCase
     {
         $tree = [
             'name' => 'Demo',
+            'category' => 'Content',
             'fields' => ['title' => ['type' => 'text', 'label' => 'Nadpis']],
         ];
         $out = sys_get_temp_dir() . '/writer-test-' . uniqid('', true) . '.fields.yaml';
@@ -29,7 +30,7 @@ final class FieldsYamlWriterTest extends TestCase
 
     public function test_invalid_tree_throws_and_writes_nothing(): void
     {
-        $tree = ['name' => 'Demo', 'fields' => ['title' => ['type' => 'text']]]; // missing required label
+        $tree = ['name' => 'Demo', 'category' => 'Content', 'fields' => ['title' => ['type' => 'text']]]; // missing required label
         $out = sys_get_temp_dir() . '/writer-test-' . uniqid('', true) . '.fields.yaml';
 
         $this->expectException(MigrationValidationException::class);
@@ -42,7 +43,7 @@ final class FieldsYamlWriterTest extends TestCase
 
     public function test_write_is_atomic_no_leftover_tmp_file_on_success(): void
     {
-        $tree = ['name' => 'Demo', 'fields' => ['title' => ['type' => 'text', 'label' => 'Nadpis']]];
+        $tree = ['name' => 'Demo', 'category' => 'Content', 'fields' => ['title' => ['type' => 'text', 'label' => 'Nadpis']]];
         $out = sys_get_temp_dir() . '/writer-test-' . uniqid('', true) . '.fields.yaml';
 
         (new FieldsYamlWriter())->write($tree, $out);

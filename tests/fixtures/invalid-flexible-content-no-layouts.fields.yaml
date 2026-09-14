@@ -1,4 +1,5 @@
 name: Demo Invalid Flexible Content
+category: Content
 fields:
   items:
     type: flexible_content   # missing required `layouts`

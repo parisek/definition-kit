@@ -59,7 +59,7 @@ final class RoleProposerTest extends TestCase
     public function testAFieldWithAnAcfFieldBehindItIsProposedAsField(): void
     {
         $dir = $this->component('hero', [
-            'hero.yaml' => "name: Hero\nfields:\n  title: { type: text, label: T }\n",
+            'hero.yaml' => "name: Hero\ncategory: Content\nfields:\n  title: { type: text, label: T }\n",
             'hero.twig' => '{{ content.title }}',
             'acf.json' => $this->acfJson([['name' => 'title', 'type' => 'text']]),
         ]);
@@ -76,7 +76,7 @@ final class RoleProposerTest extends TestCase
         // `type: text` looks exactly like a `parent` prop, so with no acf.json
         // to point at, the proposer leaves it for a human.
         $dir = $this->component('hero', [
-            'hero.yaml' => "name: Hero\nfields:\n  title: { type: text, label: T }\n",
+            'hero.yaml' => "name: Hero\ncategory: Content\nfields:\n  title: { type: text, label: T }\n",
             'hero.twig' => '{{ content.title }}',
         ]);
 
@@ -89,7 +89,7 @@ final class RoleProposerTest extends TestCase
     public function testASidecarBackedByAQueryProposesQuery(): void
     {
         $dir = $this->component('article-featured', [
-            'article-featured.yaml' => "name: Article featured\nfields:\n  title: { type: text, label: T }\n",
+            'article-featured.yaml' => "name: Article featured\ncategory: Content\nfields:\n  title: { type: text, label: T }\n",
             'article-featured.twig' => '{% for item in content.items %}{{ item.title }}{% endfor %}',
             'article-featured.php' => "<?php\n\$query = new WP_Query(['post_type' => 'post']);\n"
                 . "\$content['items'] = \$query->posts;\n",
@@ -104,7 +104,7 @@ final class RoleProposerTest extends TestCase
     public function testAnOptionsBackedAssignmentProposesGlobal(): void
     {
         $dir = $this->component('contact-details', [
-            'contact-details.yaml' => "name: Contact details\nfields:\n  title: { type: text, label: T }\n",
+            'contact-details.yaml' => "name: Contact details\ncategory: Content\nfields:\n  title: { type: text, label: T }\n",
             'contact-details.twig' => '{{ content.contact_socials }}',
             'contact-details.php' => "<?php\n\$content['contact_socials'] = Helpers::formatFields('option');\n",
             'acf.json' => $this->acfJson([['name' => 'title', 'type' => 'text']]),
@@ -119,7 +119,7 @@ final class RoleProposerTest extends TestCase
         // nothing about where from. `computed` was the home for that shrug and
         // was removed in #27 for exactly this reason.
         $dir = $this->component('widget', [
-            'widget.yaml' => "name: Widget\nfields: {}\n",
+            'widget.yaml' => "name: Widget\ncategory: Content\nfields: {}\n",
             'widget.twig' => '{{ content.total }}',
             'widget.php' => "<?php\n\$content['total'] = 1 + 2;\n",
         ]);
@@ -133,11 +133,11 @@ final class RoleProposerTest extends TestCase
     public function testAPropHandedInByACallSiteProposesParent(): void
     {
         $this->component('divider', [
-            'divider.yaml' => "name: Divider\nfields: {}\n",
+            'divider.yaml' => "name: Divider\ncategory: Content\nfields: {}\n",
             'divider.twig' => '{{ content.inner }}',
         ]);
         $this->component('hero', [
-            'hero.yaml' => "name: Hero\nfields: {}\n",
+            'hero.yaml' => "name: Hero\ncategory: Content\nfields: {}\n",
             'hero.twig' => '{% include "divider/divider.twig" with { inner: "x" } %}',
         ]);
 
@@ -153,11 +153,11 @@ final class RoleProposerTest extends TestCase
         // components, so `role: parent` was proposable exactly nowhere until
         // this shape was recognised.
         $this->component('button', [
-            'button.yaml' => "name: Button\nfields: {}\n",
+            'button.yaml' => "name: Button\ncategory: Content\nfields: {}\n",
             'button.twig' => '{{ content.label }}',
         ]);
         $this->component('hero', [
-            'hero.yaml' => "name: Hero\nfields: {}\n",
+            'hero.yaml' => "name: Hero\ncategory: Content\nfields: {}\n",
             'hero.twig' => "{{ component_button({ label: 'Více' }) }}",
         ]);
 
@@ -169,11 +169,11 @@ final class RoleProposerTest extends TestCase
     public function testAComponentFunctionUnderscoreIsTheComponentsHyphen(): void
     {
         $this->component('page-header-default', [
-            'page-header-default.yaml' => "name: PHD\nfields: {}\n",
+            'page-header-default.yaml' => "name: PHD\ncategory: Content\nfields: {}\n",
             'page-header-default.twig' => '{{ content.claim }}',
         ]);
         $this->component('hero', [
-            'hero.yaml' => "name: Hero\nfields: {}\n",
+            'hero.yaml' => "name: Hero\ncategory: Content\nfields: {}\n",
             'hero.twig' => "{{ component_page_header_default({ claim: 'x' }) }}",
         ]);
 
@@ -189,12 +189,12 @@ final class RoleProposerTest extends TestCase
         // override it. Consulting call sites first would relabel real `field`
         // props as `parent` across a whole project.
         $this->component('promo', [
-            'promo.yaml' => "name: Promo\nfields:\n  title: { type: text, label: T }\n",
+            'promo.yaml' => "name: Promo\ncategory: Content\nfields:\n  title: { type: text, label: T }\n",
             'promo.twig' => '{{ content.title }}',
             'acf.json' => $this->acfJson([['name' => 'title', 'type' => 'text']]),
         ]);
         $this->component('page-home', [
-            'page-home.yaml' => "name: Home\nfields: {}\n",
+            'page-home.yaml' => "name: Home\ncategory: Content\nfields: {}\n",
             'page-home.twig' => "{{ component_promo({ title: 'Override' }) }}",
         ]);
 
@@ -211,7 +211,7 @@ final class RoleProposerTest extends TestCase
         // skeleton `parent`. (tailwind-base docs/398-unresolved-roles.md; on
         // mairateam, 191 props are fixture-only against 58 from production.)
         $this->component('promo', [
-            'promo.yaml' => "name: Promo\nfields: {}\n",
+            'promo.yaml' => "name: Promo\ncategory: Content\nfields: {}\n",
             'promo.twig' => '{{ content.title }}',
             'styleguide.primary.twig' => "{{ component_promo({ title: 'Demo' }) }}",
         ]);
@@ -228,11 +228,11 @@ final class RoleProposerTest extends TestCase
         // about any particular prop. Counting it would let every component
         // claim every prop as `parent`.
         $this->component('divider', [
-            'divider.yaml' => "name: Divider\nfields: {}\n",
+            'divider.yaml' => "name: Divider\ncategory: Content\nfields: {}\n",
             'divider.twig' => '{{ content.inner }}',
         ]);
         $this->component('hero', [
-            'hero.yaml' => "name: Hero\nfields: {}\n",
+            'hero.yaml' => "name: Hero\ncategory: Content\nfields: {}\n",
             'hero.twig' => '{% include "divider/divider.twig" %}',
         ]);
 
@@ -245,7 +245,7 @@ final class RoleProposerTest extends TestCase
     public function testAFrameworkInjectedPropIsOmittedRatherThanDeclared(): void
     {
         $dir = $this->component('hero', [
-            'hero.yaml' => "name: Hero\nfields: {}\n",
+            'hero.yaml' => "name: Hero\ncategory: Content\nfields: {}\n",
             'hero.twig' => '<div id="{{ content.wrapper_id }}">',
         ]);
 
@@ -259,7 +259,7 @@ final class RoleProposerTest extends TestCase
     public function testAFrameworkDerivedPropProposesDerivedWithItsOrigin(): void
     {
         $dir = $this->component('article-video-grid', [
-            'article-video-grid.yaml' => "name: Video grid\nfields:\n"
+            'article-video-grid.yaml' => "name: Video grid\ncategory: Content\nfields:\n"
                 . "  video: { type: media, kind: file, label: Video }\n",
             'article-video-grid.twig' => '{{ content.sources }}',
             'acf.json' => $this->acfJson([['name' => 'video', 'type' => 'file']]),
@@ -278,7 +278,7 @@ final class RoleProposerTest extends TestCase
         // case existed; the mairateam run found this one, and `derived`
         // describes it with an origin a linter can verify.
         $dir = $this->component('reference-slider', [
-            'reference-slider.yaml' => "name: Reference slider\nfields:\n"
+            'reference-slider.yaml' => "name: Reference slider\ncategory: Content\nfields:\n"
                 . "  heading: { type: group, label: H, fields: { title: { type: text, label: T } } }\n",
             'reference-slider.twig' => '{{ content.title }}',
             'reference-slider.php' => "<?php\n\$content['title'] = wp_kses_post(\$content['heading']['title']);\n",
@@ -296,7 +296,7 @@ final class RoleProposerTest extends TestCase
         // The origin has to exist, or the `from:` written into the definition
         // would dangle — the assertion fields-validate rejects.
         $dir = $this->component('widget', [
-            'widget.yaml' => "name: Widget\nfields: {}\n",
+            'widget.yaml' => "name: Widget\ncategory: Content\nfields: {}\n",
             'widget.twig' => '{{ content.title }}',
             'widget.php' => "<?php\n\$content['title'] = \$content['heading']['title'];\n",
         ]);
@@ -312,7 +312,7 @@ final class RoleProposerTest extends TestCase
         // Proposing `derived` here would write a `from:` that dangles —
         // precisely the assertion the linter rejects.
         $dir = $this->component('gallery', [
-            'gallery.yaml' => "name: Gallery\nfields:\n  title: { type: text, label: T }\n",
+            'gallery.yaml' => "name: Gallery\ncategory: Content\nfields:\n  title: { type: text, label: T }\n",
             'gallery.twig' => '{{ content.sources }}',
             'acf.json' => $this->acfJson([['name' => 'title', 'type' => 'text']]),
         ]);
@@ -330,7 +330,7 @@ final class RoleProposerTest extends TestCase
         // it instead of proposing it, which made the check noisy about the one
         // case the role exists to describe.
         $dir = $this->component('article-video-grid', [
-            'article-video-grid.yaml' => "name: Video grid\nfields:\n"
+            'article-video-grid.yaml' => "name: Video grid\ncategory: Content\nfields:\n"
                 . "  items:\n    type: repeater\n    label: Items\n    role: field\n    fields:\n"
                 . "      video: { type: media, kind: file, label: Video, role: field }\n",
             'article-video-grid.twig' => '{% for item in content.items %}{{ item.sources }}{% endfor %}',
@@ -352,7 +352,7 @@ final class RoleProposerTest extends TestCase
     public function testANestedBlankIsReportedWithItsFullPath(): void
     {
         $dir = $this->component('list', [
-            'list.yaml' => "name: List\nfields:\n"
+            'list.yaml' => "name: List\ncategory: Content\nfields:\n"
                 . "  items:\n    type: repeater\n    label: Items\n    role: field\n    fields:\n"
                 . "      title: { type: text, label: T, role: field }\n",
             'list.twig' => '{% for item in content.items %}{{ item.subtitle }}{% endfor %}',
@@ -367,7 +367,7 @@ final class RoleProposerTest extends TestCase
         // component — neither says anything about a row of one of its
         // repeaters. Reusing that evidence one level down would be a guess.
         $dir = $this->component('list', [
-            'list.yaml' => "name: List\nfields:\n"
+            'list.yaml' => "name: List\ncategory: Content\nfields:\n"
                 . "  items:\n    type: repeater\n    label: Items\n    role: field\n    fields:\n"
                 . "      title: { type: text, label: T, role: field }\n",
             'list.twig' => '{% for item in content.items %}{{ item.total }}{% endfor %}',
@@ -383,7 +383,7 @@ final class RoleProposerTest extends TestCase
     public function testReadsPastADeclaredLeafAreStillNotProps(): void
     {
         $dir = $this->component('cta', [
-            'cta.yaml' => "name: CTA\nfields:\n  button: { type: link, shape: link, label: B, role: field }\n",
+            'cta.yaml' => "name: CTA\ncategory: Content\nfields:\n  button: { type: link, shape: link, label: B, role: field }\n",
             'cta.twig' => '<a href="{{ content.button.url }}">{{ content.button.title }}</a>',
         ]);
 
@@ -396,11 +396,11 @@ final class RoleProposerTest extends TestCase
     public function testTheAppliedDefinitionIsSchemaValidAndReRunsToANoOp(): void
     {
         $this->component('divider', [
-            'divider.yaml' => "name: Divider\nfields: {}\n",
+            'divider.yaml' => "name: Divider\ncategory: Content\nfields: {}\n",
             'divider.twig' => '{{ content.inner }}',
         ]);
         $this->component('hero', [
-            'hero.yaml' => "name: Hero\nfields: {}\n",
+            'hero.yaml' => "name: Hero\ncategory: Content\nfields: {}\n",
             'hero.twig' => '{% include "divider/divider.twig" with { inner: "x" } %}',
         ]);
 
@@ -445,7 +445,7 @@ final class RoleProposerTest extends TestCase
             'button.twig' => '{% macro render(content) %}{{ content.label }}{% endmacro %}',
         ]);
         $card = $this->component('card', [
-            'card.yaml' => "name: Card\nfields: {}\n",
+            'card.yaml' => "name: Card\ncategory: Content\nfields: {}\n",
             'card.twig' => '{% import "button/button.twig" as b %}{{ b.render(content) }}',
         ]);
 
@@ -469,7 +469,7 @@ final class RoleProposerTest extends TestCase
     public function testAnUnresolvableMacroHandoffIsSurfacedAsANote(): void
     {
         $card = $this->component('orphan-card', [
-            'orphan-card.yaml' => "name: Orphan Card\nfields: {}\n",
+            'orphan-card.yaml' => "name: Orphan Card\ncategory: Content\nfields: {}\n",
             'orphan-card.twig' => '{% import "missing/missing.twig" as b %}{{ b.render(content) }}',
         ]);
 

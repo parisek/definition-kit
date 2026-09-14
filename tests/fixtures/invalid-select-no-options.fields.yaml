@@ -1,4 +1,5 @@
 name: Demo Invalid Select
+category: Content
 fields:
   spacing:
     type: select       # missing required `options` when type is select

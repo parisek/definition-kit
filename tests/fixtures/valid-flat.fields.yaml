@@ -1,4 +1,5 @@
 name: Demo Flat
+category: Content
 fields:
   title:
     type: text

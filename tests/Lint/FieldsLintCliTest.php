@@ -38,7 +38,7 @@ final class FieldsLintCliTest extends TestCase
     {
         $dir = "{$this->root}/{$slug}";
         mkdir($dir, 0777, true);
-        $tree = ['name' => ucfirst($slug), 'fields' => ['title' => ['type' => 'text', 'label' => 'Title']]];
+        $tree = ['name' => ucfirst($slug), 'category' => 'Content', 'fields' => ['title' => ['type' => 'text', 'label' => 'Title']]];
         file_put_contents("{$dir}/{$slug}.yaml", Yaml::dump($tree, 10, 2));
         $fieldGroup = (new FieldsGenerator())->generate($tree, $slug, 1_700_000_000);
         self::assertNotNull($fieldGroup);
@@ -66,6 +66,7 @@ final class FieldsLintCliTest extends TestCase
         mkdir($dir, 0777, true);
         file_put_contents("{$dir}/divider.yaml", Yaml::dump([
             'name' => 'Divider',
+            'category' => 'Content',
             'fields' => [
                 // A projecting field, so the projection half has something to
                 // miss. (A definition that projects nothing needs no acf.json
@@ -104,6 +105,7 @@ final class FieldsLintCliTest extends TestCase
         mkdir($dir, 0777, true);
         file_put_contents("{$dir}/header.yaml", Yaml::dump([
             'name' => 'Header',
+            'category' => 'Content',
             'fields' => [
                 'menu' => ['type' => 'repeater', 'label' => 'Menu', 'role' => 'parent', 'of' => 'component:nope#items'],
             ],
@@ -159,7 +161,7 @@ final class FieldsLintCliTest extends TestCase
     {
         $this->makeCleanComponent('demo-card');
         mkdir("{$this->root}/broken", 0777, true);
-        file_put_contents("{$this->root}/broken/broken.yaml", "name: Broken\n"); // missing required `fields`
+        file_put_contents("{$this->root}/broken/broken.yaml", "name: Broken\ncategory: Content\n"); // missing required `fields`
 
         $output = [];
         $exitCode = null;

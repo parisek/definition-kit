@@ -1,4 +1,5 @@
 name: Invalid Mcp
+category: Content
 fields:
   title:
     type: text

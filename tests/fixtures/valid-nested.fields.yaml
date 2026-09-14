@@ -1,4 +1,5 @@
 name: Demo Nested
+category: Content
 fields:
   heading:
     type: group

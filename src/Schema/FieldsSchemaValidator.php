@@ -108,9 +108,13 @@ final class FieldsSchemaValidator
         }
 
         $errors = [];
-        $formatted = (new ErrorFormatter())->formatKeyed(
+        $errorFormatter = new ErrorFormatter();
+        // formatErrorMessage(), not $error->message(): the raw message keeps
+        // opis's {placeholder} tokens, so a missing key read as "The required
+        // properties ({missing}) are missing" and never named the key.
+        $formatted = $errorFormatter->formatKeyed(
             $error,
-            static fn ($error) => $error->message(),
+            static fn ($error) => $errorFormatter->formatErrorMessage($error),
             static fn ($error) => '/' . implode('/', $error->data()->fullPath()),
         );
         foreach ($formatted as $pointer => $messages) {

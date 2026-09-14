@@ -32,13 +32,31 @@ final class FieldsMigrateCliTest extends TestCase
         $dir = $this->makeComponentDir('demo', [
             'key' => 'group_demo', 'title' => 'Demo',
             'fields' => [['key' => 'field_demo_title', 'name' => 'title', 'label' => 'Nadpis', 'type' => 'text']],
-        ]);
+        ], "{#\nname: Demo\ncategory: Content\n#}\n");
 
         $output = shell_exec(sprintf('php %s %s 2>&1', escapeshellarg($this->binPath), escapeshellarg($dir)));
 
         self::assertIsString($output);
         self::assertStringContainsString('OK   demo', $output);
         self::assertFileExists("{$dir}/demo.yaml");
+    }
+
+    public function test_a_component_without_a_category_is_refused_naming_the_key(): void
+    {
+        // `category` is required on a component (#67). acf.json does not
+        // carry it, so without a twig front-comment that does, the migrated
+        // tree is invalid and no file is written.
+        $dir = $this->makeComponentDir('demo', [
+            'key' => 'group_demo', 'title' => 'Demo',
+            'fields' => [['key' => 'field_demo_title', 'name' => 'title', 'label' => 'Nadpis', 'type' => 'text']],
+        ]);
+
+        $output = shell_exec(sprintf('php %s %s 2>&1', escapeshellarg($this->binPath), escapeshellarg($dir)));
+
+        self::assertIsString($output);
+        self::assertStringContainsString('FAIL demo', $output);
+        self::assertStringContainsString('(category)', $output);
+        self::assertFileDoesNotExist("{$dir}/demo.yaml");
     }
 
     public function test_dry_run_writes_nothing(): void
@@ -65,6 +83,7 @@ final class FieldsMigrateCliTest extends TestCase
             'key' => 'group_good', 'title' => 'Good',
             'fields' => [['key' => 'field_good_title', 'name' => 'title', 'label' => 'Nadpis', 'type' => 'text']],
         ]));
+        file_put_contents("{$good}/good.twig", "{#\nname: Good\ncategory: Content\n#}\n");
         file_put_contents("{$bad}/acf.json", json_encode([
             'key' => 'group_bad', 'title' => 'Bad',
             'fields' => [['key' => 'field_bad_x', 'name' => 'x', 'label' => 'X', 'type' => 'unsupported_acf_type']],
@@ -86,7 +105,7 @@ final class FieldsMigrateCliTest extends TestCase
                 'key' => 'group_demo', 'title' => 'Demo',
                 'fields' => [['key' => 'field_demo_title', 'name' => 'title', 'label' => 'Nadpis', 'type' => 'text']],
             ],
-            "{#\nname: Demo (from twig)\nfields:\n#}\n<div></div>",
+            "{#\nname: Demo (from twig)\ncategory: Content\nfields:\n#}\n<div></div>",
         );
 
         shell_exec(sprintf('php %s %s 2>&1', escapeshellarg($this->binPath), escapeshellarg($dir)));
@@ -113,7 +132,7 @@ final class FieldsMigrateCliTest extends TestCase
             'title' => 'Divider',
             'acf' => ['mode' => 'preview', 'postTypes' => ['page']],
         ], JSON_PRETTY_PRINT));
-        file_put_contents("{$dir}/divider.twig", "{#\nname: Divider\nkind: block\n#}\n");
+        file_put_contents("{$dir}/divider.twig", "{#\nname: Divider\ncategory: Content\nkind: block\n#}\n");
 
         $output = shell_exec(sprintf('php %s %s 2>&1', escapeshellarg($this->binPath), escapeshellarg($dir)));
 
@@ -173,7 +192,8 @@ final class FieldsMigrateCliTest extends TestCase
             'title' => 'Hero',
             'fields' => [['key' => 'field_hero_title', 'name' => 'title', 'label' => 'T', 'type' => 'text']],
         ], JSON_THROW_ON_ERROR));
-        file_put_contents("{$dir}/hero.yaml", "name: Hero\nmcp:\n  - 'Authored guidance'\nfields: {}\n");
+        file_put_contents("{$dir}/hero.twig", "{#\nname: Hero\ncategory: Content\n#}\n");
+        file_put_contents("{$dir}/hero.yaml", "name: Hero\ncategory: Content\nmcp:\n  - 'Authored guidance'\nfields: {}\n");
 
         $output = shell_exec(sprintf('php %s %s 2>&1', escapeshellarg($this->binPath), escapeshellarg($dir)));
 
@@ -193,7 +213,8 @@ final class FieldsMigrateCliTest extends TestCase
             'title' => 'Hero',
             'fields' => [['key' => 'field_hero_title', 'name' => 'title', 'label' => 'T', 'type' => 'text']],
         ], JSON_THROW_ON_ERROR));
-        file_put_contents("{$dir}/hero.yaml", "name: Hero\nmcp:\n  - 'Authored guidance'\nfields: {}\n");
+        file_put_contents("{$dir}/hero.twig", "{#\nname: Hero\ncategory: Content\n#}\n");
+        file_put_contents("{$dir}/hero.yaml", "name: Hero\ncategory: Content\nmcp:\n  - 'Authored guidance'\nfields: {}\n");
 
         $output = shell_exec(sprintf('php %s --force %s 2>&1', escapeshellarg($this->binPath), escapeshellarg($dir)));
 
@@ -223,7 +244,7 @@ final class FieldsMigrateCliTest extends TestCase
         $root = sys_get_temp_dir() . '/fields-migrate-cli-' . uniqid('', true);
         foreach (['hero', 'divider', 'button'] as $name) {
             mkdir("{$root}/{$name}", 0777, true);
-            file_put_contents("{$root}/{$name}/{$name}.twig", "{#\nname: \"{$name}\"\n#}\n");
+            file_put_contents("{$root}/{$name}/{$name}.twig", "{#\nname: \"{$name}\"\ncategory: Content\n#}\n");
         }
         file_put_contents("{$root}/hero/acf.json", json_encode([
             'key' => 'group_hero',

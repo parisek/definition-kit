@@ -1,4 +1,5 @@
 name: Demo Invalid Key
+category: Content
 fields:
   logo:
     type: media

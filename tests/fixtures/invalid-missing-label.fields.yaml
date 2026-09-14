@@ -1,4 +1,5 @@
 name: Demo Invalid Missing Label
+category: Content
 fields:
   orphan:
     type: text         # missing required `label`

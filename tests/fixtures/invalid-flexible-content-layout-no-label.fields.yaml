@@ -1,4 +1,5 @@
 name: Demo Invalid Flexible Content Layout Label
+category: Content
 fields:
   items:
     type: flexible_content

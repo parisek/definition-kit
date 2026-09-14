@@ -42,6 +42,7 @@ final class FieldsSchemaValidatorTest extends TestCase
         // feed opis the same JSON-model shape (stdClass for maps, incl. empty ones).
         $tree = Yaml::parse(<<<YAML
         name: X
+        category: Content
         fields:
           spacing:
             type: select
@@ -58,6 +59,7 @@ final class FieldsSchemaValidatorTest extends TestCase
     {
         $tree = Yaml::parse(<<<YAML
         name: X
+        category: Content
         fields:
           spacing:
             type: bogus
@@ -84,6 +86,7 @@ final class FieldsSchemaValidatorTest extends TestCase
     {
         $tree = Yaml::parse(<<<YAML
         name: X
+        category: Content
         fields:
           title:
             type: text
@@ -99,6 +102,7 @@ final class FieldsSchemaValidatorTest extends TestCase
     {
         $tree = Yaml::parse(<<<YAML
         name: X
+        category: Content
         fields:
           title:
             type: text
@@ -114,6 +118,7 @@ final class FieldsSchemaValidatorTest extends TestCase
     {
         $tree = Yaml::parse(<<<YAML
         name: X
+        category: Content
         fields:
           title:
             type: text
@@ -142,6 +147,7 @@ final class FieldsSchemaValidatorTest extends TestCase
     {
         $tree = Yaml::parse(<<<YAML
         name: X
+        category: Content
         fields:
           title:
             type: richtext
@@ -155,6 +161,7 @@ final class FieldsSchemaValidatorTest extends TestCase
         foreach (['key', 'name', 'type', 'fields', 'sub_fields', 'layouts', 'parent_repeater'] as $prop) {
             $rejectedTree = Yaml::parse(<<<YAML
             name: X
+            category: Content
             fields:
               title:
                 type: richtext
@@ -172,6 +179,7 @@ final class FieldsSchemaValidatorTest extends TestCase
     {
         $tree = Yaml::parse(<<<YAML
         name: X
+        category: Content
         fields:
           items:
             type: flexible_content
@@ -193,6 +201,7 @@ final class FieldsSchemaValidatorTest extends TestCase
     {
         $tree = Yaml::parse(<<<YAML
         name: X
+        category: Content
         fields:
           items:
             type: flexible_content
@@ -215,6 +224,7 @@ final class FieldsSchemaValidatorTest extends TestCase
         $yamlPath = tempnam(sys_get_temp_dir(), 'fields-two-errors-') . '.fields.yaml';
         file_put_contents($yamlPath, <<<YAML
         name: Demo Two Errors
+        category: Content
         fields:
           headline:
             type: heading
@@ -436,6 +446,7 @@ final class FieldsSchemaValidatorTest extends TestCase
         foreach (['fields', 'sub_fields', 'layouts', 'parent_repeater'] as $prop) {
             $tree = Yaml::parse(<<<YAML
             name: X
+            category: Content
             fields:
               title:
                 type: text
@@ -454,6 +465,7 @@ final class FieldsSchemaValidatorTest extends TestCase
         foreach (['fields', 'sub_fields', 'layouts', 'parent_repeater'] as $prop) {
             $tree = Yaml::parse(<<<YAML
             name: X
+            category: Content
             fields:
               items:
                 type: flexible_content
@@ -485,6 +497,7 @@ final class FieldsSchemaValidatorTest extends TestCase
         foreach (['key', 'name', 'type', 'fields', 'sub_fields', 'layouts', 'parent_repeater'] as $prop) {
             $tree = Yaml::parse(<<<YAML
             name: X
+            category: Content
             wp: { {$prop}: [] }
             fields:
               title:
@@ -506,6 +519,7 @@ final class FieldsSchemaValidatorTest extends TestCase
     {
         $tree = Yaml::parse(<<<YAML
         name: X
+        category: Content
         wp:
           accordions:
             - { key: field_x_accordion_a, label: A, open: 0 }
@@ -531,6 +545,7 @@ final class FieldsSchemaValidatorTest extends TestCase
     {
         $tree = Yaml::parse(<<<YAML
         name: X
+        category: Content
         fields:
           title:
             type: text
@@ -549,6 +564,7 @@ final class FieldsSchemaValidatorTest extends TestCase
         foreach (['field', 'query', 'global', 'parent', 'inherited'] as $role) {
             $tree = Yaml::parse(<<<YAML
             name: X
+            category: Content
             fields:
               title: { type: text, label: L, role: {$role} }
             YAML, Yaml::PARSE_OBJECT_FOR_MAP);
@@ -562,6 +578,7 @@ final class FieldsSchemaValidatorTest extends TestCase
     {
         $tree = Yaml::parse(<<<YAML
         name: X
+        category: Content
         fields:
           title: { type: text, label: L, role: computed }
         YAML, Yaml::PARSE_OBJECT_FOR_MAP);
@@ -573,6 +590,7 @@ final class FieldsSchemaValidatorTest extends TestCase
     {
         $tree = Yaml::parse(<<<YAML
         name: X
+        category: Content
         fields:
           video: { type: media, label: Video }
           sources: { type: text, label: Sources, role: derived, from: video }
@@ -588,6 +606,7 @@ final class FieldsSchemaValidatorTest extends TestCase
         // which is the unverifiable shrug the role exists to replace.
         $tree = Yaml::parse(<<<YAML
         name: X
+        category: Content
         fields:
           sources: { type: text, label: Sources, role: derived }
         YAML, Yaml::PARSE_OBJECT_FOR_MAP);
@@ -601,6 +620,7 @@ final class FieldsSchemaValidatorTest extends TestCase
             $roleLine = null === $role ? '' : ", role: {$role}";
             $tree = Yaml::parse(<<<YAML
             name: X
+            category: Content
             fields:
               video: { type: media, label: Video }
               sources: { type: text, label: Sources, from: video{$roleLine} }
@@ -623,6 +643,7 @@ final class FieldsSchemaValidatorTest extends TestCase
         // tailwind-base had to do.
         $tree = Yaml::parse(<<<'YAML'
         name: X
+        category: Content
         fields:
           link_attributes:
             type: group
@@ -639,6 +660,7 @@ final class FieldsSchemaValidatorTest extends TestCase
     {
         $tree = Yaml::parse(<<<'YAML'
         name: X
+        category: Content
         fields:
           heading: { type: group, label: Heading }
         YAML, Yaml::PARSE_OBJECT_FOR_MAP);
@@ -659,7 +681,7 @@ final class FieldsSchemaValidatorTest extends TestCase
             'menu: { type: repeater, label: M, role: parent, of: component:header-menu#items }',
             'menu: { type: repeater, label: M, role: parent, of: "component:header-menu#items.attributes" }',
         ] as $field) {
-            $tree = Yaml::parse("name: X\nfields:\n  {$field}\n", Yaml::PARSE_OBJECT_FOR_MAP);
+            $tree = Yaml::parse("name: X\ncategory: Content\nfields:\n  {$field}\n", Yaml::PARSE_OBJECT_FOR_MAP);
             $result = (new FieldsSchemaValidator())->validateData($tree);
             self::assertTrue($result->valid, $field . ': ' . print_r($result->errors, true));
         }
@@ -676,7 +698,7 @@ final class FieldsSchemaValidatorTest extends TestCase
             'related: { type: reference, label: R, of: "post :article" }',
             'related: { type: reference, label: R, of: "posts:article" }',
         ] as $field) {
-            $tree = Yaml::parse("name: X\nfields:\n  {$field}\n", Yaml::PARSE_OBJECT_FOR_MAP);
+            $tree = Yaml::parse("name: X\ncategory: Content\nfields:\n  {$field}\n", Yaml::PARSE_OBJECT_FOR_MAP);
             self::assertFalse(
                 (new FieldsSchemaValidator())->validateData($tree)->valid,
                 $field . ' was expected to fail',
@@ -694,7 +716,7 @@ final class FieldsSchemaValidatorTest extends TestCase
             'menu: { type: repeater, label: M, role: field, of: component:header-menu#items }',
             'menu: { type: repeater, label: M, role: parent, acf: true, of: component:header-menu#items }',
         ] as $field) {
-            $tree = Yaml::parse("name: X\nfields:\n  {$field}\n", Yaml::PARSE_OBJECT_FOR_MAP);
+            $tree = Yaml::parse("name: X\ncategory: Content\nfields:\n  {$field}\n", Yaml::PARSE_OBJECT_FOR_MAP);
             self::assertFalse(
                 (new FieldsSchemaValidator())->validateData($tree)->valid,
                 $field . ' was expected to fail',
@@ -706,6 +728,7 @@ final class FieldsSchemaValidatorTest extends TestCase
     {
         $tree = Yaml::parse(<<<'YAML'
         name: X
+        category: Content
         fields:
           menu:
             type: repeater
