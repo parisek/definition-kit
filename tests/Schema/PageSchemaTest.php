@@ -41,10 +41,10 @@ final class PageSchemaTest extends TestCase
             usage: [page-header-image, gallery-slider]
             category: Page
             render: bleed
-            web: https://example.com
+            web: /
             asana: https://app.asana.com/0/1
             figma: https://figma.com/design/x
-            drupal: https://example.com/node/1
+            drupal: /node/1
             description: "Homepage"
             dev: "Header overlaps the hero."
             weight: 1

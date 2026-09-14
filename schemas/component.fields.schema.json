@@ -5,6 +5,7 @@
     "type": "object",
     "required": [
         "name",
+        "category",
         "fields"
     ],
     "additionalProperties": false,
@@ -60,11 +61,13 @@
         },
         "web": {
             "type": "string",
-            "minLength": 1
+            "pattern": "^/(?!/)",
+            "description": "Site-relative path of the live page for this entry. Starts with `/` and not with `//`, so a full URL or a protocol-relative one fails: the host belongs to the environment, not the definition."
         },
         "asana": {
             "type": "string",
-            "minLength": 1
+            "pattern": "^[Hh][Tt][Tt][Pp][Ss]?://.*[Aa][Ss][Aa][Nn][Aa]\\.[Cc][Oo][Mm]",
+            "description": "Link to the tracking task. An absolute http(s) URL on asana.com; scheme and host match case-insensitively. The pattern spells out case classes instead of a `(?i)` flag, which ECMA-262 regex does not support."
         },
         "figma": {
             "type": "string",
@@ -72,7 +75,8 @@
         },
         "drupal": {
             "type": "string",
-            "minLength": 1
+            "pattern": "^/(?!/)",
+            "description": "Site-relative path of the Drupal admin screen for this entry. Starts with `/` and not with `//`, so a full URL or a protocol-relative one fails: the host belongs to the environment, not the definition."
         },
         "description": {
             "type": "string",
