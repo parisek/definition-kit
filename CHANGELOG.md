@@ -8,6 +8,28 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 <!-- New entries go directly under this line. It is the anchor that keeps a branch's
      changelog edit from merging into a version that shipped without it. -->
 
+### Added
+
+- **Pages get their own definition file, `page/<id>/<id>.yaml`, and their own
+  schema, `schemas/page.schema.json`.** A page YAML failed
+  `component.fields.schema.json`: that schema requires `fields:` and has no
+  page `kind`. A page is a different type, so it has a separate schema, not a
+  mode in the component one. It allows the keys `parisek/styleguide` reads for
+  a page (`name` required; `usage`, `category`, `render`, `web`, `asana`,
+  `figma`, `drupal`, `description`, `dev`, `weight`, `responsive`,
+  `body_class`, legacy `variants`) and refuses `fields`, `kind`, `wp`, `key`
+  and `mcp`.
+
+  A file is a page when it sits below a `page/` directory.
+  `fields-validate` checks it against the page schema and names the refused
+  component key. `fields-lint`, `fields-generate` and `fields-roles` report it
+  as `SKIP`. `fields-migrate page/<id>` moves the twig front-comment into
+  `<id>.yaml` with the `$schema` header and removes the comment from the twig. `--root` also finds nested `page/<group>/<id>/` pages.
+
+  Found on `neoli`: a prose comment in `page/_partials` broke the styleguide,
+  because a twig front-comment is parsed as YAML. Retiring the comment on pages
+  removes that failure mode (tailwind-base PR #708).
+
 ## [0.8.2] - 2026-08-14
 
 ### Fixed

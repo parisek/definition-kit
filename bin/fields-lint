@@ -8,6 +8,7 @@ use Parisek\DefinitionKit\Contract\ContractLinter;
 use Parisek\DefinitionKit\Contract\ContractResult;
 use Parisek\DefinitionKit\Lint\DriftLinter;
 use Parisek\DefinitionKit\Support\KeyStyle;
+use Parisek\DefinitionKit\Support\PageDefinition;
 
 foreach ([__DIR__ . '/../vendor/autoload.php', __DIR__ . '/../../../autoload.php'] as $autoload) {
     if (is_file($autoload)) {
@@ -22,6 +23,10 @@ function fields_lint_one(string $componentDir, KeyStyle $keyStyle): array
     $componentDir = rtrim($componentDir, '/');
     $componentName = basename($componentDir);
     $yamlPath = "{$componentDir}/{$componentName}.yaml";
+
+    if (PageDefinition::isPageDirectory($componentDir)) {
+        return ['status' => 'skip', 'component' => $componentName, 'reason' => PageDefinition::SKIP_REASON];
+    }
 
     if (!is_file($yamlPath)) {
         return ['status' => 'skip', 'component' => $componentName, 'reason' => "no {$componentName}.yaml yet"];
@@ -102,17 +107,20 @@ $results = [];
 if (null !== $root) {
     $dirs = glob(rtrim($root, '/') . '/*', GLOB_ONLYDIR) ?: [];
     sort($dirs);
-    foreach ($dirs as $dir) {
-        if (!$contractOnly) {
-            $results[] = fields_lint_one($dir, $keyStyle);
-        }
-        $contractResults[] = $contractLinter->lint($dir);
-    }
 } else {
-    if (!$contractOnly) {
-        $results[] = fields_lint_one($single, $keyStyle);
+    $dirs = [$single];
+}
+foreach ($dirs as $dir) {
+    // A page has neither a projection nor an input contract. It is reported
+    // once as SKIP, in both modes, and never reaches the contract linter.
+    if (PageDefinition::isPageDirectory($dir)) {
+        $results[] = fields_lint_one($dir, $keyStyle);
+        continue;
     }
-    $contractResults[] = $contractLinter->lint($single);
+    if (!$contractOnly) {
+        $results[] = fields_lint_one($dir, $keyStyle);
+    }
+    $contractResults[] = $contractLinter->lint($dir);
 }
 
 $failures = 0;

@@ -8,6 +8,7 @@ use Parisek\DefinitionKit\Generator\BlockJsonGenerator;
 use Parisek\DefinitionKit\Generator\BlockJsonWriter;
 use Parisek\DefinitionKit\Generator\FieldsGenerator;
 use Parisek\DefinitionKit\Support\KeyStyle;
+use Parisek\DefinitionKit\Support\PageDefinition;
 use Parisek\DefinitionKit\Schema\FieldsSchemaValidator;
 use Symfony\Component\Yaml\Yaml;
 
@@ -19,13 +20,17 @@ foreach ([__DIR__ . '/../vendor/autoload.php', __DIR__ . '/../../../autoload.php
 }
 
 /**
- * @return array{ok: bool, component: string, out?: string, error?: string}
+ * @return array{ok: bool, component: string, out?: string, error?: string, skipped?: string}
  */
 function fields_generate_one(string $componentDir, bool $dryRun, KeyStyle $keyStyle): array
 {
     $componentDir = rtrim($componentDir, '/');
     $componentName = basename($componentDir);
     $yamlPath = "{$componentDir}/{$componentName}.yaml";
+
+    if (PageDefinition::isPageDirectory($componentDir)) {
+        return ['ok' => true, 'component' => $componentName, 'skipped' => PageDefinition::SKIP_REASON];
+    }
 
     if (!is_file($yamlPath)) {
         return ['ok' => false, 'component' => $componentName, 'error' => "no {$componentName}.yaml at {$yamlPath}"];
@@ -205,7 +210,9 @@ if (null !== $root) {
 $failures = 0;
 foreach ($results as $result) {
     if ($result['ok']) {
-        echo "OK   {$result['component']}" . (isset($result['out']) ? " -> {$result['out']}" : '') . "\n";
+        echo isset($result['skipped'])
+            ? "SKIP {$result['component']}: {$result['skipped']}\n"
+            : "OK   {$result['component']}" . (isset($result['out']) ? " -> {$result['out']}" : '') . "\n";
         continue;
     }
     $failures++;

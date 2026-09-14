@@ -28,7 +28,7 @@ Four executables land in `vendor/bin/`:
 | --- | --- |
 | `fields-migrate` | Bootstrap: `acf.json` (+ sibling `block.json`, + `<name>.twig` front-comment for metadata) → authored `<name>.yaml`. |
 | `fields-generate` | `<name>.yaml` → `acf.json` + `block.json` projection. |
-| `fields-validate` | Validate `<name>.yaml` against the bundled JSON Schema. |
+| `fields-validate` | Validate `<name>.yaml` against the bundled JSON Schema (`page.schema.json` for a page, see Pages below). |
 | `fields-lint` | Drift-lint: fail when the committed projection differs from `generate(migrate(source))`. |
 
 Each accepts a single component directory or `--root=<components-root>` to sweep every `component/*/` under it (`--dry-run` on `fields-migrate` writes nothing).
@@ -41,6 +41,24 @@ vendor/bin/fields-migrate path/to/component/service-feature
 vendor/bin/fields-generate --root=path/to/components
 vendor/bin/fields-lint --root=path/to/components
 ```
+
+## Pages — `page/<id>/<id>.yaml`
+
+A styleguide page is not a component. It composes components, has no editor fields and no CMS projection. Its metadata lives in `page/<id>/<id>.yaml` and validates against its own schema, `schemas/page.schema.json`:
+
+```yaml
+# yaml-language-server: $schema=../../../../vendor/parisek/definition-kit/schemas/page.schema.json
+name: 'Hlavní strana'
+usage:
+  - page-header-image
+  - gallery-slider
+weight: 1
+```
+
+- **Required:** `name`. **Allowed:** `usage`, `category`, `render`, `web`, `asana`, `figma`, `drupal`, `description`, `dev`, `weight`, `responsive`, `body_class`, `variants` (legacy). **Refused:** `fields`, `kind`, `wp`, `key`, `mcp`.
+- **A file is a page when it is `<id>.yaml` in a directory below `page/`** (nearest `page` or `component` ancestor decides; nested `page/_partials/` and `page/<group>/<id>/` count) — the same rule `parisek/styleguide` types an entry by. The `$schema` comment is an editor hint, not the rule.
+- `fields-validate` checks a page against `page.schema.json`. `fields-lint`, `fields-generate` and `fields-roles` report it as `SKIP`.
+- `fields-migrate page/<id>` (or `--root=path/to/page`, which also finds nested `page/<group>/<id>/` and skips `_`-prefixed partial directories) moves the twig front-comment into `<id>.yaml` and removes the comment from the twig. It refuses a comment with a component-only key and never overwrites an existing `<id>.yaml` (unless `--force`).
 
 ## Wire the drift-lint into CI
 

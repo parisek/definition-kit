@@ -11,6 +11,7 @@ use Parisek\DefinitionKit\Lint\KindLinter;
 use Parisek\DefinitionKit\Lint\TranslatableInertLinter;
 use Parisek\DefinitionKit\Schema\FieldsSchemaValidator;
 use Parisek\DefinitionKit\Support\KeyStyle;
+use Parisek\DefinitionKit\Support\PageDefinition;
 use Symfony\Component\Yaml\Yaml;
 
 foreach ([__DIR__ . '/../vendor/autoload.php', __DIR__ . '/../../../autoload.php'] as $autoload) {
@@ -38,12 +39,37 @@ foreach ($paths as $path) {
 }
 
 $validator = new FieldsSchemaValidator();
+$pageValidator = FieldsSchemaValidator::forPage();
 $kindLinter = new KindLinter();
 $translatableInertLinter = new TranslatableInertLinter();
 $derivedFromLinter = new DerivedFromLinter();
 $forwardedShapeLinter = new ForwardedShapeLinter();
 $failed = false;
 foreach ($paths as $path) {
+    // A page (`page/<id>/<id>.yaml`) is a different type: it has its own
+    // schema and none of the component linters or the generator apply.
+    if (PageDefinition::isPageYaml($path)) {
+        $result = $pageValidator->validateFile($path);
+        if ($result->valid) {
+            echo "OK   {$path}\n";
+            continue;
+        }
+        $failed = true;
+        echo "FAIL {$path}\n";
+        try {
+            $document = Yaml::parseFile($path);
+        } catch (\Throwable) {
+            $document = null;
+        }
+        foreach (is_array($document) ? PageDefinition::componentOnlyKeyMessages($document) : [] as $message) {
+            echo "       {$message}\n";
+        }
+        foreach ($result->errors as $error) {
+            echo "       {$error['pointer']}: {$error['message']}\n";
+        }
+        continue;
+    }
+
     $result = $validator->validateFile($path);
     if (!$result->valid) {
         $failed = true;
