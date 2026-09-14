@@ -92,6 +92,7 @@ final class MetadataFormatSchemaTest extends TestCase
         yield 'https absolute URL' => ['https://example.com/faq'];
         yield 'http absolute URL' => ['http://example.ddev.site/faq'];
         yield 'uppercase scheme' => ['HTTPS://example.com'];
+        yield 'port and query' => ['http://localhost:8080/x?y=1#z'];
     }
 
     /** @return iterable<string, array{string}> */
@@ -101,6 +102,10 @@ final class MetadataFormatSchemaTest extends TestCase
         yield 'ftp scheme' => ['ftp://example.com/faq'];
         yield 'scheme without host' => ['https://'];
         yield 'bare host' => ['example.com/x'];
+        yield 'empty host with port' => ['https://:80'];
+        yield 'empty host with userinfo' => ['https://@'];
+        yield 'whitespace after the host' => ['https://example.com bad'];
+        yield 'whitespace in a path' => ['/faq bad'];
         yield 'protocol-relative' => ['//example.com/faq'];
         yield 'no leading slash' => ['faq'];
         yield 'empty' => [''];
