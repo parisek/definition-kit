@@ -79,6 +79,7 @@ final class MetadataFormatSchemaTest extends TestCase
         yield 'asana.com as a host suffix' => ['https://notasana.com/task'];
         yield 'asana.com as userinfo' => ['https://asana.com@example.com/task'];
         yield 'asana.com as a host prefix' => ['https://asana.com.example.com/task'];
+        yield 'whitespace after the path' => ['https://asana.com/ bad'];
         yield 'relative path' => ['/0/1'];
         yield 'empty' => [''];
     }
