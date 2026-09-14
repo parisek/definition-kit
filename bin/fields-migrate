@@ -206,7 +206,8 @@ $single = null;
 $usage = "usage: fields-migrate [--dry-run] [--force] <component-dir|page-dir>\n"
     . "       fields-migrate [--dry-run] [--force] --root=<components-root>\n"
     . "  --force re-derives over an existing definition, discarding whatever only it records.\n"
-    . "  A directory under page/ moves its twig front-comment into <id>.yaml (page.schema.json).\n";
+    . "  A directory under page/ moves its twig front-comment into <id>.yaml (page.schema.json).\n"
+    . "  --root on a page root also finds nested page/<group>/<id>/ directories.\n";
 
 foreach ($args as $arg) {
     if (str_starts_with($arg, '--root=')) {
@@ -251,6 +252,27 @@ $keyStyle = KeyStyle::discoverFor($root ?? dirname(rtrim((string) $single, '/'))
 $results = [];
 if (null !== $root) {
     $dirs = glob(rtrim($root, '/') . '/*', GLOB_ONLYDIR) ?: [];
+    // The styleguide walks the page tree recursively, so a page root also
+    // holds `page/<group>/<id>/`. A group directory has no <group>.twig, and
+    // a one-level glob skipped every page under it while exiting 0.
+    // `_`-prefixed directories hold partials, not pages.
+    $dirs = array_values(array_filter(
+        $dirs,
+        static fn (string $dir): bool => !(str_starts_with(basename($dir), '_') && PageDefinition::isPageDirectory($dir)),
+    ));
+    $pending = $dirs;
+    while ([] !== $pending) {
+        $dir = array_shift($pending);
+        if (!PageDefinition::isPageDirectory($dir)) {
+            continue;
+        }
+        foreach (glob("{$dir}/*", GLOB_ONLYDIR) ?: [] as $child) {
+            if (!str_starts_with(basename($child), '_')) {
+                $dirs[] = $child;
+                $pending[] = $child;
+            }
+        }
+    }
     sort($dirs);
     foreach ($dirs as $dir) {
         // Everything the per-component form accepts, so a sweep and a single

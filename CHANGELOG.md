@@ -24,7 +24,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `fields-validate` checks it against the page schema and names the refused
   component key. `fields-lint`, `fields-generate` and `fields-roles` report it
   as `SKIP`. `fields-migrate page/<id>` moves the twig front-comment into
-  `<id>.yaml` with the `$schema` header and removes the comment from the twig.
+  `<id>.yaml` with the `$schema` header and removes the comment from the twig. `--root` also finds nested `page/<group>/<id>/` pages.
 
   Found on `neoli`: a prose comment in `page/_partials` broke the styleguide,
   because a twig front-comment is parsed as YAML. Retiring the comment on pages

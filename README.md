@@ -58,7 +58,7 @@ weight: 1
 - **Required:** `name`. **Allowed:** `usage`, `category`, `render`, `web`, `asana`, `figma`, `drupal`, `description`, `dev`, `weight`, `responsive`, `body_class`, `variants` (legacy). **Refused:** `fields`, `kind`, `wp`, `key`, `mcp`.
 - **A file is a page when it is `<id>.yaml` in a directory below `page/`** (nearest `page` or `component` ancestor decides; nested `page/_partials/` and `page/<group>/<id>/` count) — the same rule `parisek/styleguide` types an entry by. The `$schema` comment is an editor hint, not the rule.
 - `fields-validate` checks a page against `page.schema.json`. `fields-lint`, `fields-generate` and `fields-roles` report it as `SKIP`.
-- `fields-migrate page/<id>` (or `--root=path/to/page`) moves the twig front-comment into `<id>.yaml` and removes the comment from the twig. It refuses a comment with a component-only key and never overwrites an existing `<id>.yaml` (unless `--force`).
+- `fields-migrate page/<id>` (or `--root=path/to/page`, which also finds nested `page/<group>/<id>/` and skips `_`-prefixed partial directories) moves the twig front-comment into `<id>.yaml` and removes the comment from the twig. It refuses a comment with a component-only key and never overwrites an existing `<id>.yaml` (unless `--force`).
 
 ## Wire the drift-lint into CI
 

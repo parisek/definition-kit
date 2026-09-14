@@ -243,6 +243,24 @@ final class PageDefinitionCliTest extends TestCase
     }
 
     #[Test]
+    public function migrate_root_finds_a_page_nested_in_a_group_directory(): void
+    {
+        mkdir("{$this->root}/page/blog/post", 0777, true);
+        mkdir("{$this->root}/page/_partials", 0777, true);
+        file_put_contents("{$this->root}/page/blog/post/post.twig", "{# name: Post #}\n<main></main>\n");
+        file_put_contents("{$this->root}/page/home/home.twig", "{# name: Home #}\n<main></main>\n");
+        file_put_contents("{$this->root}/page/_partials/_partials.twig", "{# name: Partial #}\n");
+
+        [$out, $code] = $this->runBin('fields-migrate', ["--root={$this->root}/page"]);
+
+        self::assertSame(0, $code, $out);
+        self::assertStringContainsString('OK   post', $out);
+        self::assertFileExists("{$this->root}/page/blog/post/post.yaml");
+        self::assertFileExists("{$this->root}/page/home/home.yaml");
+        self::assertFileDoesNotExist("{$this->root}/page/_partials/_partials.yaml");
+    }
+
+    #[Test]
     public function migrate_dry_run_touches_neither_file(): void
     {
         $twig = "{# name: Home #}\n<main></main>\n";
