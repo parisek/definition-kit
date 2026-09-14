@@ -19,7 +19,8 @@ use Symfony\Component\Yaml\Yaml;
  * - `category`: required and non-empty on a component; optional on a page.
  * - `asana`: absolute http(s) URL on asana.com or a subdomain, case-insensitive.
  *   The rule only searched for the substring; the schema checks the host.
- * - `web`, `drupal`: site-relative path, starts with `/` and not with `//`.
+ * - `web`, `drupal`: site-relative path (starts with `/`, not `//`) or an
+ *   absolute http(s) URL with a host.
  */
 final class MetadataFormatSchemaTest extends TestCase
 {
@@ -88,12 +89,18 @@ final class MetadataFormatSchemaTest extends TestCase
         yield 'root' => ['/'];
         yield 'nested' => ['/admin/structure/paragraphs_type/accordion'];
         yield 'query' => ['/faq?x=1'];
+        yield 'https absolute URL' => ['https://example.com/faq'];
+        yield 'http absolute URL' => ['http://example.ddev.site/faq'];
+        yield 'uppercase scheme' => ['HTTPS://example.com'];
     }
 
     /** @return iterable<string, array{string}> */
     public static function invalidPath(): iterable
     {
-        yield 'absolute URL' => ['https://example.com/faq'];
+        yield 'javascript scheme' => ['javascript:alert(1)'];
+        yield 'ftp scheme' => ['ftp://example.com/faq'];
+        yield 'scheme without host' => ['https://'];
+        yield 'bare host' => ['example.com/x'];
         yield 'protocol-relative' => ['//example.com/faq'];
         yield 'no leading slash' => ['faq'];
         yield 'empty' => [''];

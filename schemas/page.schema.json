@@ -46,8 +46,8 @@
         },
         "web": {
             "type": "string",
-            "pattern": "^/(?!/)",
-            "description": "Site-relative path of the live page for this entry. Starts with `/` and not with `//`, so a full URL or a protocol-relative one fails: the host belongs to the environment, not the definition."
+            "pattern": "^(/(?!/)|[Hh][Tt][Tt][Pp][Ss]?://[^/?#\\s]+)",
+            "description": "Link to the live page for this entry. Either a site-relative path, which starts with `/` and not with `//`, or an absolute http(s) URL with a non-empty host; the scheme matches case-insensitively. A protocol-relative `//host`, another scheme (`ftp:`, `javascript:`) and a bare `example.com` fail. Consumers use the value as an href unchanged and resolve only a relative path against the environment."
         },
         "asana": {
             "type": "string",
@@ -60,8 +60,8 @@
         },
         "drupal": {
             "type": "string",
-            "pattern": "^/(?!/)",
-            "description": "Site-relative path of the Drupal admin screen for this entry. Starts with `/` and not with `//`, so a full URL or a protocol-relative one fails: the host belongs to the environment, not the definition."
+            "pattern": "^(/(?!/)|[Hh][Tt][Tt][Pp][Ss]?://[^/?#\\s]+)",
+            "description": "Link to the Drupal admin screen for this entry. Either a site-relative path, which starts with `/` and not with `//`, or an absolute http(s) URL with a non-empty host; the scheme matches case-insensitively. A protocol-relative `//host`, another scheme (`ftp:`, `javascript:`) and a bare `example.com` fail. Consumers use the value as an href unchanged and resolve only a relative path against the environment."
         },
         "description": {
             "type": "string",
