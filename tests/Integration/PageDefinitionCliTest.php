@@ -265,6 +265,24 @@ final class PageDefinitionCliTest extends TestCase
     }
 
     #[Test]
+    public function migrate_root_survives_a_symlink_cycle_and_migrates_each_page_once(): void
+    {
+        mkdir("{$this->root}/page/blog/post", 0777, true);
+        file_put_contents("{$this->root}/page/blog/post/post.twig", "{# name: Post #}\n<main></main>\n");
+        file_put_contents("{$this->root}/page/home/home.twig", "{# name: Home #}\n<main></main>\n");
+        symlink("{$this->root}/page/blog", "{$this->root}/page/blog/post/loop");
+        symlink("{$this->root}/page/home", "{$this->root}/page/alias");
+
+        [$out, $code] = $this->runBin('fields-migrate', ["--root={$this->root}/page"]);
+        unlink("{$this->root}/page/blog/post/loop");
+        unlink("{$this->root}/page/alias");
+
+        self::assertSame(0, $code, $out);
+        self::assertSame(1, substr_count($out, 'OK   post'), $out);
+        self::assertSame(1, substr_count($out, 'OK   home'), $out);
+    }
+
+    #[Test]
     public function migrate_dry_run_touches_neither_file(): void
     {
         $twig = "{# name: Home #}\n<main></main>\n";

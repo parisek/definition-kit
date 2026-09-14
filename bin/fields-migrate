@@ -260,6 +260,18 @@ if (null !== $root) {
         $dirs,
         static fn (string $dir): bool => !(str_starts_with(basename($dir), '_') && PageDefinition::isPageDirectory($dir)),
     ));
+    // Visited real paths stop a symlink cycle from looping forever, and a
+    // symlinked alias from migrating one page twice.
+    $visited = [];
+    $dirs = array_values(array_filter($dirs, static function (string $dir) use (&$visited): bool {
+        $real = (string) realpath($dir);
+        if (isset($visited[$real])) {
+            return false;
+        }
+        $visited[$real] = true;
+
+        return true;
+    }));
     $pending = $dirs;
     while ([] !== $pending) {
         $dir = array_shift($pending);
@@ -267,10 +279,13 @@ if (null !== $root) {
             continue;
         }
         foreach (glob("{$dir}/*", GLOB_ONLYDIR) ?: [] as $child) {
-            if (!str_starts_with(basename($child), '_')) {
-                $dirs[] = $child;
-                $pending[] = $child;
+            $real = realpath($child);
+            if (str_starts_with(basename($child), '_') || false === $real || isset($visited[$real])) {
+                continue;
             }
+            $visited[$real] = true;
+            $dirs[] = $child;
+            $pending[] = $child;
         }
     }
     sort($dirs);
