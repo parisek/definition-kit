@@ -21,7 +21,7 @@ final class PageSchemaTest extends TestCase
 {
     private static function validate(string $yaml): \Parisek\DefinitionKit\Schema\ValidationResult
     {
-        return FieldsSchemaValidator::forPage()->validateData(Yaml::parse($yaml, Yaml::PARSE_OBJECT_FOR_MAP));
+        return FieldsSchemaValidator::forEntry('page')->validateData(Yaml::parse($yaml, Yaml::PARSE_OBJECT_FOR_MAP));
     }
 
     /** @return array<string, mixed> */

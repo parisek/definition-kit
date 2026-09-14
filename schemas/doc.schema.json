@@ -1,0 +1,81 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://schemas.parisek.dev/definition-kit/doc.schema.json",
+    "title": "Styleguide doc definition",
+    "description": "The `doc/<id>/<id>.yaml` contract. A doc is a styleguide catalogue entry of prose, not a widget. It has no editor fields, no CMS projection and no `kind`. The keys below are the ones parisek/styleguide gives an effect for a doc. It refuses `render` (forwarded to the render only for a component), `responsive` (forced to false for every doc), and `usage`, `category`, `web`, `asana`, `figma` and `drupal` (the SPA shows none of them on a doc route). Shapes shared with page.schema.json are copied, not referenced, and DocSchemaTest keeps the copies identical.",
+    "type": "object",
+    "required": [
+        "name"
+    ],
+    "additionalProperties": false,
+    "properties": {
+        "name": {
+            "type": "string",
+            "minLength": 1
+        },
+        "description": {
+            "type": "string",
+            "description": "What this doc is. Shown as the sidebar tooltip and on the overview card."
+        },
+        "dev": {
+            "$ref": "#/$defs/multivalueAnnotation",
+            "description": "Notes for the DEVELOPER working on this doc. Stays in the YAML: the styleguide does not read it."
+        },
+        "weight": {
+            "type": "integer"
+        },
+        "body_class": {
+            "type": "string",
+            "description": "Class string the styleguide puts on the render iframe's <body>. For a doc it is the only body class: the styleguide skips the global `iframe.body_class` on doc renders."
+        },
+        "variants": {
+            "type": "object",
+            "additionalProperties": {
+                "oneOf": [
+                    {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                            "title": {
+                                "type": "string"
+                            },
+                            "label": {
+                                "type": "string"
+                            },
+                            "description": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                ]
+            },
+            "description": "LEGACY fallback for the display metadata of `styleguide.<variant>.twig` siblings. The primary convention is a `{# title: … description: … #}` comment in the sibling file itself."
+        }
+    },
+    "$defs": {
+        "multivalueAnnotation": {
+            "oneOf": [
+                {
+                    "type": "null"
+                },
+                {
+                    "type": "string",
+                    "minLength": 1
+                },
+                {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "minItems": 1
+                }
+            ],
+            "description": "Either guidance, or an explicit decision that none is needed. A bare key (`mcp:`, parsing as null) means DELIBERATELY NONE — tooling that reports un-annotated components must stay silent about it, which an absent key cannot express. An empty string and an empty array stay invalid on purpose: they are almost always a half-finished edit, and allowing them would give one decision three spellings."
+        }
+    }
+}

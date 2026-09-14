@@ -34,12 +34,15 @@ final class FieldsSchemaValidator
     }
 
     /**
-     * A validator for `page/<id>/<id>.yaml`. A page is a different type from
-     * a component, so it has its own schema file, not a mode in this one.
+     * A validator for `page/<id>/<id>.yaml` or `doc/<id>/<id>.yaml`. Each is a
+     * different type from a component, so it has its own schema file, not a
+     * mode in this one.
+     *
+     * @param 'page'|'doc' $type
      */
-    public static function forPage(): self
+    public static function forEntry(string $type): self
     {
-        return new self(__DIR__ . '/../../schemas/page.schema.json');
+        return new self(__DIR__ . "/../../schemas/{$type}.schema.json");
     }
 
     public function validateFile(string $yamlPath): ValidationResult

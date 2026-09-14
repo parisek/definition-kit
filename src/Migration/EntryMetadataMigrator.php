@@ -6,41 +6,44 @@ namespace Parisek\DefinitionKit\Migration;
 
 use Parisek\DefinitionKit\Schema\FieldsSchemaValidator;
 use Parisek\DefinitionKit\Support\ArrayJsonModel;
-use Parisek\DefinitionKit\Support\PageDefinition;
+use Parisek\DefinitionKit\Support\EntryDefinition;
 use Symfony\Component\Yaml\Exception\ParseException;
 use Symfony\Component\Yaml\Yaml;
 
 /**
- * Moves a styleguide page's twig front-comment into `page/<id>/<id>.yaml`.
+ * Moves a styleguide page's or doc's twig front-comment into `<id>.yaml`.
  *
- * A page has no acf.json, so nothing is derived: the comment IS the
+ * A page or doc has no acf.json, so nothing is derived: the comment IS the
  * definition. It is parsed as YAML, the same way parisek/styleguide parses
  * it, then normalised the way AcfJsonReader normalises a component's root
  * metadata (a comma-separated `usage` becomes a list, an empty string is
  * dropped). The result must validate against page.schema.json before
  * anything is returned, so a caller never writes a YAML the styleguide would
  * read and the schema would refuse.
+ *
+ * Pages and docs share this code; the type picks the schema and the refused keys.
  */
-final class PageMetadataMigrator
+final class EntryMetadataMigrator
 {
     private readonly FieldsSchemaValidator $validator;
 
-    public function __construct(?FieldsSchemaValidator $validator = null)
+    /** @param 'page'|'doc' $type */
+    public function __construct(private readonly string $type)
     {
-        $this->validator = $validator ?? FieldsSchemaValidator::forPage();
+        $this->validator = FieldsSchemaValidator::forEntry($type);
     }
 
     /**
-     * @return array{yaml: string, twig: string} the page YAML (header included)
+     * @return array{yaml: string, twig: string} the entry YAML (header included)
      *                                           and the twig without its front-comment
      *
      * @throws MigrationValidationException when there is no front-comment, it is
      *                                      not YAML, or it does not validate
      */
-    public function migrate(string $twigSource, string $schemaHeader = PageDefinition::SCHEMA_HEADER): array
+    public function migrate(string $twigSource, string $schemaHeader): array
     {
         // The FIRST comment anywhere, as ComponentParser::parseTwigComment()
-        // finds it: a page may open with `{% extends %}` before its metadata.
+        // finds it: an entry may open with `{% extends %}` before its metadata.
         if (!preg_match('/\{#(.*?)#\}[ \t]*\r?\n?/s', $twigSource, $m, PREG_OFFSET_CAPTURE)) {
             throw new MigrationValidationException('no front-comment to migrate');
         }
@@ -54,7 +57,7 @@ final class PageMetadataMigrator
             throw new MigrationValidationException('front-comment has no `name:`');
         }
 
-        $refused = PageDefinition::componentOnlyKeyMessages($parsed);
+        $refused = EntryDefinition::refusedKeyMessages($parsed, $this->type);
         if ([] !== $refused) {
             throw new MigrationValidationException(implode('; ', $refused));
         }

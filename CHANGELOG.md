@@ -8,6 +8,29 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 <!-- New entries go directly under this line. It is the anchor that keeps a branch's
      changelog edit from merging into a version that shipped without it. -->
 
+### Added
+
+- **Docs get their own definition file, `doc/<id>/<id>.yaml`, and their own
+  schema, `schemas/doc.schema.json`.** A doc is prose, not a widget. The schema
+  requires `name` and allows `description`, `dev`, `weight`, `body_class` and
+  legacy `variants`. It refuses the component keys (`fields`, `kind`, `wp`,
+  `key`, `mcp`) and the keys `parisek/styleguide` gives no effect on a doc
+  (`render`, `responsive`, `usage`, `category`, `web`, `asana`, `figma`,
+  `drupal`). The CLI treats a doc like a page: `fields-validate` checks it,
+  the projection commands skip it, and `fields-migrate doc/<id>` or
+  `--root=path/to/doc` moves its twig front-comment into `<id>.yaml`.
+
+  From tailwind-base: after tailwind-base ADR-0016 retired the page
+  front-comment, `doc/typography` carried the last twig annotation.
+
+### Changed
+
+- **`Support\PageDefinition` is now `Support\EntryDefinition`,
+  `Migration\PageMetadataMigrator` is now `Migration\EntryMetadataMigrator`,
+  and `FieldsSchemaValidator::forPage()` is now `forEntry('page')`.** One code
+  path serves pages and docs. The CLI behaviour for pages and components is
+  unchanged.
+
 ## [0.9.0] - 2026-09-14
 
 ### Added
