@@ -8,7 +8,7 @@ use Parisek\DefinitionKit\Contract\ContractLinter;
 use Parisek\DefinitionKit\Contract\ContractResult;
 use Parisek\DefinitionKit\Lint\DriftLinter;
 use Parisek\DefinitionKit\Support\KeyStyle;
-use Parisek\DefinitionKit\Support\PageDefinition;
+use Parisek\DefinitionKit\Support\EntryDefinition;
 
 foreach ([__DIR__ . '/../vendor/autoload.php', __DIR__ . '/../../../autoload.php'] as $autoload) {
     if (is_file($autoload)) {
@@ -24,8 +24,8 @@ function fields_lint_one(string $componentDir, KeyStyle $keyStyle): array
     $componentName = basename($componentDir);
     $yamlPath = "{$componentDir}/{$componentName}.yaml";
 
-    if (PageDefinition::isPageDirectory($componentDir)) {
-        return ['status' => 'skip', 'component' => $componentName, 'reason' => PageDefinition::SKIP_REASON];
+    if (null !== ($entryType = EntryDefinition::typeOfDirectory($componentDir))) {
+        return ['status' => 'skip', 'component' => $componentName, 'reason' => EntryDefinition::skipReason($entryType)];
     }
 
     if (!is_file($yamlPath)) {
@@ -111,9 +111,9 @@ if (null !== $root) {
     $dirs = [$single];
 }
 foreach ($dirs as $dir) {
-    // A page has neither a projection nor an input contract. It is reported
-    // once as SKIP, in both modes, and never reaches the contract linter.
-    if (PageDefinition::isPageDirectory($dir)) {
+    // A page or doc has neither a projection nor an input contract. It is
+    // reported once as SKIP, in both modes, and never reaches the contract linter.
+    if (null !== EntryDefinition::typeOfDirectory($dir)) {
         $results[] = fields_lint_one($dir, $keyStyle);
         continue;
     }

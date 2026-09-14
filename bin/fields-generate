@@ -8,7 +8,7 @@ use Parisek\DefinitionKit\Generator\BlockJsonGenerator;
 use Parisek\DefinitionKit\Generator\BlockJsonWriter;
 use Parisek\DefinitionKit\Generator\FieldsGenerator;
 use Parisek\DefinitionKit\Support\KeyStyle;
-use Parisek\DefinitionKit\Support\PageDefinition;
+use Parisek\DefinitionKit\Support\EntryDefinition;
 use Parisek\DefinitionKit\Schema\FieldsSchemaValidator;
 use Symfony\Component\Yaml\Yaml;
 
@@ -28,8 +28,8 @@ function fields_generate_one(string $componentDir, bool $dryRun, KeyStyle $keySt
     $componentName = basename($componentDir);
     $yamlPath = "{$componentDir}/{$componentName}.yaml";
 
-    if (PageDefinition::isPageDirectory($componentDir)) {
-        return ['ok' => true, 'component' => $componentName, 'skipped' => PageDefinition::SKIP_REASON];
+    if (null !== ($entryType = EntryDefinition::typeOfDirectory($componentDir))) {
+        return ['ok' => true, 'component' => $componentName, 'skipped' => EntryDefinition::skipReason($entryType)];
     }
 
     if (!is_file($yamlPath)) {
