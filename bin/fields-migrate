@@ -7,6 +7,8 @@ use Parisek\DefinitionKit\Migration\AcfJsonReader;
 use Parisek\DefinitionKit\Support\KeyStyle;
 use Parisek\DefinitionKit\Migration\BlockResidualCapturer;
 use Parisek\DefinitionKit\Migration\FieldsYamlWriter;
+use Parisek\DefinitionKit\Migration\PageMetadataMigrator;
+use Parisek\DefinitionKit\Support\PageDefinition;
 
 foreach ([__DIR__ . '/../vendor/autoload.php', __DIR__ . '/../../../autoload.php'] as $autoload) {
     if (is_file($autoload)) {
@@ -16,7 +18,7 @@ foreach ([__DIR__ . '/../vendor/autoload.php', __DIR__ . '/../../../autoload.php
 }
 
 /**
- * @return array{ok: bool, component: string, out?: string, error?: string}
+ * @return array{ok: bool, component: string, out?: string, error?: string, skipped?: string}
  */
 function fields_migrate_one(string $componentDir, bool $dryRun, bool $force, KeyStyle $keyStyle): array
 {
@@ -45,6 +47,34 @@ function fields_migrate_one(string $componentDir, bool $dryRun, bool $force, Key
             'skipped' => "{$componentName}.yaml already exists — migrating would overwrite what only it "
                 . 'records (mcp:/dev: guidance, authored labels). Re-derive with --force if that is what you want.',
         ];
+    }
+
+    // A page has no acf.json to derive from: its twig front-comment is the
+    // whole definition. It moves into the YAML and leaves the twig, so the
+    // two sources cannot disagree later (the retirement tailwind-base
+    // ADR 0007 did for components).
+    if (PageDefinition::isPageDirectory($componentDir)) {
+        if (!is_file($twigPath)) {
+            return ['ok' => false, 'component' => $componentName, 'error' => "no {$componentName}.twig at {$componentDir}"];
+        }
+        try {
+            $page = (new PageMetadataMigrator())->migrate((string) file_get_contents($twigPath));
+        } catch (\RuntimeException $e) {
+            return ['ok' => false, 'component' => $componentName, 'error' => $e->getMessage()];
+        }
+        if ($dryRun) {
+            return ['ok' => true, 'component' => $componentName];
+        }
+        // YAML first: if the twig write then fails, the metadata exists twice
+        // (the YAML wins in the styleguide), never zero times.
+        if (false === file_put_contents($yamlPath, $page['yaml'])) {
+            return ['ok' => false, 'component' => $componentName, 'error' => "cannot write {$yamlPath}"];
+        }
+        if (false === file_put_contents($twigPath, $page['twig'])) {
+            return ['ok' => false, 'component' => $componentName, 'error' => "wrote {$yamlPath} but cannot strip the front-comment from {$twigPath}"];
+        }
+
+        return ['ok' => true, 'component' => $componentName, 'out' => $yamlPath];
     }
 
     // A Gutenberg block with no editor fields has a block.json and no
@@ -153,9 +183,10 @@ $dryRun = false;
 $force = false;
 $single = null;
 
-$usage = "usage: fields-migrate [--dry-run] [--force] <component-dir>\n"
+$usage = "usage: fields-migrate [--dry-run] [--force] <component-dir|page-dir>\n"
     . "       fields-migrate [--dry-run] [--force] --root=<components-root>\n"
-    . "  --force re-derives over an existing definition, discarding whatever only it records.\n";
+    . "  --force re-derives over an existing definition, discarding whatever only it records.\n"
+    . "  A directory under page/ moves its twig front-comment into <id>.yaml (page.schema.json).\n";
 
 foreach ($args as $arg) {
     if (str_starts_with($arg, '--root=')) {
