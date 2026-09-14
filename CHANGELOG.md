@@ -20,7 +20,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `body_class`, legacy `variants`) and refuses `fields`, `kind`, `wp`, `key`
   and `mcp`.
 
-  A file is a page when its directory's parent is named `page`.
+  A file is a page when it sits below a `page/` directory.
   `fields-validate` checks it against the page schema and names the refused
   component key. `fields-lint`, `fields-generate` and `fields-roles` report it
   as `SKIP`. `fields-migrate page/<id>` moves the twig front-comment into

@@ -17,11 +17,15 @@ final class PageDefinitionTest extends TestCase
         $this->root = sys_get_temp_dir() . '/page-definition-' . bin2hex(random_bytes(4));
         mkdir("{$this->root}/page/home", 0777, true);
         mkdir("{$this->root}/component/home", 0777, true);
+        mkdir("{$this->root}/page/_partials", 0777, true);
+        mkdir("{$this->root}/page/group/nested", 0777, true);
+        touch("{$this->root}/page/_partials/header.twig");
     }
 
     protected function tearDown(): void
     {
-        foreach (["{$this->root}/page/home", "{$this->root}/component/home", "{$this->root}/page", "{$this->root}/component", $this->root] as $dir) {
+        unlink("{$this->root}/page/_partials/header.twig");
+        foreach (["{$this->root}/page/_partials", "{$this->root}/page/group/nested", "{$this->root}/page/group", "{$this->root}/page/home", "{$this->root}/component/home", "{$this->root}/page", "{$this->root}/component", $this->root] as $dir) {
             rmdir($dir);
         }
     }
@@ -35,5 +39,15 @@ final class PageDefinitionTest extends TestCase
         self::assertFalse(PageDefinition::isPageYaml("{$this->root}/page/hmoe/hmoe.yaml"));
         self::assertTrue(PageDefinition::isPageDirectory("{$this->root}/page/home/"));
         self::assertFalse(PageDefinition::isPageDirectory("{$this->root}/page/hmoe"));
+        self::assertFalse(PageDefinition::isPageDirectory("{$this->root}/page"));
+    }
+
+    #[Test]
+    public function a_page_nested_below_the_page_root_is_a_page(): void
+    {
+        self::assertTrue(PageDefinition::isPageDirectory("{$this->root}/page/group/nested"));
+        self::assertTrue(PageDefinition::isPageYaml("{$this->root}/page/group/nested/nested.yaml"));
+        self::assertTrue(PageDefinition::isPageYaml("{$this->root}/page/_partials/header.yaml"));
+        self::assertFalse(PageDefinition::isPageYaml("{$this->root}/page/_partials/notes.yaml"));
     }
 }

@@ -8,10 +8,12 @@ namespace Parisek\DefinitionKit\Support;
  * Tells a styleguide page from a component, and says what a page may carry.
  *
  * The rule is the directory, the same one parisek/styleguide uses to type an
- * entry: a definition directory whose parent is named `page` is a page
- * (`<templates>/page/<id>/`). The `$schema` comment line is not the rule. It
- * is an editor hint, authors omit it or point it at a stale path, and a YAML
- * parser never sees it.
+ * entry: a definition directory below a `page` directory is a page. The
+ * styleguide walks the page tree recursively, so `page/<id>/`,
+ * `page/_partials/` and `page/<group>/<id>/` all count. The nearest
+ * `page` or `component` ancestor decides. The `$schema` comment line is not
+ * the rule. It is an editor hint, authors omit it or point it at a stale
+ * path, and a YAML parser never sees it.
  *
  * A page has no CMS projection (no acf.json, block.json or component.yml) and
  * no input contract, so the projection commands skip it.
@@ -32,15 +34,34 @@ final class PageDefinition
         // the projection commands report a clean SKIP for a missing directory.
         $real = realpath(rtrim($dir, '/'));
 
-        return false !== $real && is_dir($real) && 'page' === basename(\dirname($real));
+        if (false === $real || !is_dir($real)) {
+            return false;
+        }
+
+        for ($dir = \dirname($real); \dirname($dir) !== $dir; $dir = \dirname($dir)) {
+            $name = basename($dir);
+            if ('page' === $name) {
+                return true;
+            }
+            if ('component' === $name) {
+                return false;
+            }
+        }
+
+        return false;
     }
 
     public static function isPageYaml(string $path): bool
     {
-        // Only the definition itself, `page/<id>/<id>.yaml`, not a sidecar
-        // YAML that happens to live in the same directory.
-        return basename($path) === basename(\dirname($path)) . '.yaml'
-            && self::isPageDirectory(\dirname($path));
+        // The definition is the YAML the styleguide pairs with a template:
+        // `<dir>/<id>.yaml` next to `<dir>/<id>.twig`, or `page/<id>/<id>.yaml`.
+        // A sidecar such as `fixtures.yaml` is neither.
+        $dir = \dirname($path);
+        $id = basename($path, '.yaml');
+
+        return str_ends_with($path, '.yaml')
+            && ($id === basename($dir) || is_file("{$dir}/{$id}.twig"))
+            && self::isPageDirectory($dir);
     }
 
     /**
