@@ -18,6 +18,26 @@ foreach ([__DIR__ . '/../vendor/autoload.php', __DIR__ . '/../../../autoload.php
 }
 
 /**
+ * Writes the whole content or nothing: a short write never replaces the file.
+ * Page migration strips the twig comment only after the YAML is complete, so a
+ * truncated YAML must not count as written.
+ */
+function fields_migrate_write_atomically(string $path, string $content): bool
+{
+    $tmp = $path . '.tmp';
+    if (strlen($content) !== file_put_contents($tmp, $content)) {
+        @unlink($tmp);
+        return false;
+    }
+    if (!rename($tmp, $path)) {
+        @unlink($tmp);
+        return false;
+    }
+
+    return true;
+}
+
+/**
  * @return array{ok: bool, component: string, out?: string, error?: string, skipped?: string}
  */
 function fields_migrate_one(string $componentDir, bool $dryRun, bool $force, KeyStyle $keyStyle): array
@@ -67,10 +87,10 @@ function fields_migrate_one(string $componentDir, bool $dryRun, bool $force, Key
         }
         // YAML first: if the twig write then fails, the metadata exists twice
         // (the YAML wins in the styleguide), never zero times.
-        if (false === file_put_contents($yamlPath, $page['yaml'])) {
+        if (!fields_migrate_write_atomically($yamlPath, $page['yaml'])) {
             return ['ok' => false, 'component' => $componentName, 'error' => "cannot write {$yamlPath}"];
         }
-        if (false === file_put_contents($twigPath, $page['twig'])) {
+        if (!fields_migrate_write_atomically($twigPath, $page['twig'])) {
             return ['ok' => false, 'component' => $componentName, 'error' => "wrote {$yamlPath} but cannot strip the front-comment from {$twigPath}"];
         }
 
