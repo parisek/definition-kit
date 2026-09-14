@@ -39,12 +39,14 @@ final class PageMetadataMigrator
      */
     public function migrate(string $twigSource): array
     {
-        if (!preg_match('/^(\xEF\xBB\xBF)?\s*\{#(.*?)#\}[ \t]*\r?\n?/s', $twigSource, $m)) {
+        // The FIRST comment anywhere, as ComponentParser::parseTwigComment()
+        // finds it: a page may open with `{% extends %}` before its metadata.
+        if (!preg_match('/\{#(.*?)#\}[ \t]*\r?\n?/s', $twigSource, $m, PREG_OFFSET_CAPTURE)) {
             throw new MigrationValidationException('no front-comment to migrate');
         }
 
         try {
-            $parsed = Yaml::parse(str_replace("\t", "    ", trim($m[2])));
+            $parsed = Yaml::parse(str_replace("\t", "    ", trim($m[1][0])));
         } catch (ParseException $e) {
             throw new MigrationValidationException('front-comment is not YAML: ' . $e->getMessage());
         }
@@ -86,7 +88,7 @@ final class PageMetadataMigrator
 
         return [
             'yaml' => PageDefinition::SCHEMA_HEADER . "\n" . Yaml::dump($tree, 10, 2, Yaml::DUMP_MULTI_LINE_LITERAL_BLOCK),
-            'twig' => $m[1] . substr($twigSource, strlen($m[0])),
+            'twig' => substr($twigSource, 0, $m[0][1]) . substr($twigSource, $m[0][1] + strlen($m[0][0])),
         ];
     }
 }

@@ -222,6 +222,18 @@ final class PageDefinitionCliTest extends TestCase
     }
 
     #[Test]
+    public function migrate_finds_the_metadata_comment_after_leading_twig(): void
+    {
+        file_put_contents("{$this->root}/page/home/home.twig", "{% extends 'base.twig' %}\n{# name: Home #}\n<main></main>\n");
+
+        [$out, $code] = $this->runBin('fields-migrate', ["{$this->root}/page/home"]);
+
+        self::assertSame(0, $code, $out);
+        self::assertStringContainsString('name: Home', (string) file_get_contents("{$this->root}/page/home/home.yaml"));
+        self::assertSame("{% extends 'base.twig' %}\n<main></main>\n", file_get_contents("{$this->root}/page/home/home.twig"));
+    }
+
+    #[Test]
     public function migrate_dry_run_touches_neither_file(): void
     {
         $twig = "{# name: Home #}\n<main></main>\n";
