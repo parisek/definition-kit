@@ -29,7 +29,7 @@ final class FieldsGenerateCliTest extends TestCase
 
     public function test_single_component_writes_acf_json_and_block_json(): void
     {
-        $dir = $this->makeComponentDir('demo', "name: Demo\nfields:\n  title:\n    type: text\n    label: Nadpis\n");
+        $dir = $this->makeComponentDir('demo', "name: Demo\ncategory: Content\nfields:\n  title:\n    type: text\n    label: Nadpis\n");
 
         $output = shell_exec(sprintf('php %s %s 2>&1', escapeshellarg($this->binPath), escapeshellarg($dir)));
 
@@ -49,7 +49,7 @@ final class FieldsGenerateCliTest extends TestCase
         // Idempotence: regenerating over an existing acf.json must keep its
         // `modified`, not stamp the current time — otherwise every run churns
         // the field on every component (git noise for a committed artifact).
-        $dir = $this->makeComponentDir('demo', "name: Demo\nfields:\n  title:\n    type: text\n    label: Nadpis\n");
+        $dir = $this->makeComponentDir('demo', "name: Demo\ncategory: Content\nfields:\n  title:\n    type: text\n    label: Nadpis\n");
         $pinned = 1700000000;
         file_put_contents("{$dir}/acf.json", json_encode(['key' => 'group_demo', 'modified' => $pinned], JSON_PRETTY_PRINT));
 
@@ -65,7 +65,7 @@ final class FieldsGenerateCliTest extends TestCase
     {
         // No existing acf.json → fall back to the current time (just assert it's
         // a plausible non-zero timestamp; the exact value is non-deterministic).
-        $dir = $this->makeComponentDir('demo', "name: Demo\nfields:\n  title:\n    type: text\n    label: Nadpis\n");
+        $dir = $this->makeComponentDir('demo', "name: Demo\ncategory: Content\nfields:\n  title:\n    type: text\n    label: Nadpis\n");
 
         shell_exec(sprintf('php %s %s 2>&1', escapeshellarg($this->binPath), escapeshellarg($dir)));
 
@@ -78,7 +78,7 @@ final class FieldsGenerateCliTest extends TestCase
 
     public function test_dry_run_writes_nothing(): void
     {
-        $dir = $this->makeComponentDir('demo', "name: Demo\nfields:\n  title:\n    type: text\n    label: Nadpis\n");
+        $dir = $this->makeComponentDir('demo', "name: Demo\ncategory: Content\nfields:\n  title:\n    type: text\n    label: Nadpis\n");
 
         shell_exec(sprintf('php %s --root=%s --dry-run 2>&1', escapeshellarg($this->binPath), escapeshellarg(dirname($dir))));
 
@@ -94,11 +94,11 @@ final class FieldsGenerateCliTest extends TestCase
         $bad = "{$root}/bad";
         mkdir($good);
         mkdir($bad);
-        file_put_contents("{$good}/good.yaml", "name: Good\nfields:\n  title:\n    type: text\n    label: Nadpis\n");
+        file_put_contents("{$good}/good.yaml", "name: Good\ncategory: Content\nfields:\n  title:\n    type: text\n    label: Nadpis\n");
         // A field with `type: media` but no `kind` — AbstractTypeReverseMapper
         // throws DomainException; the validator lets it through since `kind`
         // is only required-by-convention for media, not schema-enforced.
-        file_put_contents("{$bad}/bad.yaml", "name: Bad\nfields:\n  photo:\n    type: media\n    label: Foto\n");
+        file_put_contents("{$bad}/bad.yaml", "name: Bad\ncategory: Content\nfields:\n  photo:\n    type: media\n    label: Foto\n");
 
         $output = shell_exec(sprintf('php %s --root=%s --dry-run 2>&1', escapeshellarg($this->binPath), escapeshellarg($root)));
 
@@ -112,7 +112,7 @@ final class FieldsGenerateCliTest extends TestCase
     {
         $dir = $this->makeComponentDir(
             'demo',
-            "name: Demo\nfields:\n  title:\n    type: text\n    label: Nadpis\n",
+            "name: Demo\ncategory: Content\nfields:\n  title:\n    type: text\n    label: Nadpis\n",
             ['example' => ['viewportWidth' => 1280, 'attributes' => ['data' => ['title' => 'Real content']]]],
         );
 
@@ -126,7 +126,7 @@ final class FieldsGenerateCliTest extends TestCase
 
     public function test_invalid_definition_fails_fast_before_writing_anything(): void
     {
-        $dir = $this->makeComponentDir('demo', "name: Demo\nfields:\n  title:\n    type: not_a_real_type\n    label: Nadpis\n");
+        $dir = $this->makeComponentDir('demo', "name: Demo\ncategory: Content\nfields:\n  title:\n    type: not_a_real_type\n    label: Nadpis\n");
 
         $output = shell_exec(sprintf('php %s %s 2>&1', escapeshellarg($this->binPath), escapeshellarg($dir)));
 
@@ -141,7 +141,7 @@ final class FieldsGenerateCliTest extends TestCase
         // Before the guard it fell through to the positional argument, left
         // $dryRun false, and the command rewrote acf.json/block.json — the
         // caller believed nothing had been touched.
-        $dir = $this->makeComponentDir('demo', "name: Demo\nfields:\n  title:\n    type: text\n    label: Nadpis\n");
+        $dir = $this->makeComponentDir('demo', "name: Demo\ncategory: Content\nfields:\n  title:\n    type: text\n    label: Nadpis\n");
 
         $output = shell_exec(sprintf(
             'php %s --check %s 2>&1; echo "exit=$?"',
@@ -170,7 +170,7 @@ final class FieldsGenerateCliTest extends TestCase
         // is unaffected — a `part` still projects its fields.
         $dir = $this->makeComponentDir(
             'demo',
-            "name: Demo\nkind: {$kind}\nfields:\n  title:\n    type: text\n    label: Nadpis\n",
+            "name: Demo\ncategory: Content\nkind: {$kind}\nfields:\n  title:\n    type: text\n    label: Nadpis\n",
         );
 
         $output = shell_exec(sprintf('php %s %s 2>&1', escapeshellarg($this->binPath), escapeshellarg($dir)));
@@ -185,7 +185,7 @@ final class FieldsGenerateCliTest extends TestCase
     {
         $dir = $this->makeComponentDir(
             'demo',
-            "name: Demo\nkind: block\nfields:\n  title:\n    type: text\n    label: Nadpis\n",
+            "name: Demo\ncategory: Content\nkind: block\nfields:\n  title:\n    type: text\n    label: Nadpis\n",
         );
 
         shell_exec(sprintf('php %s %s 2>&1', escapeshellarg($this->binPath), escapeshellarg($dir)));
@@ -204,7 +204,7 @@ final class FieldsGenerateCliTest extends TestCase
         // also leave the file untouched and this test would still pass.
         $dir = $this->makeComponentDir(
             'demo',
-            "name: Demo\nkind: part\nfields:\n  title:\n    type: text\n    label: Nadpis\n",
+            "name: Demo\ncategory: Content\nkind: part\nfields:\n  title:\n    type: text\n    label: Nadpis\n",
             ['name' => 'acf/demo', 'sentinel' => true],
         );
 
@@ -225,7 +225,7 @@ final class FieldsGenerateCliTest extends TestCase
         // rather than assumed to carry over.
         $dir = $this->makeComponentDir(
             'demo',
-            "name: Demo\nkind: utility\nfields:\n  title:\n    type: text\n    label: Nadpis\n",
+            "name: Demo\ncategory: Content\nkind: utility\nfields:\n  title:\n    type: text\n    label: Nadpis\n",
         );
 
         $dryRun = shell_exec(sprintf(
@@ -256,7 +256,7 @@ final class FieldsGenerateCliTest extends TestCase
         // Absence of `kind` means "the backfill has not reached this file", not
         // "not a block" — inferring from silence would strip block.json from
         // every un-migrated component in a downstream repo.
-        $dir = $this->makeComponentDir('demo', "name: Demo\nfields:\n  title:\n    type: text\n    label: Nadpis\n");
+        $dir = $this->makeComponentDir('demo', "name: Demo\ncategory: Content\nfields:\n  title:\n    type: text\n    label: Nadpis\n");
 
         shell_exec(sprintf('php %s %s 2>&1', escapeshellarg($this->binPath), escapeshellarg($dir)));
 
@@ -267,7 +267,7 @@ final class FieldsGenerateCliTest extends TestCase
     {
         // The guard keys off a leading '-', so it must not swallow the real
         // flags sitting next to it.
-        $dir = $this->makeComponentDir('demo', "name: Demo\nfields:\n  title:\n    type: text\n    label: Nadpis\n");
+        $dir = $this->makeComponentDir('demo', "name: Demo\ncategory: Content\nfields:\n  title:\n    type: text\n    label: Nadpis\n");
 
         $dryRunOutput = shell_exec(sprintf(
             'php %s --dry-run %s 2>&1',

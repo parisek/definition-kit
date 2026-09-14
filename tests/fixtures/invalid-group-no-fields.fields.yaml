@@ -1,4 +1,5 @@
 name: Demo Invalid Group
+category: Content
 fields:
   heading:
     type: group        # missing required `fields` when type is group/repeater

@@ -2,10 +2,10 @@ name: Demo Root Metadata
 usage: homepage-v2
 category: Gutenberg
 render: bleed
-web: 'https://mairateam.ddev.site/demo-root-metadata'
-asana: 'https://app.asana.com/1/311854867024856/task/1215711477693484'
+web: /demo-root-metadata
+asana: 'https://app.asana.com/1/000/task/000'
 figma: 'https://figma.com/file/abc123/demo?node-id=1-2'
-drupal: 'paragraph--demo_root_metadata'
+drupal: /admin/structure/paragraphs_type/demo_root_metadata
 description: 'Demo component exercising every optional root metadata key at once.'
 weight: 20
 responsive: true

@@ -1,4 +1,5 @@
 name: 'Reference - detail'
+category: Content
 key: group_reference_detail
 fields:
   heading:

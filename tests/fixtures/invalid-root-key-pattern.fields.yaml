@@ -1,4 +1,5 @@
 name: Invalid Root Key
+category: Content
 key: not-a-group-key
 fields:
   title:

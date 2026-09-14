@@ -27,7 +27,7 @@ final class PageDefinitionCliTest extends TestCase
         file_put_contents("{$this->root}/component/demo/demo.twig", "<p>{{ content.title }}</p>\n");
         file_put_contents(
             "{$this->root}/component/demo/demo.yaml",
-            "name: Demo\nkind: element\nfields:\n  title:\n    type: text\n    label: Title\n    acf: false\n    role: field\n",
+            "name: Demo\ncategory: Content\nkind: element\nfields:\n  title:\n    type: text\n    label: Title\n    acf: false\n    role: field\n",
         );
         file_put_contents("{$this->root}/page/home/home.twig", "<main>{{ component_demo({ title: 'Hi' }) }}</main>\n");
         file_put_contents("{$this->root}/page/home/styleguide.twig", "{{ page_home({}) }}\n");

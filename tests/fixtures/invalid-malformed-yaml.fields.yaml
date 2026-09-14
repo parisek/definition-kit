@@ -1,4 +1,5 @@
 name: Demo Malformed
+category: Content
 fields:
   title:
     type: text

@@ -1,4 +1,5 @@
 name: Invalid Visible When
+category: Content
 fields:
   conditional_field:
     type: text

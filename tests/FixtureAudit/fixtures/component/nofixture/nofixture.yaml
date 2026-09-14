@@ -1,4 +1,5 @@
 name: "nofixture (fields-contract fixture)"
+category: Content
 fields:
   x:
     role: field

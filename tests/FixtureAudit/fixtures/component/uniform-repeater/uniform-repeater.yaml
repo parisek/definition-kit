@@ -1,4 +1,5 @@
 name: "uniform-repeater (fields-contract fixture)"
+category: Content
 fields:
   items:
     role: field

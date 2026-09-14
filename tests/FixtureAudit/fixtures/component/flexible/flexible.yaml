@@ -1,4 +1,5 @@
 name: "flexible (fields-contract fixture)"
+category: Content
 fields:
   blocks:
     role: field

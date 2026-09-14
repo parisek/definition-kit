@@ -1,4 +1,5 @@
 name: Demo Invalid Bad Type
+category: Content
 fields:
   headline:
     type: heading      # not in the abstract-type enum

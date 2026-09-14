@@ -4,8 +4,8 @@ category: Gutenberg
 render: bleed
 asana: 'https://app.asana.com/1/000/task/000'
 figma: 'https://figma.com/file/000'
-web: 'https://example.com/demo'
-drupal: paragraph_demo
+web: /demo
+drupal: /admin/structure/paragraphs_type/demo
 key: group_authored-vocabulary
 wp:
   show_in_rest: 1

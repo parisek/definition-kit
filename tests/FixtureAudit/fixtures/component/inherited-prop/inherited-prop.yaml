@@ -1,4 +1,5 @@
 name: "inherited-prop (fields-contract fixture)"
+category: Content
 fields:
   wrapper_id:
     role: inherited

@@ -1,4 +1,5 @@
 name: Demo Flexible Content
+category: Content
 fields:
   items:
     type: flexible_content

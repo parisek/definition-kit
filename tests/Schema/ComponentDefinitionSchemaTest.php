@@ -27,6 +27,7 @@ final class ComponentDefinitionSchemaTest extends TestCase
         $definition = array_merge(
             [
                 'name' => 'X',
+                'category' => 'Content',
                 'fields' => [
                     'title' => [
                         'type' => 'text',

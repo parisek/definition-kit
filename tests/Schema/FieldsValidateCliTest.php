@@ -69,7 +69,7 @@ final class FieldsValidateCliTest extends TestCase
 
     public function test_valid_definition_exits_zero(): void
     {
-        $path = $this->writeYaml('demo', "name: Demo\nkind: element\nfields:\n  title:\n    type: text\n    label: Title\n");
+        $path = $this->writeYaml('demo', "name: Demo\ncategory: Content\nkind: element\nfields:\n  title:\n    type: text\n    label: Title\n");
 
         [$output, $exitCode] = $this->runCli($path);
 
@@ -79,7 +79,7 @@ final class FieldsValidateCliTest extends TestCase
 
     public function test_schema_invalid_definition_exits_nonzero(): void
     {
-        $path = $this->writeYaml('demo', "name: Demo\nkind: element\nfields:\n  title:\n    type: not_a_real_type\n    label: Title\n");
+        $path = $this->writeYaml('demo', "name: Demo\ncategory: Content\nkind: element\nfields:\n  title:\n    type: not_a_real_type\n    label: Title\n");
 
         [$output, $exitCode] = $this->runCli($path);
 
@@ -92,6 +92,7 @@ final class FieldsValidateCliTest extends TestCase
     {
         $path = $this->writeYaml('demo', <<<YAML
         name: Demo
+        category: Content
         kind: element
         fields:
           toggle:
@@ -116,6 +117,7 @@ final class FieldsValidateCliTest extends TestCase
     {
         $path = $this->writeYaml('demo', <<<YAML
         name: Demo
+        category: Content
         kind: element
         fields:
           conditional_field:
@@ -142,6 +144,7 @@ final class FieldsValidateCliTest extends TestCase
     {
         $path = $this->writeYaml('demo', <<<YAML
         name: Demo
+        category: Content
         kind: element
         fields:
           toggle:
@@ -174,6 +177,7 @@ final class FieldsValidateCliTest extends TestCase
     {
         $path = $this->writeYaml('demo', <<<YAML
         name: Demo
+        category: Content
         kind: element
         fields:
           items:
@@ -203,6 +207,7 @@ final class FieldsValidateCliTest extends TestCase
     {
         $path = $this->writeYaml('demo', <<<YAML
         name: Demo
+        category: Content
         kind: element
         fields:
           items:
@@ -227,6 +232,7 @@ final class FieldsValidateCliTest extends TestCase
     {
         $path = $this->writeYaml('demo', <<<YAML
         name: Demo
+        category: Content
         kind: element
         fields:
           items:
