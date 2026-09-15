@@ -106,7 +106,10 @@ final class GenerationRoundTripTest extends TestCase
      * refusing a whole component (measured across the downstream fleet:
      * relationship 9 fields, message 2, range 1). The fixture covers a
      * fully-baseline relationship, a relationship deviating on
-     * `filters`/`elements`/`taxonomy`/`min`/`max`, a range with every
+     * `filters`/`elements`/`taxonomy`/`min`/`max`, an UNRESTRICTED
+     * relationship (`post_type: []` — a normal, common ACF shape that used
+     * to migrate to the schema-invalid `of: ""`, see
+     * AbstractTypeMapper::normalizedPostTypes()), a range with every
      * constraint authored, a leading message with a residual `esc_html`
      * deviation, and a trailing message with an empty `name` (the real
      * corpus shape — umbili's image-promo styleguide-link note).
@@ -119,9 +122,18 @@ final class GenerationRoundTripTest extends TestCase
         $diffs = AcfJsonComparator::diff($result['original'], $result['regenerated']);
         self::assertSame([], $diffs, implode("\n", $diffs));
         self::assertSame(
-            ['message', 'relationship', 'relationship', 'range', 'message'],
+            ['message', 'relationship', 'relationship', 'relationship', 'range', 'message'],
             array_column($result['regenerated']['fields'], 'type'),
         );
+    }
+
+    public function test_related_content_unrestricted_relationship_reproduces_empty_post_type(): void
+    {
+        $fixtureDir = __DIR__ . '/../fixtures/migration/corpus-sample/related-content';
+        $result = $this->roundTrip("{$fixtureDir}/acf.json", 'related-content');
+
+        $regeneratedByName = array_column($result['regenerated']['fields'], null, 'name');
+        self::assertSame([], $regeneratedByName['any_content']['post_type']);
     }
 
     public function test_heading_section_round_trips_structurally_exact_including_multi_field_accordion(): void

@@ -90,6 +90,31 @@ final class AbstractTypeMapperTest extends TestCase
         self::assertSame(['of' => 'post:post', 'multiple' => true], $result['extra']);
     }
 
+    /**
+     * An empty (or missing) `post_type` means "no restriction — every post
+     * type" in real ACF, a normal and common relationship shape — NOT
+     * "restricted to nothing". `implode(',', [])` used to emit `of: ""`,
+     * which the schema's `of` pattern rejects outright (see
+     * AbstractTypeMapper::normalizedPostTypes()'s own docblock).
+     */
+    public function test_relationship_with_empty_post_type_maps_to_of_post_any(): void
+    {
+        $result = $this->mapper->map(['type' => 'relationship', 'name' => 'f', 'post_type' => []]);
+        self::assertSame(['of' => 'post:any', 'multiple' => true], $result['extra']);
+    }
+
+    public function test_relationship_with_missing_post_type_key_maps_to_of_post_any(): void
+    {
+        $result = $this->mapper->map(['type' => 'relationship', 'name' => 'f']);
+        self::assertSame(['of' => 'post:any', 'multiple' => true], $result['extra']);
+    }
+
+    public function test_post_object_with_empty_post_type_maps_to_of_post_any(): void
+    {
+        $result = $this->mapper->map(['type' => 'post_object', 'name' => 'f', 'post_type' => []]);
+        self::assertSame(['of' => 'post:any'], $result['extra']);
+    }
+
     public function test_range_maps_to_number_with_marker(): void
     {
         $result = $this->mapper->map(['type' => 'range', 'name' => 'f']);

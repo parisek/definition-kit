@@ -72,6 +72,22 @@ final class MigrationCompletenessAuditor
             $path = '' === $pathPrefix ? $name : "{$pathPrefix}.{$name}";
 
             if (in_array($type, ['accordion', 'message'], true)) {
+                // Documented drop, but ONLY at the root — Migration\AcfJsonReader
+                // captures and replays both pseudo-field kinds exclusively at
+                // that level (`wp.accordions`/`wp.messages`). A NESTED
+                // accordion/message (inside a group/repeater's `sub_fields` or
+                // a flexible_content layout) has no such capture — the reader
+                // now rejects it loudly instead of silently dropping it (see
+                // its own `rejectNestedPseudoField()` docblock), so seeing one
+                // here means either that guard regressed, or this auditor is
+                // being run directly against hand-built data that bypassed it.
+                // Either way it is silent data loss, not a documented drop.
+                if ('' === $pathPrefix) {
+                    continue;
+                }
+                $violations[] = "{$path}: nested {$type} field reached the migrated definition — "
+                    . 'accordion/message pseudo-fields are only captured and replayed at the root level; '
+                    . 'this is silent data loss, not the documented root-level drop';
                 continue;
             }
 

@@ -144,7 +144,12 @@ final class AbstractTypeReverseMapper
                 static fn (string $part): string => substr($part, strlen('post:')),
                 explode(',', $of),
             );
-            $extra = ['post_type' => $postTypes];
+            // `post:any` is the reverse of AbstractTypeMapper::normalizedPostTypes()'s
+            // forward normalization — WordPress's own reserved "no
+            // restriction" sentinel, standing in for the raw field's
+            // genuinely empty `post_type: []`. Reversing it to a literal
+            // `['any']` would emit an ACF post type that does not exist.
+            $extra = ['post_type' => ['any'] === $postTypes ? [] : $postTypes];
             // A relationship is always multi-value by field design — it has
             // no raw `multiple` prop of its own, unlike post_object, so none
             // is emitted here (see AbstractTypeMapper::map()'s own relationship

@@ -85,6 +85,35 @@
             "bidirectional_target": []
         },
         {
+            "key": "field_related-content_any_content",
+            "label": "Any related content",
+            "name": "any_content",
+            "aria-label": "",
+            "type": "relationship",
+            "instructions": "Unrestricted — every post type, ACF's own default when no post type is picked.",
+            "required": 0,
+            "conditional_logic": 0,
+            "wrapper": {
+                "width": "",
+                "class": "",
+                "id": ""
+            },
+            "allow_in_bindings": 0,
+            "wpml_cf_preferences": 1,
+            "post_type": [],
+            "taxonomy": [],
+            "min": 0,
+            "max": 0,
+            "filters": [
+                "search",
+                "post_type",
+                "taxonomy"
+            ],
+            "elements": [],
+            "return_format": "object",
+            "bidirectional_target": []
+        },
+        {
             "key": "field_related-content_rating",
             "label": "Rating",
             "name": "rating",

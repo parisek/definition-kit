@@ -115,6 +115,32 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   component for an annotation that looked completely valid. Such a child
   now falls back to `--assume-role` (or ambiguous-provenance) instead,
   same as if the container had no role at all. Closes #75.
+- **A nested `accordion`/`message` inside a group/repeater's `sub_fields`
+  or a flexible_content layout is now rejected loudly, not silently
+  dropped.** Both pseudo-field kinds are captured and replayed ONLY at a
+  component's root — the reader used to `continue` past a nested one with
+  no diagnostic at all, generation never reproduced it, and a container
+  whose only child was a pseudo-field threw a misleading "zero sub-fields"
+  error with no hint why. `AcfJsonReader::rejectNestedPseudoField()` now
+  throws immediately, naming the field, its container and its ACF type.
+  `MigrationCompletenessAuditor` now flags a nested pseudo-field it
+  encounters directly as silent data loss too, instead of skipping it the
+  same way it correctly skips a ROOT-level one. Found in review of #78.
+- **An unrestricted `relationship`/`post_object` (`post_type: []` or
+  missing — "every post type", a normal and common ACF shape) used to
+  migrate to the schema-invalid `of: ""`.** Empty/missing `post_type` now
+  normalizes to WordPress's own reserved "no restriction" sentinel,
+  `of: post:any` (mirroring `WP_Query`'s `post_type: 'any'`), which
+  reverses back to ACF's genuinely-unrestricted `post_type: []` — not a
+  literal, nonexistent `any` post type. Found in review of #78.
+- **A message immediately followed by an accordion (or vice versa), both
+  anchored on the same real field, now reproduces its true authored
+  order on regeneration.** It used to always emit accordions first
+  regardless of which was actually authored first. `Migration\AcfJsonReader`
+  now attaches a `seq` ordering hint, but ONLY on an anchor that mixes
+  both kinds — a single-kind anchor (the fleet's overwhelming majority)
+  never gets one, so `wp.accordions` stays byte-for-byte unchanged for
+  every definition with no messages. Found in review of #78.
 
 ## [0.13.0] - 2026-09-15
 
