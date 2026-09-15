@@ -135,13 +135,14 @@ final class FieldsGenerator
      * AbstractTypeReverseMapper::reverse() above, via `buildField()` ->
      * `FieldReconstructor::reconstruct()` -> `AbstractTypeReverseMapper`)
      * — overlaying it verbatim would emit a bogus `acf_type` prop ACF
-     * itself never writes. `accordions` is root-only (AcfJsonReader sets
-     * it exclusively on the definition tree's own `wp` bag, never on a
-     * per-field one) — listed here defensively so a future migration bug
-     * that mistakenly attaches it to a field can't leak it either;
-     * RootFieldGroupBuilder is the sole legitimate consumer.
+     * itself never writes. `accordions`/`messages` are root-only
+     * (AcfJsonReader sets them exclusively on the definition tree's own
+     * `wp` bag, never on a per-field one) — listed here defensively so a
+     * future migration bug that mistakenly attaches either to a field
+     * can't leak it either; RootFieldGroupBuilder is the sole legitimate
+     * consumer of both.
      */
-    private const INTERNAL_WP_MARKERS = ['acf_type', 'accordions'];
+    private const INTERNAL_WP_MARKERS = ['acf_type', 'accordions', 'messages'];
 
     /**
      * Round 7 — the deny-list widens beyond the round-6 scalar identity
@@ -606,7 +607,12 @@ final class FieldsGenerator
             // (accordionBaseline() always emits `type: 'accordion'`)
             // instead, so the exemption can only ever match a genuine
             // accordion pseudo-field.
-            if ('accordion' !== ($field['type'] ?? null)) {
+            // `message` pseudo-fields get the identical exemption for the
+            // identical reason — they carry no postmeta row (see
+            // RootFieldGroupBuilder::messageBaseline()), and the real corpus
+            // has message fields authored with an empty `name` (umbili's
+            // image-promo styleguide-link message).
+            if (!in_array($field['type'] ?? null, ['accordion', 'message'], true)) {
                 $this->assertNameUnseenAtThisLevel((string) $field['name'], $seenNamesThisLevel);
             }
 

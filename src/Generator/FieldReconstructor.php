@@ -76,7 +76,7 @@ final class FieldReconstructor
             $out['maxlength'] = (int) $semanticField['maxlength'];
         }
 
-        if ('number' === $acfType) {
+        if (in_array($acfType, ['number', 'range'], true)) {
             foreach (['min', 'max', 'step'] as $prop) {
                 if (isset($semanticField[$prop])) {
                     $out[$prop] = $semanticField[$prop];

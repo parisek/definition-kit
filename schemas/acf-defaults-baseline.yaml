@@ -112,6 +112,33 @@ checkbox: # -> select + multiple:true
   allow_custom: 0
   default_value: []
 
+range: # -> number + wp.acf_type:range
+  # ACF's own field defaults, not a corpus census: the fleet's one real
+  # `range` field (loyaltiq/estimate-list) authors every one of min/max/
+  # step/default_value itself, so no deviation from these defaults is
+  # observed either way. `prepend`/`append` mirror `number`'s own entries.
+  prepend: ''
+  append: ''
+  default_value: ''
+
+relationship: # -> reference + of:post:<type>[,...] + multiple:true + wp.acf_type:relationship
+  # ACF's own field defaults. Corpus census over the 9 real relationship
+  # fields (aleszejdl x6, loyaltiq x1, meteopress x1): `return_format` is
+  # always `object`, `bidirectional_target` always `[]`. `min`/`max` are
+  # always the `0` ("no limit") sentinel in the corpus; `filters` and
+  # `elements` vary per field (search-only vs. search+post_type+taxonomy;
+  # [] vs. ['featured_image']) and `taxonomy` is inconsistently `[]` vs.
+  # `''` across ACF-version eras — all four survive verbatim in a field's
+  # `wp:` bag whenever they deviate from the values below, exactly like
+  # post_object's own `taxonomy`/`return_format`.
+  filters: ['search', 'post_type', 'taxonomy']
+  elements: []
+  taxonomy: []
+  min: 0
+  max: 0
+  return_format: object
+  bidirectional_target: []
+
 taxonomy: # -> reference + of:term:<taxonomy>
   # The editor-UI cardinality axis. `select` is ACF's own default and the
   # only value the abstract vocabulary has no home for; the other three

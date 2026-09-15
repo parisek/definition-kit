@@ -27,12 +27,12 @@ final class AbstractTypeReverseMapper
         return match ($type) {
             'text' => $this->text($semanticField, $wpAcfType),
             'richtext' => ['acfType' => 'wysiwyg', 'extra' => []],
-            'number' => ['acfType' => 'number', 'extra' => []],
+            'number' => $this->number($wpAcfType),
             'boolean' => ['acfType' => 'true_false', 'extra' => []],
             'select' => $this->select($semanticField, $wpAcfType),
             'media' => $this->media($semanticField),
             'link' => $this->link($semanticField),
-            'reference' => $this->reference($semanticField),
+            'reference' => $this->reference($semanticField, $wpAcfType),
             'date' => ['acfType' => 'date_picker', 'extra' => []],
             'group' => ['acfType' => 'group', 'extra' => []],
             'repeater' => $this->repeater($semanticField),
@@ -54,6 +54,18 @@ final class AbstractTypeReverseMapper
             return ['acfType' => 'textarea', 'extra' => []];
         }
         return ['acfType' => 'email' === $wpAcfType ? 'email' : 'text', 'extra' => []];
+    }
+
+    /**
+     * `range` collides with a plain `number` (identical signature — both
+     * lift min/max/step as constraints, neither has a type-specific extra
+     * key) — the `wp.acf_type` marker is what lets this stay reconstructible.
+     *
+     * @return array{acfType: string, extra: array<string,mixed>}
+     */
+    private function number(mixed $wpAcfType): array
+    {
+        return ['acfType' => 'range' === $wpAcfType ? 'range' : 'number', 'extra' => []];
     }
 
     /**
@@ -110,7 +122,7 @@ final class AbstractTypeReverseMapper
      * @param array<string,mixed> $field
      * @return array{acfType: string, extra: array<string,mixed>}
      */
-    private function reference(array $field): array
+    private function reference(array $field, mixed $wpAcfType): array
     {
         $of = (string) ($field['of'] ?? '');
         if ('geo' === $of) {
@@ -133,6 +145,13 @@ final class AbstractTypeReverseMapper
                 explode(',', $of),
             );
             $extra = ['post_type' => $postTypes];
+            // A relationship is always multi-value by field design — it has
+            // no raw `multiple` prop of its own, unlike post_object, so none
+            // is emitted here (see AbstractTypeMapper::map()'s own relationship
+            // docblock for the forward direction of this same asymmetry).
+            if ('relationship' === $wpAcfType) {
+                return ['acfType' => 'relationship', 'extra' => $extra];
+            }
             if (true === ($field['multiple'] ?? false)) {
                 $extra['multiple'] = 1;
             }

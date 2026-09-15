@@ -13,7 +13,8 @@ use Parisek\DefinitionKit\Baseline\TypeDefaults;
  * genuinely reconstructible from the migrated field's emitted output (this
  * is verified, not assumed — see the per-prop checks below), (c) present
  * verbatim under the migrated field's `wp:`, or (d) the field is an
- * accordion (documented drop). Anything else is a silent-data-loss bug.
+ * accordion or a message (both a documented drop). Anything else is a
+ * silent-data-loss bug.
  *
  * "Reconstructible" means: applying the inverse of the lift to the emitted
  * output reproduces the raw ACF value. This intentionally does NOT check
@@ -70,7 +71,7 @@ final class MigrationCompletenessAuditor
             $name = (string) ($acfField['name'] ?? '');
             $path = '' === $pathPrefix ? $name : "{$pathPrefix}.{$name}";
 
-            if ('accordion' === $type) {
+            if (in_array($type, ['accordion', 'message'], true)) {
                 continue;
             }
 
@@ -194,7 +195,7 @@ final class MigrationCompletenessAuditor
                 $violations[] = "{$path}.maxlength: not reconstructible from migrated field.maxlength";
             }
 
-            if ('number' === $type) {
+            if (in_array($type, ['number', 'range'], true)) {
                 foreach (self::NUMBER_CONSTRAINT_PROPS as $prop) {
                     $accounted[] = $prop;
                     if (isset($acfField[$prop]) && '' !== $acfField[$prop]

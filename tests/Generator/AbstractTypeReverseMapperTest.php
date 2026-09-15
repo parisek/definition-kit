@@ -153,6 +153,26 @@ final class AbstractTypeReverseMapperTest extends TestCase
         $this->mapper->reverse(['type' => 'reference', 'of' => 'taxonomy:category', 'label' => 'T']);
     }
 
+    public function test_reference_with_wp_acf_type_relationship_reverses_to_relationship_without_multiple(): void
+    {
+        $result = $this->mapper->reverse([
+            'type' => 'reference', 'of' => 'post:post,post:page', 'multiple' => true, 'label' => 'T',
+            'wp' => ['acf_type' => 'relationship'],
+        ]);
+        self::assertSame('relationship', $result['acfType']);
+        self::assertSame(['post', 'page'], $result['extra']['post_type']);
+        // ACF's relationship has no `multiple` prop of its own — always
+        // multi-value by field design — so emitting one would invent a key.
+        self::assertArrayNotHasKey('multiple', $result['extra']);
+    }
+
+    public function test_number_with_wp_acf_type_range_reverses_to_range(): void
+    {
+        $result = $this->mapper->reverse(['type' => 'number', 'label' => 'T', 'wp' => ['acf_type' => 'range']]);
+        self::assertSame('range', $result['acfType']);
+        self::assertSame([], $result['extra']);
+    }
+
     public function test_date_reverses_to_date_picker(): void
     {
         self::assertSame('date_picker', $this->mapper->reverse(['type' => 'date', 'label' => 'T'])['acfType']);

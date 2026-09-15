@@ -77,6 +77,42 @@ final class AbstractTypeMapper
                 'consumed' => ['type', 'choices'],
                 'wp' => ['acf_type' => 'radio'],
             ],
+            // Relationship collapses onto `reference` with `of: post:<type>[,post:<type>...]`
+            // — the same signature `post_object` uses — but a relationship
+            // is ALWAYS multi-value by field design (ACF has no single-value
+            // mode for it, unlike post_object's opt-in `multiple`), so
+            // `multiple: true` is emitted unconditionally rather than
+            // derived from a raw prop. `wp.acf_type` disambiguates the
+            // otherwise-identical `of: post:x, multiple: true` shape a
+            // multi-value post_object would also produce. `min`/`max`/
+            // `filters`/`elements`/`taxonomy`/`return_format`/
+            // `bidirectional_target` are relationship-only ACF knobs with
+            // no abstract home — left unconsumed here, so they fall
+            // through to the type-defaults baseline / a field's `wp:` bag
+            // exactly like post_object's own `taxonomy`/`return_format`.
+            'relationship' => [
+                'type' => 'reference',
+                'extra' => [
+                    'of' => implode(',', array_map(
+                        static fn ($t): string => 'post:' . (string) $t,
+                        (array) ($acfField['post_type'] ?? []),
+                    )),
+                    'multiple' => true,
+                ],
+                'consumed' => ['type', 'post_type'],
+                'wp' => ['acf_type' => 'relationship'],
+            ],
+            // Range is a number with a slider UI — same abstract signature
+            // as `number` (min/max/step are lifted as constraints exactly
+            // like a plain number field, see AcfJsonReader). `wp.acf_type`
+            // is what lets the generator emit `range` again instead of a
+            // `number` nobody authored.
+            'range' => [
+                'type' => 'number',
+                'extra' => [],
+                'consumed' => ['type'],
+                'wp' => ['acf_type' => 'range'],
+            ],
             'image' => ['type' => 'media', 'extra' => ['kind' => 'image'], 'consumed' => ['type']],
             'file' => ['type' => 'media', 'extra' => ['kind' => 'file'], 'consumed' => ['type']],
             'gallery' => ['type' => 'media', 'extra' => ['kind' => 'gallery', 'multiple' => true], 'consumed' => ['type']],

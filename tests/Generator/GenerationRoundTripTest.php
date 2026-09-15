@@ -101,6 +101,29 @@ final class GenerationRoundTripTest extends TestCase
         self::assertSame(['radio', 'radio', 'radio'], array_column($result['regenerated']['fields'], 'type'));
     }
 
+    /**
+     * `relationship`, `range` and `message` — the three ACF types still
+     * refusing a whole component (measured across the downstream fleet:
+     * relationship 9 fields, message 2, range 1). The fixture covers a
+     * fully-baseline relationship, a relationship deviating on
+     * `filters`/`elements`/`taxonomy`/`min`/`max`, a range with every
+     * constraint authored, a leading message with a residual `esc_html`
+     * deviation, and a trailing message with an empty `name` (the real
+     * corpus shape — umbili's image-promo styleguide-link note).
+     */
+    public function test_related_content_relationship_range_and_message_round_trip_exactly(): void
+    {
+        $fixtureDir = __DIR__ . '/../fixtures/migration/corpus-sample/related-content';
+        $result = $this->roundTrip("{$fixtureDir}/acf.json", 'related-content');
+
+        $diffs = AcfJsonComparator::diff($result['original'], $result['regenerated']);
+        self::assertSame([], $diffs, implode("\n", $diffs));
+        self::assertSame(
+            ['message', 'relationship', 'relationship', 'range', 'message'],
+            array_column($result['regenerated']['fields'], 'type'),
+        );
+    }
+
     public function test_heading_section_round_trips_structurally_exact_including_multi_field_accordion(): void
     {
         $fixtureDir = __DIR__ . '/../fixtures/migration/corpus-sample/heading-section';

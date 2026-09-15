@@ -35,6 +35,7 @@ final class AcfJsonReader
         private readonly TwigFieldTypeMapper $twigFieldTypeMapper = new TwigFieldTypeMapper(),
         private readonly WpmlTranslatableMapper $wpmlMapper = new WpmlTranslatableMapper(),
         private readonly AccordionResidualCapturer $accordionCapturer = new AccordionResidualCapturer(),
+        private readonly MessageResidualCapturer $messageCapturer = new MessageResidualCapturer(),
         private readonly KeyStyle $keyStyle = KeyStyle::Slug,
         /**
          * Fallback `role:` for a twig-derived field with no explicit `role:`
@@ -161,8 +162,37 @@ final class AcfJsonReader
 
         $fields = [];
         $accordions = [];
-        $pendingAccordion = null;
+        $messages = [];
+        // A SINGLE ordered queue for both pseudo-field kinds — not one
+        // pending slot per kind — so two-or-more pseudo-fields of either
+        // kind stacked back to back (e.g. umbili's image-promo: a message
+        // immediately followed by an accordion, both before the first real
+        // field) flush against their real anchor in the exact document
+        // order they were authored in, instead of a fixed kind-based order
+        // that would silently reorder them on generation.
+        $pendingPseudo = [];
         foreach ((array) ($acfJson['fields'] ?? []) as $acfField) {
+            if ('message' === ($acfField['type'] ?? null)) {
+                // A message field is presentational — a hint left in the
+                // editor UI, not a value an author sets. It carries no data
+                // an abstract type could hold without inventing a field
+                // nobody authored, so it is captured the same way as an
+                // accordion (its {key, label, name, message} identity plus
+                // "which field did it precede") and replayed by
+                // Generator\RootFieldGroupBuilder. Any further prop that
+                // deviates from ACF's own message defaults (a non-default
+                // `new_lines`, enabled `esc_html`, a non-zero
+                // `wpml_cf_preferences`, …) is captured verbatim by
+                // MessageResidualCapturer, mirroring AccordionResidualCapturer.
+                $pendingPseudo[] = ['kind' => 'message', 'data' => [
+                    'key' => (string) $acfField['key'],
+                    'label' => (string) ($acfField['label'] ?? ''),
+                    'name' => (string) ($acfField['name'] ?? ''),
+                    'message' => (string) ($acfField['message'] ?? ''),
+                    ...$this->messageCapturer->capture($acfField),
+                ]];
+                continue;
+            }
             if ('accordion' === ($acfField['type'] ?? null)) {
                 // An accordion carries no data of its own that survives migration
                 // elsewhere in this reader — its {key, label, open} identity plus
@@ -179,26 +209,44 @@ final class AcfJsonReader
                 // self-diff against the generator's baseline — generalising the
                 // former wpml-only special case so no per-prop special case
                 // accumulates. A fully-baseline accordion adds no residual.
-                $pendingAccordion = [
+                $pendingPseudo[] = ['kind' => 'accordion', 'data' => [
                     'key' => (string) $acfField['key'],
                     'label' => (string) ($acfField['label'] ?? ''),
                     'open' => (int) ($acfField['open'] ?? 0),
                     ...$this->accordionCapturer->capture($acfField),
-                ];
+                ]];
                 continue;
             }
-            if (null !== $pendingAccordion) {
-                $accordions[] = [...$pendingAccordion, 'before' => (string) $acfField['name']];
-                $pendingAccordion = null;
+            // Flush the whole queue here, against this real field, ONLY once
+            // we know this field is neither a message nor an accordion
+            // itself — flushing eagerly (before checking whether the
+            // CURRENT field is itself another pseudo-field) would anchor a
+            // pending message to a following accordion's empty `name`, a
+            // `before` no real field ever matches, silently dropping the
+            // message on generation.
+            foreach ($pendingPseudo as $pending) {
+                $entry = [...$pending['data'], 'before' => (string) $acfField['name']];
+                if ('accordion' === $pending['kind']) {
+                    $accordions[] = $entry;
+                } else {
+                    $messages[] = $entry;
+                }
             }
+            $pendingPseudo = [];
             $fields[(string) $acfField['name']] = $this->readField($acfField, $componentSlug, [], $keyNameMap);
         }
-        if (null !== $pendingAccordion) {
-            // Trailing accordion with nothing after it — never observed in the
-            // corpus, but a real ACF possibility. `before: null` tells
-            // Generator\RootFieldGroupBuilder to append it after the last field
-            // rather than silently dropping it.
-            $accordions[] = [...$pendingAccordion, 'before' => null];
+        // Trailing pseudo-fields with nothing after them — never observed for
+        // accordion in the corpus, but real corpus shape for message
+        // (umbili's image-promo carries a trailing styleguide-link message).
+        // `before: null` tells Generator\RootFieldGroupBuilder to append
+        // after the last field rather than silently dropping it.
+        foreach ($pendingPseudo as $pending) {
+            $entry = [...$pending['data'], 'before' => null];
+            if ('accordion' === $pending['kind']) {
+                $accordions[] = $entry;
+            } else {
+                $messages[] = $entry;
+            }
         }
         $root['fields'] = $fields;
 
@@ -208,6 +256,9 @@ final class AcfJsonReader
         // file, uninterrupted by the escape hatch.
         if ([] !== $accordions) {
             $root['wp']['accordions'] = $accordions;
+        }
+        if ([] !== $messages) {
+            $root['wp']['messages'] = $messages;
         }
 
         return $root;
@@ -294,7 +345,10 @@ final class AcfJsonReader
         }
         $consumed[] = 'maxlength';
 
-        if ('number' === $acfType) {
+        // `range` shares `number`'s min/max/step constraint-lifting exactly
+        // — the abstract vocabulary has no separate "step" home for range,
+        // it's the same `number` signature with a `wp.acf_type` marker.
+        if (in_array($acfType, ['number', 'range'], true)) {
             foreach (['min', 'max', 'step'] as $prop) {
                 if (isset($acfField[$prop]) && '' !== $acfField[$prop]) {
                     $out[$prop] = $acfField[$prop] + 0;
@@ -356,7 +410,7 @@ final class AcfJsonReader
             $childChain = [...$nameChain, (string) $acfField['name']];
             $children = [];
             foreach ((array) $acfField['sub_fields'] as $sub) {
-                if ('accordion' === ($sub['type'] ?? null)) {
+                if (in_array($sub['type'] ?? null, ['accordion', 'message'], true)) {
                     continue;
                 }
                 $children[(string) $sub['name']] = $this->readField($sub, $componentSlug, $childChain, $keyNameMap);
@@ -459,7 +513,7 @@ final class AcfJsonReader
 
             $children = [];
             foreach ((array) ($layout['sub_fields'] ?? []) as $sub) {
-                if ('accordion' === ($sub['type'] ?? null)) {
+                if (in_array($sub['type'] ?? null, ['accordion', 'message'], true)) {
                     continue;
                 }
                 $children[(string) $sub['name']] = $this->readField($sub, $componentSlug, $layoutChain, $keyNameMap);
