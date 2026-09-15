@@ -35,6 +35,13 @@ number:
   min: ''
   max: ''
   step: ''
+range:
+  # Same empty-string "no constraint authored" sentinel as `number` — the
+  # fleet's one real range field authors all three itself, so this is
+  # ACF's own convention rather than a corpus-observed majority.
+  min: ''
+  max: ''
+  step: ''
 repeater:
   min: 0
   max: 0

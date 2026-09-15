@@ -102,6 +102,31 @@ final class MigrationCompletenessAuditorTest extends TestCase
         self::assertStringContainsString('wpml_cf_preferences', $violations[0]);
     }
 
+    /**
+     * A nested accordion/message reaching this auditor (bypassing
+     * Migration\AcfJsonReader's own `rejectNestedPseudoField()` loud
+     * rejection — e.g. hand-built data, as here) is silent data loss, NOT
+     * the documented root-level drop `test_accordion_fields_are_skipped_not_flagged`
+     * exercises. The auditor must flag it, not silently `continue` past it.
+     */
+    public function test_nested_message_inside_sub_fields_is_flagged_not_silently_skipped(): void
+    {
+        $acf = [[
+            'key' => 'field_demo_grp', 'name' => 'grp', 'label' => 'Grp', 'type' => 'group',
+            'sub_fields' => [
+                ['key' => 'field_demo_grp_msg', 'name' => '', 'type' => 'message', 'label' => 'Hint', 'message' => 'Hi'],
+                ['key' => 'field_demo_grp_title', 'name' => 'title', 'label' => 'Title', 'type' => 'text'],
+            ],
+        ]];
+        $def = ['grp' => ['type' => 'group', 'label' => 'Grp', 'fields' => [
+            'title' => ['type' => 'text', 'label' => 'Title'],
+        ]]];
+
+        $violations = $this->auditor->audit($acf, $def);
+        self::assertNotEmpty($violations);
+        self::assertStringContainsString('nested message field', $violations[0]);
+    }
+
     public function test_recurses_into_sub_fields(): void
     {
         $acf = [[

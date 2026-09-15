@@ -245,6 +245,52 @@ final class AcfJsonReaderTest extends TestCase
         self::assertArrayNotHasKey('wp', $tree);
     }
 
+    /**
+     * A pure-accordion anchor (no message sharing it) must never carry a
+     * `seq` — that key exists only to disambiguate a MIXED anchor's true
+     * order, and its absence for the fleet's overwhelming majority
+     * (accordion-only components) is what keeps `wp.accordions` byte-for-
+     * byte unchanged by this feature.
+     */
+    public function test_pure_accordion_anchor_carries_no_seq(): void
+    {
+        $tree = $this->reader->read($this->group([
+            ['key' => 'field_demo_acc', 'name' => '', 'type' => 'accordion', 'label' => 'Section', 'open' => 0],
+            ['key' => 'field_demo_title', 'name' => 'title', 'label' => 'Title', 'type' => 'text'],
+        ]), 'demo');
+
+        self::assertArrayNotHasKey('seq', $tree['wp']['accordions'][0]);
+    }
+
+    /**
+     * A message immediately followed by an accordion, both before the same
+     * real field — umbili's image-promo shape. Both pseudo-fields must
+     * carry `seq` reproducing that authored order (message = 0, accordion = 1).
+     */
+    public function test_mixed_anchor_message_then_accordion_both_carry_seq_in_authored_order(): void
+    {
+        $tree = $this->reader->read($this->group([
+            ['key' => 'field_demo_msg', 'name' => '', 'type' => 'message', 'label' => 'Hint', 'message' => 'Hi'],
+            ['key' => 'field_demo_acc', 'name' => '', 'type' => 'accordion', 'label' => 'Section', 'open' => 0],
+            ['key' => 'field_demo_title', 'name' => 'title', 'label' => 'Title', 'type' => 'text'],
+        ]), 'demo');
+
+        self::assertSame(0, $tree['wp']['messages'][0]['seq']);
+        self::assertSame(1, $tree['wp']['accordions'][0]['seq']);
+    }
+
+    public function test_mixed_anchor_accordion_then_message_both_carry_seq_in_authored_order(): void
+    {
+        $tree = $this->reader->read($this->group([
+            ['key' => 'field_demo_acc', 'name' => '', 'type' => 'accordion', 'label' => 'Section', 'open' => 0],
+            ['key' => 'field_demo_msg', 'name' => '', 'type' => 'message', 'label' => 'Hint', 'message' => 'Hi'],
+            ['key' => 'field_demo_title', 'name' => 'title', 'label' => 'Title', 'type' => 'text'],
+        ]), 'demo');
+
+        self::assertSame(0, $tree['wp']['accordions'][0]['seq']);
+        self::assertSame(1, $tree['wp']['messages'][0]['seq']);
+    }
+
     public function test_field_with_no_deviation_carries_no_wp_key(): void
     {
         $tree = $this->reader->read($this->group([[
@@ -410,6 +456,71 @@ final class AcfJsonReaderTest extends TestCase
         $this->reader->read($this->group([[
             'key' => 'field_demo_g', 'name' => 'g', 'label' => 'G', 'type' => 'group',
             'sub_fields' => [['key' => 'field_demo_g_acc', 'name' => '', 'type' => 'accordion', 'label' => 'S']],
+        ]]), 'demo');
+    }
+
+    /**
+     * A nested `accordion`/`message` inside a group's `sub_fields` used to be
+     * silently `continue`d — dropped with no diagnostic, and generation
+     * never reproduced it. `rejectNestedPseudoField()` now throws instead;
+     * this is a real ACF shape a person needs to resolve, not one this tool
+     * can silently pretend never happened.
+     */
+    public function test_group_with_nested_message_sub_field_throws_loudly(): void
+    {
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessageMatches('/Nested ACF \'message\' field inside \'g\'/');
+        $this->reader->read($this->group([[
+            'key' => 'field_demo_g', 'name' => 'g', 'label' => 'G', 'type' => 'group',
+            'sub_fields' => [
+                ['key' => 'field_demo_g_msg', 'name' => '', 'type' => 'message', 'label' => 'Hint', 'message' => 'Hi'],
+                ['key' => 'field_demo_g_title', 'name' => 'title', 'label' => 'Title', 'type' => 'text'],
+            ],
+        ]]), 'demo');
+    }
+
+    /** Same guard, same message shape, for a nested `accordion` — confirms the
+     * pre-existing silent-drop gap (this project's own prior behaviour,
+     * predating this fix) is closed identically for both pseudo-field kinds.
+     */
+    public function test_group_with_nested_accordion_sub_field_throws_loudly(): void
+    {
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessageMatches('/Nested ACF \'accordion\' field inside \'g\'/');
+        $this->reader->read($this->group([[
+            'key' => 'field_demo_g', 'name' => 'g', 'label' => 'G', 'type' => 'group',
+            'sub_fields' => [
+                ['key' => 'field_demo_g_acc', 'name' => '', 'type' => 'accordion', 'label' => 'S'],
+                ['key' => 'field_demo_g_title', 'name' => 'title', 'label' => 'Title', 'type' => 'text'],
+            ],
+        ]]), 'demo');
+    }
+
+    public function test_repeater_with_nested_message_sub_field_throws_loudly(): void
+    {
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessageMatches('/Nested ACF \'message\' field inside \'items\'/');
+        $this->reader->read($this->group([[
+            'key' => 'field_demo_items', 'name' => 'items', 'label' => 'Items', 'type' => 'repeater',
+            'sub_fields' => [
+                ['key' => 'field_demo_items_msg', 'name' => '', 'type' => 'message', 'label' => 'Hint', 'message' => 'Hi'],
+                ['key' => 'field_demo_items_title', 'name' => 'title', 'label' => 'Title', 'type' => 'text'],
+            ],
+        ]]), 'demo');
+    }
+
+    /** A container whose ONLY child is a nested pseudo-field now throws the
+     * clear "Nested ACF '<type>' field" diagnostic, not the misleading
+     * "zero sub-fields" one (there was never a hint the culprit was an
+     * unsupported nested pseudo-field, not simply an empty ACF export).
+     */
+    public function test_group_with_only_a_nested_message_throws_the_nested_pseudo_field_message_not_the_empty_one(): void
+    {
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessageMatches('/Nested ACF \'message\' field/');
+        $this->reader->read($this->group([[
+            'key' => 'field_demo_g', 'name' => 'g', 'label' => 'G', 'type' => 'group',
+            'sub_fields' => [['key' => 'field_demo_g_msg', 'name' => '', 'type' => 'message', 'label' => 'Hint', 'message' => 'Hi']],
         ]]), 'demo');
     }
 
@@ -652,6 +763,26 @@ final class AcfJsonReaderTest extends TestCase
             'layouts' => [[
                 'key' => 'layout_demo_items_empty', 'name' => 'empty', 'label' => 'Empty', 'display' => 'block',
                 'sub_fields' => [['key' => 'field_demo_items_empty_acc', 'name' => '', 'type' => 'accordion', 'label' => 'S']],
+            ]],
+        ]]), 'demo');
+    }
+
+    /** Same nested-pseudo-field guard as group/repeater sub_fields, applied to
+     * a flexible_content layout's own `sub_fields` (the second nesting shape
+     * the reader recurses into).
+     */
+    public function test_flexible_content_layout_with_nested_message_sub_field_throws_loudly(): void
+    {
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessageMatches('/Nested ACF \'message\' field/');
+        $this->reader->read($this->group([[
+            'key' => 'field_demo_items', 'name' => 'items', 'label' => 'Položky', 'type' => 'flexible_content',
+            'layouts' => [[
+                'key' => 'layout_demo_items_a', 'name' => 'a', 'label' => 'A', 'display' => 'block',
+                'sub_fields' => [
+                    ['key' => 'field_demo_items_a_msg', 'name' => '', 'type' => 'message', 'label' => 'Hint', 'message' => 'Hi'],
+                    ['key' => 'field_demo_items_a_title', 'name' => 'title', 'label' => 'Title', 'type' => 'text'],
+                ],
             ]],
         ]]), 'demo');
     }

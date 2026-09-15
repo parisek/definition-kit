@@ -8,6 +8,40 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 <!-- New entries go directly under this line. It is the anchor that keeps a branch's
      changelog edit from merging into a version that shipped without it. -->
 
+### Added
+
+- **`fields-migrate` maps the ACF `relationship`, `range` and `message`
+  field types.** Measured across the downstream fleet: 9 `relationship`
+  fields, 2 `message`, 1 `range` — every one of them refused the WHOLE
+  component before, not just the one field. `relationship` maps to
+  `type: reference` with `multiple: true`, an `of: post:<type>[,...]` target
+  and `wp.acf_type: relationship` (it is always multi-value by field
+  design, unlike `post_object`'s opt-in `multiple`). `range` maps to
+  `type: number` with `wp.acf_type: range` — the same min/max/step
+  constraint-lifting as a plain `number`. `message` holds no author-set
+  value, so it is captured the same way as `accordion` (identity + "which
+  field did it precede") and replayed on generation, rather than invented
+  as a data field with no abstract home. Tests: mapper and reverse-mapper
+  unit tests for all three types, a completeness audit, and a generation
+  round trip on a new `related-content` corpus fixture covering a
+  fully-baseline relationship, a relationship deviating on
+  `filters`/`elements`/`taxonomy`/`min`/`max`, a range with every
+  constraint authored, and both a leading and a trailing message (one with
+  a residual `esc_html` deviation, one with the real corpus's empty
+  `name`). `composer check`: 906 tests OK, PHPStan clean.
+
+  End to end on four real downstream components that failed before
+  (aleszejdl/career-list, loyaltiq/estimate-list, anyever/testimonial-feature,
+  umbili/image-promo): all four now migrate and regenerate with every
+  relationship/range/message field intact, including image-promo's
+  message-then-accordion stacking ahead of its first real field.
+  Regeneration on career-list and estimate-list shows the same class of
+  pre-existing, documented residual already tolerated elsewhere in this
+  tool (legacy ACF-export sentinel conventions — `post_type` as a bare
+  string vs. an array, missing `allow_in_bindings`, string vs. `0`
+  dimension sentinels) — unrelated to this change, not a regression.
+  Closes #77.
+
 ### Fixed
 
 - **`fields-migrate` no longer discards a twig `fields:` annotation on a
@@ -81,6 +115,32 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   component for an annotation that looked completely valid. Such a child
   now falls back to `--assume-role` (or ambiguous-provenance) instead,
   same as if the container had no role at all. Closes #75.
+- **A nested `accordion`/`message` inside a group/repeater's `sub_fields`
+  or a flexible_content layout is now rejected loudly, not silently
+  dropped.** Both pseudo-field kinds are captured and replayed ONLY at a
+  component's root — the reader used to `continue` past a nested one with
+  no diagnostic at all, generation never reproduced it, and a container
+  whose only child was a pseudo-field threw a misleading "zero sub-fields"
+  error with no hint why. `AcfJsonReader::rejectNestedPseudoField()` now
+  throws immediately, naming the field, its container and its ACF type.
+  `MigrationCompletenessAuditor` now flags a nested pseudo-field it
+  encounters directly as silent data loss too, instead of skipping it the
+  same way it correctly skips a ROOT-level one. Found in review of #78.
+- **An unrestricted `relationship`/`post_object` (`post_type: []` or
+  missing — "every post type", a normal and common ACF shape) used to
+  migrate to the schema-invalid `of: ""`.** Empty/missing `post_type` now
+  normalizes to WordPress's own reserved "no restriction" sentinel,
+  `of: post:any` (mirroring `WP_Query`'s `post_type: 'any'`), which
+  reverses back to ACF's genuinely-unrestricted `post_type: []` — not a
+  literal, nonexistent `any` post type. Found in review of #78.
+- **A message immediately followed by an accordion (or vice versa), both
+  anchored on the same real field, now reproduces its true authored
+  order on regeneration.** It used to always emit accordions first
+  regardless of which was actually authored first. `Migration\AcfJsonReader`
+  now attaches a `seq` ordering hint, but ONLY on an anchor that mixes
+  both kinds — a single-kind anchor (the fleet's overwhelming majority)
+  never gets one, so `wp.accordions` stays byte-for-byte unchanged for
+  every definition with no messages. Found in review of #78.
 
 ## [0.13.0] - 2026-09-15
 

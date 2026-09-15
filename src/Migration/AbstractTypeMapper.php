@@ -77,6 +77,42 @@ final class AbstractTypeMapper
                 'consumed' => ['type', 'choices'],
                 'wp' => ['acf_type' => 'radio'],
             ],
+            // Relationship collapses onto `reference` with `of: post:<type>[,post:<type>...]`
+            // — the same signature `post_object` uses — but a relationship
+            // is ALWAYS multi-value by field design (ACF has no single-value
+            // mode for it, unlike post_object's opt-in `multiple`), so
+            // `multiple: true` is emitted unconditionally rather than
+            // derived from a raw prop. `wp.acf_type` disambiguates the
+            // otherwise-identical `of: post:x, multiple: true` shape a
+            // multi-value post_object would also produce. `min`/`max`/
+            // `filters`/`elements`/`taxonomy`/`return_format`/
+            // `bidirectional_target` are relationship-only ACF knobs with
+            // no abstract home — left unconsumed here, so they fall
+            // through to the type-defaults baseline / a field's `wp:` bag
+            // exactly like post_object's own `taxonomy`/`return_format`.
+            'relationship' => [
+                'type' => 'reference',
+                'extra' => [
+                    'of' => implode(',', array_map(
+                        static fn (string $t): string => 'post:' . $t,
+                        $this->normalizedPostTypes($acfField),
+                    )),
+                    'multiple' => true,
+                ],
+                'consumed' => ['type', 'post_type'],
+                'wp' => ['acf_type' => 'relationship'],
+            ],
+            // Range is a number with a slider UI — same abstract signature
+            // as `number` (min/max/step are lifted as constraints exactly
+            // like a plain number field, see AcfJsonReader). `wp.acf_type`
+            // is what lets the generator emit `range` again instead of a
+            // `number` nobody authored.
+            'range' => [
+                'type' => 'number',
+                'extra' => [],
+                'consumed' => ['type'],
+                'wp' => ['acf_type' => 'range'],
+            ],
             'image' => ['type' => 'media', 'extra' => ['kind' => 'image'], 'consumed' => ['type']],
             'file' => ['type' => 'media', 'extra' => ['kind' => 'file'], 'consumed' => ['type']],
             'gallery' => ['type' => 'media', 'extra' => ['kind' => 'gallery', 'multiple' => true], 'consumed' => ['type']],
@@ -143,12 +179,47 @@ final class AbstractTypeMapper
      */
     private function postObject(array $acfField): array
     {
-        $postTypes = (array) ($acfField['post_type'] ?? []);
-        $extra = ['of' => implode(',', array_map(static fn ($t): string => 'post:' . (string) $t, $postTypes))];
+        $extra = ['of' => implode(',', array_map(
+            static fn (string $t): string => 'post:' . $t,
+            $this->normalizedPostTypes($acfField),
+        ))];
         if (1 === (int) ($acfField['multiple'] ?? 0)) {
             $extra['multiple'] = true;
         }
         return ['type' => 'reference', 'extra' => $extra, 'consumed' => ['type', 'post_type', 'multiple']];
+    }
+
+    /**
+     * An empty/missing raw `post_type` means "no restriction — every post
+     * type" in ACF (both `relationship` and `post_object`), NOT "restricted
+     * to nothing". `implode(',', [])` used to emit `of: ""` here, which
+     * `component.fields.schema.json`'s `of` pattern rejects outright — a
+     * schema-invalid definition nobody could author by hand either, so it
+     * silently broke migration for any unrestricted relationship/post_object
+     * (a normal, common ACF shape — restricting to specific post types is
+     * the opt-in case, not the default).
+     *
+     * `any` is WordPress's OWN reserved sentinel for this exact meaning
+     * (`WP_Query`/`get_posts(['post_type' => 'any'])`) — reusing it here
+     * means `of: post:any` reads as "no restriction" to anyone who already
+     * knows WordPress, not a bespoke convention this tool invented. Also
+     * normalizes a post_type carried as a bare empty string (`''`) or an
+     * array containing one, rather than a genuinely empty array — both
+     * shapes are observed across the corpus for OTHER post_object props
+     * (e.g. `taxonomy`), so the same ACF-version-era inconsistency is
+     * assumed possible here too.
+     *
+     * @param array<string,mixed> $acfField
+     * @return list<string> at least one non-empty post type name, `['any']`
+     *                       when the raw field authored no restriction
+     */
+    private function normalizedPostTypes(array $acfField): array
+    {
+        $postTypes = array_values(array_filter(
+            array_map('strval', (array) ($acfField['post_type'] ?? [])),
+            static fn (string $t): bool => '' !== $t,
+        ));
+        return [] === $postTypes ? ['any'] : $postTypes;
     }
 
     /**

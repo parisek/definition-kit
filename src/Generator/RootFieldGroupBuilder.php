@@ -55,14 +55,17 @@ final class RootFieldGroupBuilder
         $rootWp = (array) ($definitionTree['wp'] ?? []);
         /** @var list<array<string,mixed>> $accordions */
         $accordions = (array) ($rootWp['accordions'] ?? []);
-        // `accordions` is replayed into `fields` below; `block` is block.json-only
-        // config (Generator\BlockJsonGenerator consumes it). Neither is an acf.json
-        // field-group prop, so both are stripped before the rest of the root `wp:`
-        // bag (e.g. the group's own `description`) merges into the group object.
-        unset($rootWp['accordions'], $rootWp['block']);
+        /** @var list<array<string,mixed>> $messages */
+        $messages = (array) ($rootWp['messages'] ?? []);
+        // `accordions`/`messages` are replayed into `fields` below; `block` is
+        // block.json-only config (Generator\BlockJsonGenerator consumes it).
+        // None of these three is an acf.json field-group prop, so all are
+        // stripped before the rest of the root `wp:` bag (e.g. the group's
+        // own `description`) merges into the group object.
+        unset($rootWp['accordions'], $rootWp['messages'], $rootWp['block']);
 
         $fieldNames = array_keys((array) ($definitionTree['fields'] ?? []));
-        $fields = $this->interleaveAccordions($fieldNames, $orderedRawFields, $accordions);
+        $fields = $this->interleavePseudoFields($fieldNames, $orderedRawFields, $accordions, $messages);
 
         return array_merge(
             self::ROOT_DEFAULTS,
@@ -83,41 +86,106 @@ final class RootFieldGroupBuilder
     }
 
     /**
+     * Interleaves BOTH pseudo-field kinds (accordion + message) back into the
+     * real field list, anchored on the real field name each one precedes
+     * (`before`). Each kind is built into its own pseudo-field array first,
+     * then grouped by anchor in a single combined pass.
+     *
+     * `seq` — Migration\AcfJsonReader::flushPendingPseudo()'s own per-anchor
+     * position, present ONLY on an anchor that mixes both kinds — is what
+     * lets a mixed anchor come back out in its true authored order (real
+     * corpus shape: umbili's image-promo opens with a message immediately
+     * followed by an accordion, both anchored on the first real field).
+     * Bucketing accordions and messages separately would otherwise always
+     * emit one kind before the other, regardless of which one was actually
+     * authored first. An anchor with NO `seq` (the overwhelming fleet
+     * majority — accordions with no messages, or vice versa) keeps the
+     * fixed "messages ahead of accordions" fallback order below; this is
+     * what keeps `wp.accordions` byte-unchanged for every definition that
+     * has no messages at all.
+     *
      * @param list<string> $fieldNames
      * @param list<array<string,mixed>> $orderedRawFields
      * @param list<array<string,mixed>> $accordions
+     * @param list<array<string,mixed>> $messages
      * @return list<array<string,mixed>>
      */
-    private function interleaveAccordions(array $fieldNames, array $orderedRawFields, array $accordions): array
-    {
-        if ([] === $accordions) {
+    private function interleavePseudoFields(
+        array $fieldNames,
+        array $orderedRawFields,
+        array $accordions,
+        array $messages,
+    ): array {
+        if ([] === $accordions && [] === $messages) {
             return $orderedRawFields;
         }
 
         $byBefore = [];
         $trailing = [];
-        foreach ($accordions as $accordion) {
-            $pseudo = $this->buildAccordionPseudoField($accordion);
-            $before = $accordion['before'] ?? null;
-            if (null === $before) {
-                $trailing[] = $pseudo;
-            } else {
-                $byBefore[(string) $before][] = $pseudo;
-            }
+        // Messages queued ahead of accordions — the fixed fallback order for
+        // an anchor with no `seq` (see docblock above).
+        foreach ($messages as $message) {
+            $this->bucketPseudo(
+                $this->buildMessagePseudoField($message),
+                $message['seq'] ?? null,
+                $message['before'] ?? null,
+                $byBefore,
+                $trailing,
+            );
         }
+        foreach ($accordions as $accordion) {
+            $this->bucketPseudo(
+                $this->buildAccordionPseudoField($accordion),
+                $accordion['seq'] ?? null,
+                $accordion['before'] ?? null,
+                $byBefore,
+                $trailing,
+            );
+        }
+        $sortMixedBucket = static function (array &$bucket): void {
+            // A bucket where NO entry carries `seq` is left exactly as
+            // queued above (messages-then-accordions). A bucket where every
+            // entry carries one (flushPendingPseudo() sets it on ALL
+            // entries at a mixed anchor, never just some) is re-sorted by
+            // it, reproducing the true authored order.
+            if ([] === $bucket || null === $bucket[0]['seq']) {
+                return;
+            }
+            usort($bucket, static fn (array $a, array $b): int => $a['seq'] <=> $b['seq']);
+        };
+        foreach ($byBefore as &$bucket) {
+            $sortMixedBucket($bucket);
+        }
+        unset($bucket);
+        $sortMixedBucket($trailing);
 
         $result = [];
         foreach ($fieldNames as $i => $name) {
-            foreach ($byBefore[$name] ?? [] as $pseudo) {
-                $result[] = $pseudo;
+            foreach ($byBefore[$name] ?? [] as $entry) {
+                $result[] = $entry['pseudo'];
             }
             $result[] = $orderedRawFields[$i];
         }
-        foreach ($trailing as $pseudo) {
-            $result[] = $pseudo;
+        foreach ($trailing as $entry) {
+            $result[] = $entry['pseudo'];
         }
 
         return $result;
+    }
+
+    /**
+     * @param array<string,mixed> $pseudo
+     * @param array<string,list<array{seq: int|null, pseudo: array<string,mixed>}>> $byBefore
+     * @param list<array{seq: int|null, pseudo: array<string,mixed>}> $trailing
+     */
+    private function bucketPseudo(array $pseudo, ?int $seq, mixed $before, array &$byBefore, array &$trailing): void
+    {
+        $entry = ['seq' => $seq, 'pseudo' => $pseudo];
+        if (null === $before) {
+            $trailing[] = $entry;
+        } else {
+            $byBefore[(string) $before][] = $entry;
+        }
     }
 
     /**
@@ -164,7 +232,7 @@ final class RootFieldGroupBuilder
      * accordion-residual code path instead of an ordinary field's `wp:`.
      */
     private const ACCORDION_RESIDUAL_EXCLUDED_PROPS = [
-        'key', 'label', 'open', 'before',
+        'key', 'label', 'open', 'before', 'seq',
         'type', 'name', 'fields', 'sub_fields', 'layouts', 'parent_repeater',
     ];
 
@@ -190,6 +258,69 @@ final class RootFieldGroupBuilder
         // position, so key order is unchanged.
         foreach ($accordion as $prop => $value) {
             if (!in_array($prop, self::ACCORDION_RESIDUAL_EXCLUDED_PROPS, true)) {
+                $pseudo[$prop] = $value;
+            }
+        }
+        return $pseudo;
+    }
+
+    /**
+     * The fixed `message` pseudo-field the generator rebuilds from a
+     * message's identity — ACF's own defaults for the type (a message holds
+     * no value, so there is no abstract `type: text`-shaped home for it;
+     * see Migration\AcfJsonReader's own message docblock for why it is
+     * captured instead of mapped, mirroring accordion). Public so
+     * Migration\MessageResidualCapturer can self-diff a real message field
+     * against it — the message analogue of `accordionBaseline()`.
+     *
+     * @return array<string,mixed>
+     */
+    public function messageBaseline(string $key, string $label, string $name, string $message): array
+    {
+        return [
+            'key' => $key,
+            'allow_in_bindings' => 0,
+            'label' => $label,
+            'name' => $name,
+            'aria-label' => '',
+            'type' => 'message',
+            'instructions' => '',
+            'required' => 0,
+            'conditional_logic' => 0,
+            'wrapper' => ['width' => '', 'class' => '', 'id' => ''],
+            'message' => $message,
+            'new_lines' => 'wpautop',
+            'esc_html' => 0,
+        ];
+    }
+
+    /**
+     * Same exclusion shape as ACCORDION_RESIDUAL_EXCLUDED_PROPS — the props
+     * this method itself consumes for identity ({key, label, name, message})
+     * or positioning (`before`), plus the structural/type-identity props a
+     * message-shaped `wp:` overlay must never be allowed to smuggle in.
+     */
+    private const MESSAGE_RESIDUAL_EXCLUDED_PROPS = [
+        'key', 'label', 'name', 'message', 'before', 'seq',
+        'type', 'fields', 'sub_fields', 'layouts', 'parent_repeater',
+    ];
+
+    /**
+     * @param array<string,mixed> $message
+     * @return array<string,mixed>
+     */
+    private function buildMessagePseudoField(array $message): array
+    {
+        $pseudo = $this->messageBaseline(
+            (string) $message['key'],
+            (string) $message['label'],
+            (string) $message['name'],
+            (string) $message['message'],
+        );
+        // Overlay the captured non-derivable residual verbatim, exactly
+        // mirroring buildAccordionPseudoField() above.
+        foreach ($message as $prop => $value) {
+            if (!in_array($prop, self::MESSAGE_RESIDUAL_EXCLUDED_PROPS, true)) {
                 $pseudo[$prop] = $value;
             }
         }

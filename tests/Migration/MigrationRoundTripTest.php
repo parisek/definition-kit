@@ -123,6 +123,18 @@ final class MigrationRoundTripTest extends TestCase
         self::assertSame([], $violations, implode("\n", $violations));
     }
 
+    public function test_completeness_audit_passes_for_related_content_corpus_sample(): void
+    {
+        $fixtureDir = __DIR__ . '/../fixtures/migration/corpus-sample/related-content';
+        $raw = file_get_contents("{$fixtureDir}/acf.json");
+        self::assertIsString($raw);
+        $acfJson = json_decode($raw, true, flags: JSON_THROW_ON_ERROR);
+        $tree = $this->migrate($fixtureDir, 'related-content');
+
+        $violations = (new MigrationCompletenessAuditor())->audit($acfJson['fields'], $tree['fields']);
+        self::assertSame([], $violations, implode("\n", $violations));
+    }
+
     public function test_completeness_audit_passes_for_store_locator_corpus_sample(): void
     {
         $fixtureDir = __DIR__ . '/../fixtures/migration/corpus-sample/store-locator';

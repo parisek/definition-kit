@@ -13,7 +13,8 @@ use Parisek\DefinitionKit\Baseline\TypeDefaults;
  * genuinely reconstructible from the migrated field's emitted output (this
  * is verified, not assumed — see the per-prop checks below), (c) present
  * verbatim under the migrated field's `wp:`, or (d) the field is an
- * accordion (documented drop). Anything else is a silent-data-loss bug.
+ * accordion or a message (both a documented drop). Anything else is a
+ * silent-data-loss bug.
  *
  * "Reconstructible" means: applying the inverse of the lift to the emitted
  * output reproduces the raw ACF value. This intentionally does NOT check
@@ -70,7 +71,23 @@ final class MigrationCompletenessAuditor
             $name = (string) ($acfField['name'] ?? '');
             $path = '' === $pathPrefix ? $name : "{$pathPrefix}.{$name}";
 
-            if ('accordion' === $type) {
+            if (in_array($type, ['accordion', 'message'], true)) {
+                // Documented drop, but ONLY at the root — Migration\AcfJsonReader
+                // captures and replays both pseudo-field kinds exclusively at
+                // that level (`wp.accordions`/`wp.messages`). A NESTED
+                // accordion/message (inside a group/repeater's `sub_fields` or
+                // a flexible_content layout) has no such capture — the reader
+                // now rejects it loudly instead of silently dropping it (see
+                // its own `rejectNestedPseudoField()` docblock), so seeing one
+                // here means either that guard regressed, or this auditor is
+                // being run directly against hand-built data that bypassed it.
+                // Either way it is silent data loss, not a documented drop.
+                if ('' === $pathPrefix) {
+                    continue;
+                }
+                $violations[] = "{$path}: nested {$type} field reached the migrated definition — "
+                    . 'accordion/message pseudo-fields are only captured and replayed at the root level; '
+                    . 'this is silent data loss, not the documented root-level drop';
                 continue;
             }
 
@@ -194,7 +211,7 @@ final class MigrationCompletenessAuditor
                 $violations[] = "{$path}.maxlength: not reconstructible from migrated field.maxlength";
             }
 
-            if ('number' === $type) {
+            if (in_array($type, ['number', 'range'], true)) {
                 foreach (self::NUMBER_CONSTRAINT_PROPS as $prop) {
                     $accounted[] = $prop;
                     if (isset($acfField[$prop]) && '' !== $acfField[$prop]

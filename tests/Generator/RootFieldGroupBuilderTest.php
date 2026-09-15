@@ -216,4 +216,83 @@ final class RootFieldGroupBuilderTest extends TestCase
 
         self::assertSame(['text', 'accordion'], array_column($group['fields'], 'type'));
     }
+
+    // --- mixed accordion + message ordering at one anchor ------------------
+    //
+    // Migration\AcfJsonReader::flushPendingPseudo() attaches `seq` ONLY when
+    // an anchor mixes both pseudo-field kinds — never on a single-kind
+    // anchor (every test above this point has none, and stays byte-for-byte
+    // unaffected). These tests exercise `seq` doing its job: reproducing
+    // the true authored order in every mixed shape observed or plausible —
+    // message-then-accordion (the real corpus shape, umbili's image-promo),
+    // its reverse, and a trailing mixed sequence.
+
+    public function test_message_then_accordion_at_one_anchor_preserves_authored_order_via_seq(): void
+    {
+        $tree = [
+            'name' => 'Demo',
+            'wp' => [
+                'messages' => [['key' => 'field_demo_msg', 'label' => 'M', 'name' => '', 'message' => 'Hi', 'before' => 'title', 'seq' => 0]],
+                'accordions' => [['key' => 'field_demo_acc', 'label' => 'A', 'open' => 0, 'before' => 'title', 'seq' => 1]],
+            ],
+            'fields' => ['title' => ['type' => 'text', 'label' => 'T']],
+        ];
+        $group = $this->builder->build($tree, [['type' => 'text', 'name' => 'title']], 'demo', 1700000000);
+
+        self::assertSame(['message', 'accordion', 'text'], array_column($group['fields'], 'type'));
+        self::assertArrayNotHasKey('seq', $group['fields'][0]);
+        self::assertArrayNotHasKey('seq', $group['fields'][1]);
+    }
+
+    public function test_accordion_then_message_at_one_anchor_preserves_authored_order_via_seq(): void
+    {
+        // The reverse stacking of the case above — no example in the fleet,
+        // but `seq` must reproduce it identically either way; the fixed
+        // "messages ahead of accordions" fallback only applies when NEITHER
+        // entry carries a `seq` at all.
+        $tree = [
+            'name' => 'Demo',
+            'wp' => [
+                'accordions' => [['key' => 'field_demo_acc', 'label' => 'A', 'open' => 0, 'before' => 'title', 'seq' => 0]],
+                'messages' => [['key' => 'field_demo_msg', 'label' => 'M', 'name' => '', 'message' => 'Hi', 'before' => 'title', 'seq' => 1]],
+            ],
+            'fields' => ['title' => ['type' => 'text', 'label' => 'T']],
+        ];
+        $group = $this->builder->build($tree, [['type' => 'text', 'name' => 'title']], 'demo', 1700000000);
+
+        self::assertSame(['accordion', 'message', 'text'], array_column($group['fields'], 'type'));
+    }
+
+    public function test_trailing_mixed_sequence_preserves_authored_order_via_seq(): void
+    {
+        $tree = [
+            'name' => 'Demo',
+            'wp' => [
+                'accordions' => [['key' => 'field_demo_acc', 'label' => 'A', 'open' => 0, 'before' => null, 'seq' => 1]],
+                'messages' => [['key' => 'field_demo_msg', 'label' => 'M', 'name' => '', 'message' => 'Hi', 'before' => null, 'seq' => 0]],
+            ],
+            'fields' => ['title' => ['type' => 'text', 'label' => 'T']],
+        ];
+        $group = $this->builder->build($tree, [['type' => 'text', 'name' => 'title']], 'demo', 1700000000);
+
+        self::assertSame(['text', 'message', 'accordion'], array_column($group['fields'], 'type'));
+    }
+
+    public function test_single_kind_anchor_never_carries_seq_and_leaks_none(): void
+    {
+        // Guards the byte-stability claim: a pure-accordion (or pure-message)
+        // anchor's replayed pseudo-field must not carry a `seq` key even
+        // when the CAPTURED wp.accordions/wp.messages entry has one attached
+        // by mistake (e.g. hand-authored YAML) — it is always excluded from
+        // the overlay via ACCORDION_RESIDUAL_EXCLUDED_PROPS/
+        // MESSAGE_RESIDUAL_EXCLUDED_PROPS, never just omitted by convention.
+        $tree = [
+            'name' => 'Demo',
+            'wp' => ['accordions' => [['key' => 'field_demo_acc', 'label' => 'A', 'open' => 0, 'before' => 'title', 'seq' => 0]]],
+            'fields' => ['title' => ['type' => 'text', 'label' => 'T']],
+        ];
+        $group = $this->builder->build($tree, [['type' => 'text', 'name' => 'title']], 'demo', 1700000000);
+
+        self::assertArrayNotHasKey('seq', $group['fields'][0]);
+    }
 }

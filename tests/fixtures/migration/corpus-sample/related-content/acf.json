@@ -1,0 +1,179 @@
+{
+    "key": "group_related-content",
+    "title": "Related content",
+    "fields": [
+        {
+            "key": "field_related-content_todo_placeholder",
+            "label": "Placeholder",
+            "name": "todo_placeholder",
+            "aria-label": "",
+            "type": "message",
+            "instructions": "",
+            "required": 0,
+            "conditional_logic": 0,
+            "wrapper": {
+                "width": "",
+                "class": "",
+                "id": ""
+            },
+            "allow_in_bindings": 0,
+            "message": "TODO — wire real content.",
+            "new_lines": "wpautop",
+            "esc_html": 1
+        },
+        {
+            "key": "field_related-content_featured_items",
+            "label": "Featured items",
+            "name": "featured_items",
+            "aria-label": "",
+            "type": "relationship",
+            "instructions": "",
+            "required": 0,
+            "conditional_logic": 0,
+            "wrapper": {
+                "width": "",
+                "class": "",
+                "id": ""
+            },
+            "allow_in_bindings": 0,
+            "wpml_cf_preferences": 1,
+            "post_type": [
+                "post"
+            ],
+            "taxonomy": [],
+            "min": 0,
+            "max": 0,
+            "filters": [
+                "search",
+                "post_type",
+                "taxonomy"
+            ],
+            "elements": [],
+            "return_format": "object",
+            "bidirectional_target": []
+        },
+        {
+            "key": "field_related-content_related_pages",
+            "label": "Related pages",
+            "name": "related_pages",
+            "aria-label": "",
+            "type": "relationship",
+            "instructions": "Pick up to three related pages.",
+            "required": 1,
+            "conditional_logic": 0,
+            "wrapper": {
+                "width": "",
+                "class": "",
+                "id": ""
+            },
+            "allow_in_bindings": 0,
+            "wpml_cf_preferences": 2,
+            "post_type": [
+                "page",
+                "post"
+            ],
+            "taxonomy": [],
+            "min": 0,
+            "max": 3,
+            "filters": [
+                "search"
+            ],
+            "elements": [
+                "featured_image"
+            ],
+            "return_format": "object",
+            "bidirectional_target": []
+        },
+        {
+            "key": "field_related-content_any_content",
+            "label": "Any related content",
+            "name": "any_content",
+            "aria-label": "",
+            "type": "relationship",
+            "instructions": "Unrestricted — every post type, ACF's own default when no post type is picked.",
+            "required": 0,
+            "conditional_logic": 0,
+            "wrapper": {
+                "width": "",
+                "class": "",
+                "id": ""
+            },
+            "allow_in_bindings": 0,
+            "wpml_cf_preferences": 1,
+            "post_type": [],
+            "taxonomy": [],
+            "min": 0,
+            "max": 0,
+            "filters": [
+                "search",
+                "post_type",
+                "taxonomy"
+            ],
+            "elements": [],
+            "return_format": "object",
+            "bidirectional_target": []
+        },
+        {
+            "key": "field_related-content_rating",
+            "label": "Rating",
+            "name": "rating",
+            "aria-label": "",
+            "type": "range",
+            "instructions": "Rating on a 1-5 scale.",
+            "required": 1,
+            "conditional_logic": 0,
+            "wrapper": {
+                "width": "",
+                "class": "",
+                "id": ""
+            },
+            "allow_in_bindings": 0,
+            "wpml_cf_preferences": 1,
+            "default_value": 3,
+            "min": 1,
+            "max": 5,
+            "step": 1,
+            "prepend": "",
+            "append": ""
+        },
+        {
+            "key": "field_related-content_styleguide_note",
+            "label": "Styleguide",
+            "name": "",
+            "aria-label": "",
+            "type": "message",
+            "instructions": "",
+            "required": 0,
+            "conditional_logic": 0,
+            "wrapper": {
+                "width": "",
+                "class": "",
+                "id": ""
+            },
+            "allow_in_bindings": 0,
+            "message": "<a href=\"/styleguide/component/related-content\" target=\"_blank\">Styleguide</a>",
+            "new_lines": "wpautop",
+            "esc_html": 0
+        }
+    ],
+    "location": [
+        [
+            {
+                "param": "block",
+                "operator": "==",
+                "value": "acf/related-content"
+            }
+        ]
+    ],
+    "menu_order": 0,
+    "position": "normal",
+    "style": "default",
+    "label_placement": "top",
+    "instruction_placement": "label",
+    "hide_on_screen": "",
+    "active": true,
+    "description": "",
+    "show_in_rest": 0,
+    "acfml_field_group_mode": "advanced",
+    "modified": 1781510960
+}
