@@ -8,6 +8,18 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 <!-- New entries go directly under this line. It is the anchor that keeps a branch's
      changelog edit from merging into a version that shipped without it. -->
 
+### Added
+
+- **`fields-migrate` maps the ACF `radio` field.** It used to throw
+  `Unsupported ACF field type 'radio'`, which refused the whole component, not
+  just the field. A radio becomes `type: select` with `wp.acf_type: radio`, the
+  same marker `button_group` and `checkbox` already use, and `fields-generate`
+  emits `radio` again. ACF's radio defaults join the type-defaults baseline, so
+  only a deviating `layout`, `default_value`, `allow_null`, `other_choice`,
+  `save_other_choice` or `return_format` lands in `wp:`. A new corpus fixture
+  round-trips three radio fields byte-stable, one of them deviating on every
+  radio-only prop. Closes #71.
+
 ## [0.11.1] - 2026-09-15
 
 ### Fixed

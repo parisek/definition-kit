@@ -9,7 +9,7 @@ namespace Parisek\DefinitionKit\Generator;
  * field type from a semantic field's abstract `type` + modifier keys
  * (`kind`/`shape`/`of`/`multiple`) and a `wp.acf_type` disambiguation
  * marker where the abstract vocabulary collapses two ACF types onto one
- * signature (text/email, select/button_group). Every collision rule here
+ * signature (text/email, select/button_group/radio/checkbox). Every collision rule here
  * mirrors AbstractTypeMapper's own docblock — this class does not invent
  * new type-mapping judgment calls, it only runs them backwards.
  */
@@ -71,7 +71,11 @@ final class AbstractTypeReverseMapper
         if (true === ($field['multiple'] ?? false)) {
             $extra['multiple'] = 1;
         }
-        return ['acfType' => 'button_group' === $wpAcfType ? 'button_group' : 'select', 'extra' => $extra];
+        // `button_group` and `radio` are single-choice by field design too.
+        if (in_array($wpAcfType, ['button_group', 'radio'], true)) {
+            return ['acfType' => $wpAcfType, 'extra' => $extra];
+        }
+        return ['acfType' => 'select', 'extra' => $extra];
     }
 
     /**

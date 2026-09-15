@@ -95,6 +95,17 @@ button_group: # -> select
   return_format: value
   default_value: ''
 
+radio: # -> select + wp.acf_type:radio
+  # ACF's own field defaults, not a corpus census: the source corpus carried
+  # no radio field. A deviating `layout` (horizontal) or any enabled
+  # other_choice/save_other_choice/allow_null survives via `wp:`.
+  layout: vertical
+  return_format: value
+  allow_null: 0
+  other_choice: 0
+  save_other_choice: 0
+  default_value: ''
+
 checkbox: # -> select + multiple:true
   layout: vertical
   return_format: value

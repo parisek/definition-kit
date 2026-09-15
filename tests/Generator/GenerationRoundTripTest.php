@@ -84,6 +84,23 @@ final class GenerationRoundTripTest extends TestCase
         self::assertSame([], $diffs, implode("\n", $diffs));
     }
 
+    /**
+     * ACF `radio` shares the abstract signature of a non-multiple `select`,
+     * so it round-trips only through the `wp.acf_type` marker. The fixture
+     * covers the default props, a non-default `layout`, and a field that
+     * deviates on every radio-only prop (`other_choice`, `save_other_choice`,
+     * `allow_null`, `return_format`).
+     */
+    public function test_section_options_radio_fields_round_trip_structurally_exact(): void
+    {
+        $fixtureDir = __DIR__ . '/../fixtures/migration/corpus-sample/section-options';
+        $result = $this->roundTrip("{$fixtureDir}/acf.json", 'section-options');
+
+        $diffs = AcfJsonComparator::diff($result['original'], $result['regenerated']);
+        self::assertSame([], $diffs, implode("\n", $diffs));
+        self::assertSame(['radio', 'radio', 'radio'], array_column($result['regenerated']['fields'], 'type'));
+    }
+
     public function test_heading_section_round_trips_structurally_exact_including_multi_field_accordion(): void
     {
         $fixtureDir = __DIR__ . '/../fixtures/migration/corpus-sample/heading-section';

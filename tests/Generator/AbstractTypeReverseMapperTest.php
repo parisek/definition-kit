@@ -89,6 +89,16 @@ final class AbstractTypeReverseMapperTest extends TestCase
         self::assertArrayNotHasKey('multiple', $result['extra']);
     }
 
+    public function test_select_with_wp_acf_type_radio_reverses_to_radio_without_multiple(): void
+    {
+        $result = $this->mapper->reverse([
+            'type' => 'select', 'label' => 'T', 'options' => ['x' => 'X'], 'wp' => ['acf_type' => 'radio'],
+        ]);
+        self::assertSame('radio', $result['acfType']);
+        self::assertSame(['x' => 'X'], $result['extra']['choices']);
+        self::assertArrayNotHasKey('multiple', $result['extra']);
+    }
+
     public function test_select_with_wp_acf_type_button_group_reverses_to_button_group(): void
     {
         $result = $this->mapper->reverse([

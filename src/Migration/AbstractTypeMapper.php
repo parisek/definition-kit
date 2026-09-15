@@ -14,7 +14,7 @@ namespace Parisek\DefinitionKit\Migration;
  * across every type.
  *
  * Some raw ACF types collapse onto an identical abstract signature
- * (`text`/`email`, `select`/`button_group`-without-multiple) — for the
+ * (`text`/`email`, `select`/`button_group`/`radio`-without-multiple) — for the
  * minority member of each collision, `map()` also returns a `wp` hint
  * (`acf_type`) so the raw type stays reconstructible; the majority member
  * needs none (its absence is itself the signal).
@@ -64,6 +64,18 @@ final class AbstractTypeMapper
                 'extra' => ['options' => (array) ($acfField['choices'] ?? []), 'multiple' => true],
                 'consumed' => ['type', 'choices'],
                 'wp' => ['acf_type' => 'checkbox'],
+            ],
+            // Collides with a multiple-less `select`, exactly like
+            // `button_group` — a radio is a single choice rendered as a list.
+            // The `wp.acf_type` marker is what lets the generator emit
+            // `radio` again instead of a `select` nobody authored. Radio-only
+            // props (`other_choice`, `save_other_choice`, `layout`, …) that
+            // deviate from the baseline survive in the `wp:` bag.
+            'radio' => [
+                'type' => 'select',
+                'extra' => ['options' => (array) ($acfField['choices'] ?? [])],
+                'consumed' => ['type', 'choices'],
+                'wp' => ['acf_type' => 'radio'],
             ],
             'image' => ['type' => 'media', 'extra' => ['kind' => 'image'], 'consumed' => ['type']],
             'file' => ['type' => 'media', 'extra' => ['kind' => 'file'], 'consumed' => ['type']],
