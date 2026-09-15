@@ -50,10 +50,18 @@ namespace Parisek\DefinitionKit\Migration;
  *   date        -> date
  *   group       -> group (recurses into `fields:`)
  *   repeater    -> repeater (recurses into `fields:`)
- *   array       -> group when `fields:` is present (see the pull request's
- *                  "rejected alternatives" for why NOT repeater by default);
- *                  throws when `fields:` is absent — an `array` with no
- *                  declared shape has nothing this reader can express
+ *   array       -> ALWAYS throws \DomainException, nested `fields:` or not.
+ *                  Decided by @parisek on issue #75 / PR #76: `array` is
+ *                  genuinely ambiguous between a single nested object
+ *                  (`pagination.items.first`) and a list of them
+ *                  (`article-teaser.categories`, `footer.menu_primary`), and
+ *                  nothing in the annotation distinguishes the two. Mapping
+ *                  it to `group` mis-describes every list-shaped field (a
+ *                  categories or menu list is not a single object); guessing
+ *                  from the field name's plurality is unreliable and silent.
+ *                  The author must re-annotate the field as `group` (one
+ *                  nested object) or `repeater` (a list) before migrating —
+ *                  both remain fully supported, with nested `fields:`.
  *   post_object -> reference (no `of:` — the twig annotation never states a
  *                  target post type, so none is guessed)
  *
@@ -92,7 +100,11 @@ final class TwigFieldTypeMapper
             'post_object' => ['type' => 'reference'],
             'group' => $this->container('group', $twigField, $fieldName),
             'repeater' => $this->container('repeater', $twigField, $fieldName),
-            'array' => $this->array($twigField, $fieldName),
+            'array' => throw new \DomainException(sprintf(
+                "Field '%s' has twig type 'array', which is ambiguous between a single nested object and a list — "
+                . "re-annotate it as 'group' (one nested object) or 'repeater' (a list) before migrating.",
+                $fieldName,
+            )),
             default => throw new \DomainException(sprintf(
                 "Unsupported twig field type '%s' for field '%s' — add a case to TwigFieldTypeMapper::map(), "
                 . 'or migrate the field type by hand and add a `wp:` marker to preserve provenance.',
@@ -169,42 +181,6 @@ final class TwigFieldTypeMapper
             $mappedChildren[(string) $childName] = $this->map((array) $childField, $fieldName . '.' . $childName);
         }
         $out['fields'] = $mappedChildren;
-
-        return $out;
-    }
-
-    /**
-     * The twig annotation's `array` type is genuinely ambiguous: it is used
-     * both for a single nested object (`pagination.items.first`) and for a
-     * list of them (`article-teaser.categories`), with nothing in the
-     * annotation itself distinguishing the two — see the pull request's
-     * design notes. This reader resolves the ambiguity towards `group`
-     * (a single nested object), the structurally conservative choice: every
-     * `group` round-trips through the schema whether the real data is
-     * singular or repeated, while a wrongly-guessed `repeater` changes the
-     * shape a consuming template would see. An author who confirms the real
-     * component takes a list flips `type: group` to `type: repeater` by hand
-     * — one line, checkable against the template's own `{% for %}` loop.
-     *
-     * `array` with no nested `fields:` (e.g. `header-menu.items`, `[]`
-     * elsewhere) carries no shape at all to translate — this reader cannot
-     * invent one, so it throws rather than emit a field with no meaning.
-     *
-     * @param array<string,mixed> $twigField
-     * @return array<string,mixed>
-     */
-    private function array(array $twigField, string $fieldName): array
-    {
-        if ([] === (array) ($twigField['fields'] ?? [])) {
-            throw new \RuntimeException(sprintf(
-                "Field '%s' has twig type 'array' with no nested `fields:` — cannot translate an untyped array "
-                . 'into an abstract shape. Add `fields:` to the annotation, or migrate this field by hand.',
-                $fieldName,
-            ));
-        }
-
-        $out = $this->container('group', $twigField, $fieldName);
-        $out['wp'] = [...($out['wp'] ?? []), 'twig_type' => 'array'];
 
         return $out;
     }

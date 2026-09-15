@@ -119,23 +119,31 @@ final class TwigFieldTypeMapperTest extends TestCase
         $this->mapper->map(['type' => 'group'], 'empty');
     }
 
-    public function test_array_with_nested_fields_resolves_to_group(): void
+    public function test_array_with_nested_fields_is_refused_not_guessed(): void
     {
-        // See the class doc header for why `array` resolves to `group` rather
-        // than `repeater` — the twig annotation carries no cardinality.
-        $out = $this->mapper->map([
+        // Decided by @parisek on issue #75 / PR #76: `array` is ambiguous
+        // between a single nested object and a list, and nothing in the
+        // annotation resolves that ambiguity — see the class doc header.
+        // Mapping it to `group` would mis-describe a list-shaped field like
+        // `categories`.
+        $this->expectException(\DomainException::class);
+        $this->expectExceptionMessage(
+            "Field 'categories' has twig type 'array', which is ambiguous between a single nested object and a "
+            . "list — re-annotate it as 'group' (one nested object) or 'repeater' (a list) before migrating.",
+        );
+        $this->mapper->map([
             'type' => 'array',
             'fields' => ['url' => ['type' => 'url']],
         ], 'categories');
-
-        self::assertSame('group', $out['type']);
-        self::assertSame('array', $out['wp']['twig_type']);
-        self::assertSame(['type' => 'link', 'shape' => 'url', 'role' => 'parent'], $out['fields']['url']);
     }
 
-    public function test_array_with_no_nested_fields_throws(): void
+    public function test_bare_array_with_no_nested_fields_is_also_refused(): void
     {
-        $this->expectException(\RuntimeException::class);
+        $this->expectException(\DomainException::class);
+        $this->expectExceptionMessage(
+            "Field 'items' has twig type 'array', which is ambiguous between a single nested object and a "
+            . "list — re-annotate it as 'group' (one nested object) or 'repeater' (a list) before migrating.",
+        );
         $this->mapper->map(['type' => 'array'], 'items');
     }
 

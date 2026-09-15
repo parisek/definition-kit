@@ -21,7 +21,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `acf.json` has no fields but the twig annotation does, translating the
   twig type vocabulary (`text`/`textarea`/`url`/`link`/`select`/`image`/…)
   into the abstract schema and assigning every field `role: parent`. When
-  `acf.json` genuinely has fields, behaviour is unchanged. Closes #75.
+  `acf.json` genuinely has fields, behaviour is unchanged. A twig field
+  annotated `type: array` (with or without nested `fields:`) is refused with
+  a `\DomainException` naming the field, rather than guessed — see the
+  linked issue for the decision and its rejected alternatives. Closes #75.
 
 ## [0.13.0] - 2026-09-15
 
