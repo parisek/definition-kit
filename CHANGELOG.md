@@ -8,6 +8,21 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 <!-- New entries go directly under this line. It is the anchor that keeps a branch's
      changelog edit from merging into a version that shipped without it. -->
 
+### Fixed
+
+- **`fields-migrate` no longer discards a twig `fields:` annotation on a
+  component with no `acf.json`.** `element`/`part`/`section`/`utility`
+  components take their values from the calling template, not from ACF, so
+  the CLI synthesised an empty ACF document for them and previously wrote
+  `fields: {}` — losing the annotation entirely once ADR 0007 strips the
+  front-comment. Measured on one downstream project: 16 of 22 non-block
+  components carried such an annotation. `AcfJsonReader` now falls back to
+  the new `TwigMetadataReader::readFields()` / `TwigFieldTypeMapper` when
+  `acf.json` has no fields but the twig annotation does, translating the
+  twig type vocabulary (`text`/`textarea`/`url`/`link`/`select`/`image`/…)
+  into the abstract schema and assigning every field `role: parent`. When
+  `acf.json` genuinely has fields, behaviour is unchanged. Closes #N.
+
 ## [0.13.0] - 2026-09-15
 
 ### Changed

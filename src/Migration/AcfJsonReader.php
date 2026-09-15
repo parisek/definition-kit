@@ -32,6 +32,7 @@ final class AcfJsonReader
         private readonly VisibleWhenMapper $visibleWhenMapper = new VisibleWhenMapper(),
         private readonly TypeDefaults $typeDefaults = new TypeDefaults(),
         private readonly TwigMetadataReader $twigMetadataReader = new TwigMetadataReader(),
+        private readonly TwigFieldTypeMapper $twigFieldTypeMapper = new TwigFieldTypeMapper(),
         private readonly WpmlTranslatableMapper $wpmlMapper = new WpmlTranslatableMapper(),
         private readonly AccordionResidualCapturer $accordionCapturer = new AccordionResidualCapturer(),
         private readonly KeyStyle $keyStyle = KeyStyle::Slug,
@@ -106,6 +107,26 @@ final class AcfJsonReader
         $acfRootDescription = (string) ($acfJson['description'] ?? '');
         if ('' !== $acfRootDescription) {
             $root['wp']['description'] = $acfRootDescription;
+        }
+
+        // A component with no acf.json (`fields-migrate` synthesises an empty
+        // ACF document for it — see bin/fields-migrate) has nothing here to
+        // derive fields from, yet the twig front-comment may still carry a
+        // full `fields:` annotation (element/part/section/utility kinds: the
+        // component takes its values from whoever calls it, never from an
+        // ACF field group). Migrating such a component used to write
+        // `fields: {}` and, per ADR 0007, then strip that annotation from
+        // the twig once the YAML existed — silently discarding it with no
+        // other home. When acf.json genuinely has zero fields, defer to the
+        // twig annotation as the field source instead of emitting an empty map.
+        $twigFields = null !== $twigSource ? $this->twigMetadataReader->readFields($twigSource) : [];
+        if ([] === (array) ($acfJson['fields'] ?? []) && [] !== $twigFields) {
+            $fields = [];
+            foreach ($twigFields as $fieldName => $twigField) {
+                $fields[(string) $fieldName] = $this->twigFieldTypeMapper->map((array) $twigField, (string) $fieldName);
+            }
+            $root['fields'] = $fields;
+            return $root;
         }
 
         $fields = [];

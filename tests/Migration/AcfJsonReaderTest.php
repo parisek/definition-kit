@@ -794,4 +794,83 @@ final class AcfJsonReaderTest extends TestCase
         self::assertArrayNotHasKey('required', $field);
         self::assertSame($raw, $field['wp']['required']);
     }
+
+    /**
+     * The core of the bugfix this class ships: a component with NO acf.json
+     * (bin/fields-migrate synthesises `fields: []`) must not lose a twig
+     * front-comment `fields:` annotation. Fixture mirrors proficio-de's real
+     * `button` component (an `element`-kind utility with no editor fields).
+     */
+    public function test_component_with_no_acf_fields_derives_fields_from_the_twig_annotation(): void
+    {
+        $twig = "{#\n"
+            . "name: Button\n"
+            . "kind: element\n"
+            . "fields:\n"
+            . "\turl:\n"
+            . "\t\ttitle: Url\n"
+            . "\t\ttype: url\n"
+            . "\t\trequired: 1\n"
+            . "\ttitle:\n"
+            . "\t\ttitle: Title\n"
+            . "\t\ttype: text\n"
+            . "\t\trequired: 1\n"
+            . "\ticon:\n"
+            . "\t\ttitle: Icon\n"
+            . "\t\ttype: text\n"
+            . "\t\tdescription: \"Icon name from icons.twig (e.g. link-external)\"\n"
+            . "\ttarget:\n"
+            . "\t\ttitle: Target\n"
+            . "\t\ttype: select\n"
+            . "\t\toptions: _blank, _self\n"
+            . "#}\n";
+
+        $tree = $this->reader->read(['key' => 'group_button', 'title' => '', 'fields' => []], 'button', $twig);
+
+        self::assertSame('Button', $tree['name']);
+        self::assertSame('element', $tree['kind']);
+        self::assertSame(
+            ['url', 'title', 'icon', 'target'],
+            array_keys($tree['fields']),
+        );
+        self::assertSame(['type' => 'link', 'shape' => 'url', 'label' => 'Url', 'required' => true, 'role' => 'parent'], $tree['fields']['url']);
+        self::assertSame(['type' => 'text', 'label' => 'Title', 'required' => true, 'role' => 'parent'], $tree['fields']['title']);
+        self::assertSame([
+            'type' => 'text',
+            'label' => 'Icon',
+            'description' => 'Icon name from icons.twig (e.g. link-external)',
+            'role' => 'parent',
+        ], $tree['fields']['icon']);
+        self::assertSame([
+            'type' => 'select',
+            'options' => ['_blank' => '_blank', '_self' => '_self'],
+            'label' => 'Target',
+            'role' => 'parent',
+        ], $tree['fields']['target']);
+    }
+
+    public function test_no_annotated_field_is_lost_when_migrating_a_twig_only_component(): void
+    {
+        $twig = "{#\nname: Demo\nfields:\n\ta:\n\t\ttype: text\n\tb:\n\t\ttype: url\n\tc:\n\t\ttype: select\n\t\toptions: x, y\n\td:\n\t\ttype: image\n#}\n";
+
+        $tree = $this->reader->read(['key' => 'group_demo', 'title' => '', 'fields' => []], 'demo', $twig);
+
+        self::assertSame(['a', 'b', 'c', 'd'], array_keys($tree['fields']));
+    }
+
+    /**
+     * When acf.json genuinely has fields, it stays the source of truth even
+     * if the twig annotation also documents (possibly stale) fields — this
+     * must not regress the existing acf.json-wins behaviour.
+     */
+    public function test_acf_fields_win_over_a_twig_annotation_when_both_are_present(): void
+    {
+        $twig = "{#\nname: Demo\nfields:\n\tstale_field:\n\t\ttype: text\n#}\n";
+
+        $tree = $this->reader->read($this->group([
+            ['key' => 'field_demo_title', 'name' => 'title', 'label' => 'Nadpis', 'type' => 'text'],
+        ]), 'demo', $twig);
+
+        self::assertSame(['title'], array_keys($tree['fields']));
+    }
 }
