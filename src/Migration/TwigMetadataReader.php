@@ -72,7 +72,13 @@ final class TwigMetadataReader
         }
 
         $comment = $m[1];
-        if (!preg_match('/^fields:[ \t]*$/m', $comment, $fieldsMatch, PREG_OFFSET_CAPTURE)) {
+        // Matches the whole rest of the `fields:` line too (not just a bare
+        // `fields:` with nothing after it) — a malformed one-liner like
+        // `fields: not-a-map` must still be found and reach the YAML-shape
+        // check below, rather than being invisible to this reader entirely
+        // and read back as "no annotation at all" (Codex review round 2,
+        // finding 4).
+        if (!preg_match('/^fields:.*$/m', $comment, $fieldsMatch, PREG_OFFSET_CAPTURE)) {
             return [];
         }
 
@@ -88,8 +94,24 @@ final class TwigMetadataReader
             throw new MigrationValidationException('fields: block is not valid YAML: ' . $e->getMessage());
         }
 
-        if (!is_array($parsed) || !isset($parsed['fields']) || !is_array($parsed['fields'])) {
+        if (!is_array($parsed) || !array_key_exists('fields', $parsed)) {
             return [];
+        }
+
+        // Codex review round 2, finding 4: `fields: null` (a bare key) is
+        // the common "explicitly no fields" shape and is treated as empty,
+        // same as an absent `fields:` line. But `fields: some text` or a
+        // scalar of any other kind is a malformed annotation, not an empty
+        // one — silently returning `[]` for it hid the mistake behind the
+        // exact same output as "nothing to migrate".
+        if (null === $parsed['fields']) {
+            return [];
+        }
+        if (!is_array($parsed['fields'])) {
+            throw new MigrationValidationException(sprintf(
+                'fields: is present but is not a map (got %s) — expected field name => annotation pairs.',
+                get_debug_type($parsed['fields']),
+            ));
         }
 
         /** @var array<string,array<string,mixed>> $fields */

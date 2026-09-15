@@ -236,4 +236,81 @@ final class TwigFieldTypeMapperTest extends TestCase
             'fields' => ['mode' => ['type' => 'select']],
         ], 'items');
     }
+
+    // --- Codex review round 2 -------------------------------------------
+
+    public function test_select_options_as_a_yaml_list_are_read_like_the_comma_shorthand(): void
+    {
+        // Finding 1: `options: [compact, expanded]` used to be cast
+        // straight to a string (PHP's array-to-string coercion), producing
+        // a single bogus `Array: Array` option that still passed schema
+        // validation.
+        $out = $this->mapper->map(['type' => 'select', 'options' => ['compact', 'expanded']], 'mode');
+        self::assertSame(['compact' => 'compact', 'expanded' => 'expanded'], $out['options']);
+    }
+
+    public function test_select_options_list_with_a_non_scalar_entry_throws(): void
+    {
+        $this->expectException(\DomainException::class);
+        $this->mapper->map(['type' => 'select', 'options' => [['nested' => 'array']]], 'mode');
+    }
+
+    public function test_select_options_of_the_wrong_type_throws(): void
+    {
+        $this->expectException(\DomainException::class);
+        $this->mapper->map(['type' => 'select', 'options' => 42], 'mode');
+    }
+
+    public function test_select_with_both_options_and_choices_throws_ambiguity(): void
+    {
+        // Finding 2: `choices` used to win silently over a present
+        // `options`, discarding it with no diagnostic.
+        $this->expectException(\DomainException::class);
+        $this->expectExceptionMessage(
+            "Field 'mode' has both `options:` and `choices:` — only one select option source is allowed.",
+        );
+        $this->mapper->map([
+            'type' => 'select',
+            'options' => 'a, b',
+            'choices' => ['a' => 'A', 'b' => 'B'],
+        ], 'mode');
+    }
+
+    public function test_select_with_choices_of_the_wrong_type_throws(): void
+    {
+        // Finding 2: a malformed `choices:` (e.g. a plain string) used to
+        // fall through silently to `options` when both were present, or to
+        // "no options" when they weren't — either way the bad `choices:`
+        // itself was never reported.
+        $this->expectException(\DomainException::class);
+        $this->mapper->map(['type' => 'select', 'choices' => 'not-a-map'], 'mode');
+    }
+
+    public function test_required_yes_is_refused_not_silently_ignored(): void
+    {
+        // Finding 3: any value outside {true, 1, '1', false, 0, '0', null}
+        // used to be marked consumed and silently treated as "not
+        // required" — the constraint vanished from the migrated field with
+        // no diagnostic.
+        $this->expectException(\DomainException::class);
+        $this->mapper->map(['type' => 'text', 'required' => 'yes'], 'title');
+    }
+
+    public function test_required_2_is_refused(): void
+    {
+        $this->expectException(\DomainException::class);
+        $this->mapper->map(['type' => 'text', 'required' => 2], 'title');
+    }
+
+    public function test_required_0_is_accepted_as_not_required(): void
+    {
+        $out = $this->mapper->map(['type' => 'text', 'required' => 0], 'title');
+        self::assertArrayNotHasKey('required', $out);
+    }
+
+    public function test_required_false_is_accepted_as_not_required(): void
+    {
+        $out = $this->mapper->map(['type' => 'text', 'required' => false], 'title');
+        self::assertArrayNotHasKey('required', $out);
+    }
 }

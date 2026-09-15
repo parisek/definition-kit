@@ -29,7 +29,16 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   genuinely unhandled key) is likewise refused by field path rather than
   silently dropped, and `placeholder:` is now carried across. A `select`
   with no (or empty) `options:`/`choices:`, or a non-string option label,
-  is refused locally instead of migrating to schema-invalid YAML. Closes #75.
+  is refused locally instead of migrating to schema-invalid YAML. A
+  `select`'s `options:` written as a YAML list (`[a, b, c]`) is read like
+  the comma-string shorthand instead of collapsing to a single bogus
+  `Array: Array` option; `choices:` and `options:` given together, a
+  malformed `choices:`, and a non-canonical `required:` value (e.g.
+  `required: yes`) are refused by field path instead of one silently
+  winning over the other or the constraint silently vanishing. A `fields:`
+  annotation whose value is a scalar rather than a map is likewise refused,
+  distinct from the "explicitly no fields" bare/null `fields:` shape.
+  Closes #75.
 
 ## [0.13.0] - 2026-09-15
 

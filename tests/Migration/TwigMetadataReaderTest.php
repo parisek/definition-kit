@@ -117,4 +117,24 @@ final class TwigMetadataReaderTest extends TestCase
         $this->expectException(\Parisek\DefinitionKit\Migration\MigrationValidationException::class);
         (new TwigMetadataReader())->readFields($twig);
     }
+
+    public function test_read_fields_treats_a_bare_null_fields_key_as_empty(): void
+    {
+        // `fields:` with nothing beneath it is the common "explicitly no
+        // fields" shape and stays equivalent to an absent `fields:` line.
+        $twig = "{#\nname: Demo\nfields:\n#}\n";
+        self::assertSame([], (new TwigMetadataReader())->readFields($twig));
+    }
+
+    public function test_read_fields_throws_when_fields_is_a_scalar_not_a_map(): void
+    {
+        // Codex review round 2, finding 4: `fields: some text` used to
+        // return `[]`, indistinguishable from the empty-on-purpose case
+        // above — hiding a malformed annotation behind the exact same
+        // output as "nothing to migrate".
+        $twig = "{#\nname: Demo\nfields: not-a-map\n#}\n";
+
+        $this->expectException(\Parisek\DefinitionKit\Migration\MigrationValidationException::class);
+        (new TwigMetadataReader())->readFields($twig);
+    }
 }

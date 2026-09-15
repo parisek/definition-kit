@@ -137,9 +137,21 @@ final class TwigFieldTypeMapper
         if ('' !== (string) ($twigField['placeholder'] ?? '')) {
             $out['placeholder'] = (string) $twigField['placeholder'];
         }
-        $required = $twigField['required'] ?? null;
-        if (true === $required || 1 === $required || '1' === $required) {
-            $out['required'] = true;
+        if (array_key_exists('required', $twigField)) {
+            $required = $twigField['required'];
+            if (true === $required || 1 === $required || '1' === $required) {
+                $out['required'] = true;
+            } elseif (false !== $required && 0 !== $required && '0' !== $required && null !== $required) {
+                // Codex review round 2, finding 3: a non-canonical value
+                // (`required: yes`, `required: 2`, a typo) used to be
+                // silently treated as "not required" — the field then
+                // migrates with the constraint dropped and no diagnostic.
+                throw new \DomainException(sprintf(
+                    "Field '%s' has an unrecognised `required:` value (%s) — use `1`/`true` or `0`/`false`.",
+                    $fieldName,
+                    var_export($required, true),
+                ));
+            }
         }
 
         // Every field this reader touches is, by construction, passed in by
@@ -173,20 +185,79 @@ final class TwigFieldTypeMapper
     {
         $out = ['type' => 'select'];
 
-        if (isset($twigField['choices']) && is_array($twigField['choices'])) {
+        $hasChoices = array_key_exists('choices', $twigField) && [] !== $twigField['choices'] && null !== $twigField['choices'];
+        $hasOptions = array_key_exists('options', $twigField) && [] !== $twigField['options'] && null !== $twigField['options'] && '' !== $twigField['options'];
+
+        // Codex review round 2, finding 2: both were previously "consumed"
+        // unconditionally, so a bad or conflicting source vanished with no
+        // diagnostic — `choices` silently won over a present `options`, and
+        // a malformed `choices` (wrong type) silently fell through to
+        // `options`. Neither is allowed to disappear quietly now: exactly
+        // one representation is required, and each is validated for its
+        // own shape before use.
+        if ($hasChoices && $hasOptions) {
+            throw new \DomainException(sprintf(
+                "Field '%s' has both `options:` and `choices:` — only one select option source is allowed.",
+                $fieldName,
+            ));
+        }
+
+        if ($hasChoices) {
+            if (!is_array($twigField['choices'])) {
+                throw new \DomainException(sprintf(
+                    "Field '%s' has a `choices:` that is not a map (got %s) — expected a key => label map.",
+                    $fieldName,
+                    get_debug_type($twigField['choices']),
+                ));
+            }
             // Already an ACF-shaped key => label map — used verbatim, no
             // guessing needed.
             $out['options'] = $twigField['choices'];
-        } elseif (isset($twigField['options']) && '' !== (string) $twigField['options']) {
-            // The shorthand comma-string form (`options: a, b, c`) carries no
-            // human label, only the raw values a template compares against
-            // (`content.type == 'status'`) — so key and label are the same
-            // token. An author refining the migrated YAML can split them.
-            $tokens = array_values(array_filter(
-                array_map('trim', explode(',', (string) $twigField['options'])),
-                static fn (string $t): bool => '' !== $t,
-            ));
-            $out['options'] = array_combine($tokens, $tokens);
+        } elseif ($hasOptions) {
+            $rawOptions = $twigField['options'];
+            if (is_array($rawOptions)) {
+                // Codex review round 2, finding 1: a YAML sequence form
+                // (`options: [a, b, c]`) used to be cast straight to string
+                // — PHP's array-to-string coercion silently produced the
+                // single bogus option `Array => Array`, which still passed
+                // schema validation. A plain list of scalars is now read
+                // the same way as the comma-string shorthand: each element
+                // becomes both the option's key and its label.
+                $tokens = [];
+                foreach ($rawOptions as $token) {
+                    if (!is_scalar($token)) {
+                        throw new \DomainException(sprintf(
+                            "Field '%s' has an `options:` list entry that is not a scalar (got %s) — "
+                            . 'every entry must be a plain string value.',
+                            $fieldName,
+                            get_debug_type($token),
+                        ));
+                    }
+                    $token = trim((string) $token);
+                    if ('' !== $token) {
+                        $tokens[] = $token;
+                    }
+                }
+                $out['options'] = array_combine($tokens, $tokens);
+            } elseif (is_string($rawOptions)) {
+                // The shorthand comma-string form (`options: a, b, c`) carries
+                // no human label, only the raw values a template compares
+                // against (`content.type == 'status'`) — so key and label are
+                // the same token. An author refining the migrated YAML can
+                // split them.
+                $tokens = array_values(array_filter(
+                    array_map('trim', explode(',', $rawOptions)),
+                    static fn (string $t): bool => '' !== $t,
+                ));
+                $out['options'] = array_combine($tokens, $tokens);
+            } else {
+                throw new \DomainException(sprintf(
+                    "Field '%s' has an `options:` value that is neither a comma-separated string nor a list "
+                    . '(got %s).',
+                    $fieldName,
+                    get_debug_type($rawOptions),
+                ));
+            }
         }
 
         // The schema requires a non-empty `options` map with string labels
