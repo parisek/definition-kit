@@ -3,6 +3,7 @@
 
 declare(strict_types=1);
 
+use Parisek\DefinitionKit\Support\StructuralType;
 use Parisek\DefinitionKit\Generator\AcfJsonWriter;
 use Parisek\DefinitionKit\Generator\BlockJsonGenerator;
 use Parisek\DefinitionKit\Generator\BlockJsonWriter;
@@ -10,7 +11,6 @@ use Parisek\DefinitionKit\Generator\FieldsGenerator;
 use Parisek\DefinitionKit\Support\KeyStyle;
 use Parisek\DefinitionKit\Support\EntryDefinition;
 use Parisek\DefinitionKit\Schema\FieldsSchemaValidator;
-use Symfony\Component\Yaml\Yaml;
 
 foreach ([__DIR__ . '/../vendor/autoload.php', __DIR__ . '/../../../autoload.php'] as $autoload) {
     if (is_file($autoload)) {
@@ -45,7 +45,7 @@ function fields_generate_one(string $componentDir, bool $dryRun, KeyStyle $keySt
         return ['ok' => false, 'component' => $componentName, 'error' => 'invalid definition: ' . implode('; ', $messages)];
     }
 
-    $tree = Yaml::parseFile($yamlPath);
+    $tree = StructuralType::parseFile($yamlPath);
     if (!is_array($tree)) {
         return ['ok' => false, 'component' => $componentName, 'error' => 'malformed YAML'];
     }

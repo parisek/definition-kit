@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Parisek\DefinitionKit\Migration;
 
+use Parisek\DefinitionKit\Support\StructuralType;
+
 /**
  * Translates ONE field from the twig `fields:` annotation (tailwind-base's
  * `update-fields` skill vocabulary — `title`/`type`/`required`/
@@ -140,7 +142,7 @@ final class TwigFieldTypeMapper
     {
         return match ($twigType) {
             'select' => ['options', 'choices'],
-            'group', 'repeater' => ['fields'],
+            'object', 'list', 'group', 'repeater' => ['fields'],
             default => [],
         };
     }
@@ -171,11 +173,11 @@ final class TwigFieldTypeMapper
         // makes every other prop on the field moot.
         if (!in_array($twigType, ['text', 'textarea', 'wysiwyg', 'html', 'url', 'link', 'email', 'phone',
             'number', 'boolean', 'true_false', 'select', 'image', 'file', 'gallery', 'video', 'date',
-            'post_object', 'group', 'repeater'], true)) {
+            'post_object', 'object', 'list', 'group', 'repeater'], true)) {
             if ('array' === $twigType) {
                 throw new \DomainException(sprintf(
                     "Field '%s' has twig type 'array', which is ambiguous between a single nested object and a "
-                    . "list — re-annotate it as 'group' (one nested object) or 'repeater' (a list) before "
+                    . "list — re-annotate it as 'object' (one nested object) or 'list' (a list of objects) before "
                     . 'migrating.',
                     $fieldName,
                 ));
@@ -298,8 +300,10 @@ final class TwigFieldTypeMapper
             // The parent's OWN resolved $role (never $inheritedRole or
             // $assumeRole directly) is what a child with no explicit
             // `role:` of its own falls back to — this is the round-6 fix.
-            'group' => $this->container('group', $twigField, $fieldName, $role),
-            'repeater' => $this->container('repeater', $twigField, $fieldName, $role),
+            // `group`/`repeater` are the older twig names; both write the
+            // canonical `object`/`list` (#79).
+            'object', 'group' => $this->container(StructuralType::OBJECT, $twigType, $twigField, $fieldName, $role),
+            'list', 'repeater' => $this->container(StructuralType::LIST, $twigType, $twigField, $fieldName, $role),
         };
 
         $out = $shape;
@@ -558,14 +562,14 @@ final class TwigFieldTypeMapper
      * @param array<string,mixed> $twigField
      * @return array<string,mixed>
      */
-    private function container(string $type, array $twigField, string $fieldName, string $role): array
+    private function container(string $type, string $twigType, array $twigField, string $fieldName, string $role): array
     {
         $children = (array) ($twigField['fields'] ?? []);
         if ([] === $children) {
             throw new \RuntimeException(sprintf(
                 "Field '%s' is a twig '%s' with no nested `fields:` — the schema forbids an empty fields map.",
                 $fieldName,
-                $type,
+                $twigType,
             ));
         }
 

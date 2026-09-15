@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Parisek\DefinitionKit\Lint;
 
+use Parisek\DefinitionKit\Support\StructuralType;
+
 /**
  * Warns when `translatable:` is declared on a container field type
  * (`group`, `repeater`, `flexible_content`) — the property is silently
@@ -29,7 +31,7 @@ namespace Parisek\DefinitionKit\Lint;
  */
 final class TranslatableInertLinter
 {
-    private const CONTAINER_TYPES = ['group', 'repeater', 'flexible_content'];
+    private const CONTAINER_TYPES = [StructuralType::OBJECT, StructuralType::LIST, 'flexible_content'];
 
     /**
      * @param array<string,mixed> $definition
@@ -37,7 +39,7 @@ final class TranslatableInertLinter
      */
     public function lint(string $definitionPath, array $definition): array
     {
-        $fields = (array) ($definition['fields'] ?? []);
+        $fields = (array) (StructuralType::normalize($definition)['fields'] ?? []);
         $findings = [];
         $this->walkFields($definitionPath, $fields, [], $findings);
         return $findings;

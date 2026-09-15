@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Parisek\DefinitionKit\Generator;
 
 use Parisek\DefinitionKit\Contract\ComponentShapeResolver;
+use Parisek\DefinitionKit\Support\StructuralType;
 
 /**
  * Implements the two-axis model from issue #13: `role:` (axis B —
@@ -154,7 +155,7 @@ final class FieldProjectionFilter
             if (!empty($field['fields']) && is_array($field['fields'])) {
                 $filteredChildren = $this->filterProjecting((array) $field['fields'], $chain, $role, true);
                 $type = (string) ($field['type'] ?? '');
-                if ([] === $filteredChildren && in_array($type, ['group', 'repeater'], true)) {
+                if ([] === $filteredChildren && in_array($type, [StructuralType::OBJECT, StructuralType::LIST], true)) {
                     // Rule 9 — a projecting container with zero projecting
                     // children is dropped entirely, same as if it never
                     // projected in the first place.

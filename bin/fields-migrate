@@ -8,6 +8,7 @@ use Parisek\DefinitionKit\Support\KeyStyle;
 use Parisek\DefinitionKit\Migration\BlockResidualCapturer;
 use Parisek\DefinitionKit\Migration\FieldsYamlWriter;
 use Parisek\DefinitionKit\Migration\EntryMetadataMigrator;
+use Parisek\DefinitionKit\Migration\StructuralTypeRenamer;
 use Parisek\DefinitionKit\Support\EntryDefinition;
 
 foreach ([__DIR__ . '/../vendor/autoload.php', __DIR__ . '/../../../autoload.php'] as $autoload) {
@@ -208,6 +209,91 @@ function fields_migrate_one(string $componentDir, bool $dryRun, bool $force, Key
 }
 
 $args = array_slice($argv, 1);
+
+// `--rename-structural-types` is a codemod over EXISTING definitions (#79):
+// `type: group` -> `object`, `type: repeater` -> `list`. It reads no acf.json
+// and no twig, so none of the derivation flags below apply, and combining it
+// with one is refused rather than ignored. It prints by default and writes
+// only with `--write`, the same shape fields-roles uses for rewriting
+// authored definitions.
+if (in_array('--rename-structural-types', $args, true)) {
+    $renameUsage = "usage: fields-migrate --rename-structural-types [--write] <component-dir>\n"
+        . "       fields-migrate --rename-structural-types [--write] --root=<components-root>\n"
+        . "  Rewrites `type: group` to `object` and `type: repeater` to `list` in <name>.yaml.\n"
+        . "  Prints what would change and writes nothing unless --write is given.\n";
+    $write = false;
+    $renameRoot = null;
+    $renameSingle = null;
+    foreach ($args as $arg) {
+        if ('--rename-structural-types' === $arg) {
+            continue;
+        }
+        if ('--write' === $arg) {
+            $write = true;
+            continue;
+        }
+        if (str_starts_with($arg, '--root=')) {
+            $renameRoot = substr($arg, 7);
+            continue;
+        }
+        if (str_starts_with($arg, '-')) {
+            fwrite(STDERR, "unknown option with --rename-structural-types: {$arg}\n" . $renameUsage);
+            exit(2);
+        }
+        $renameSingle = $arg;
+    }
+    if ((null === $renameRoot) === (null === $renameSingle)) {
+        fwrite(STDERR, $renameUsage);
+        exit(2);
+    }
+    $scanDir = $renameRoot ?? $renameSingle;
+    if (!is_dir((string) $scanDir)) {
+        fwrite(STDERR, "not a directory: {$scanDir}\n");
+        exit(2);
+    }
+
+    $dirs = null !== $renameRoot ? (glob(rtrim($renameRoot, '/') . '/*', GLOB_ONLYDIR) ?: []) : [rtrim((string) $renameSingle, '/')];
+    sort($dirs);
+    $renamer = new StructuralTypeRenamer();
+    $failures = 0;
+    $changedFiles = 0;
+    $seen = 0;
+    foreach ($dirs as $dir) {
+        $name = basename($dir);
+        $yamlPath = "{$dir}/{$name}.yaml";
+        if (!is_file($yamlPath)) {
+            if (null !== $renameSingle) {
+                echo "FAIL {$name}: no {$name}.yaml at {$dir}\n";
+                $failures++;
+            }
+            continue;
+        }
+        $seen++;
+        try {
+            $result = $renamer->rename((string) file_get_contents($yamlPath));
+        } catch (\RuntimeException $e) {
+            echo "FAIL {$name}: {$e->getMessage()}\n";
+            $failures++;
+            continue;
+        }
+        if (0 === $result['renamed']) {
+            echo "OK   {$name}: nothing to rename\n";
+            continue;
+        }
+        $changedFiles++;
+        if ($write && !fields_migrate_write_atomically($yamlPath, $result['source'])) {
+            echo "FAIL {$name}: cannot write {$yamlPath}\n";
+            $failures++;
+            continue;
+        }
+        echo sprintf("%s %s: %d type(s) renamed%s\n", $write ? 'OK  ' : 'WOULD', $name, $result['renamed'], $write ? " -> {$yamlPath}" : '');
+    }
+    echo sprintf("%d definition(s), %d to rename, %d failed\n", $seen, $changedFiles, $failures);
+    if (!$write && $changedFiles > 0) {
+        echo "nothing written — re-run with --write to apply\n";
+    }
+    exit($failures > 0 ? 1 : 0);
+}
 $root = null;
 $dryRun = false;
 $force = false;
@@ -223,7 +309,9 @@ $usage = "usage: fields-migrate [--dry-run] [--force] [--assume-role=parent|quer
     . "  --assume-role sets the fallback `role:` for a twig-only component's field with no\n"
     . "  explicit `role:` of its own (see AcfJsonReader::read()'s doc header). Without it, such\n"
     . "  a field's provenance is ambiguous and migration refuses the component. Ignored for an\n"
-    . "  acf.json-backed component. A field's own twig `role:` annotation always wins over it.\n";
+    . "  acf.json-backed component. A field's own twig `role:` annotation always wins over it.\n"
+    . "       fields-migrate --rename-structural-types [--write] <component-dir>|--root=<components-root>\n"
+    . "  rewrites `type: group`/`repeater` to `object`/`list` in existing definitions.\n";
 
 $assumableRoles = ['parent', 'query', 'global'];
 

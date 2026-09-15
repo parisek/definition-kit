@@ -24,6 +24,22 @@ final class TranslatableInertLinterTest extends TestCase
         self::assertSame([], $findings);
     }
 
+    /** @return array<string, array{string}> */
+    public static function structuralTypes(): array
+    {
+        return ['object' => ['object'], 'list' => ['list'], 'group alias' => ['group'], 'repeater alias' => ['repeater']];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('structuralTypes')]
+    public function test_structural_type_or_its_alias_with_translatable_warns(string $type): void
+    {
+        $findings = $this->linter->lint('demo.yaml', [
+            'fields' => ['items' => ['type' => $type, 'label' => 'Items', 'translatable' => true, 'fields' => ['t' => ['type' => 'text']]]],
+        ]);
+        self::assertCount(1, $findings);
+        self::assertSame('warning', $findings[0]['severity']);
+    }
+
     public function test_flexible_content_with_translatable_true_warns(): void
     {
         $findings = $this->linter->lint('demo.yaml', [

@@ -6,7 +6,7 @@ render: bleed
 asana: 'https://app.asana.com/1/311854867024856/task/1215711477693484'
 fields:
   heading:
-    type: group
+    type: object
     label: Nadpis
     description: 'Volitelný nadpis nad feature kartou.'
     fields:
@@ -29,7 +29,7 @@ fields:
         role: field
     role: field
   feature:
-    type: group
+    type: object
     label: 'Feature karta'
     description: 'Zvýrazněná karta — mockup produktu, plovoucí metriky a panel s informacemi.'
     fields:
@@ -40,7 +40,7 @@ fields:
         kind: image
         role: field
       badges:
-        type: repeater
+        type: list
         label: Štítky
         description: 'Plovoucí metriky nad obrázkem produktu (např. CTR 3.3 %). Max 3.'
         max: 3
@@ -96,7 +96,7 @@ fields:
         wp:
           new_lines: wpautop
       stats:
-        type: repeater
+        type: list
         label: Statistiky
         description: 'Max 3 KPI hodnoty. Každá má vlastní hodnotu + popisek.'
         max: 3

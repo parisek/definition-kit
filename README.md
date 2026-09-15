@@ -106,7 +106,15 @@ The last line reads `N component(s), N failed`. When a component was skipped it 
 
 `<name>.yaml` is an **authored semantic layer**, not a verbatim ACF mirror:
 
-- **Abstract types** (`text`/`richtext`/`number`/`boolean`/`select`/`media`/`link`/`reference`/`group`/`repeater`/`date`) decouple the definition from ACF field-type names.
+- **Abstract types** (`text`/`richtext`/`number`/`boolean`/`select`/`media`/`link`/`reference`/`object`/`list`/`flexible_content`/`date`) decouple the definition from ACF field-type names.
+- **`object` and `list` are the structural types.** `object` is one nested object. `list` is a list of objects — never a list of scalars. Both enumerate `fields:`. A field that projects becomes an ACF `group` or `repeater`. `group` and `repeater` stay valid aliases with the same keys and byte-identical output; `fields-migrate` writes the canonical names. Rename existing definitions in one reviewed commit:
+
+  ```bash
+  vendor/bin/fields-migrate --rename-structural-types --root=path/to/component          # prints what would change
+  vendor/bin/fields-migrate --rename-structural-types --write --root=path/to/component  # rewrites type: lines only
+  ```
+
+  The rewrite changes only the value of a `type:` line. Comments, quoting and key order stay. A field named `group` or a `wp.acf_type` marker is not touched, and a second run changes nothing.
 - Properties equal to the shared **type-defaults baseline** (`schemas/acf-defaults-baseline.yaml`) are dropped on migrate and re-added on generate — the definition holds only what's meaningful.
 - Semantic annotations — `label`, `description` (editor instructions), `mcp` (AI-agent guidance), `translatable`, constraints (`maxlength`/`min`/`max`/`step`/`accept`), `visible_when`, `add_label`, `placeholder`, `options` — carry authored intent.
 - **Root metadata:** `name`, `category` and `fields` are required. `asana` is an absolute http(s) URL whose host is asana.com or a subdomain. `web` and `drupal` are a site-relative path (starts with `/`, not `//`) or an absolute http(s) URL with a host. Pages use the same formats for these keys.

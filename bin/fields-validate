@@ -3,6 +3,7 @@
 
 declare(strict_types=1);
 
+use Parisek\DefinitionKit\Support\StructuralType;
 use Parisek\DefinitionKit\Generator\FieldsGenerator;
 use Parisek\DefinitionKit\Generator\GenerationValidationException;
 use Parisek\DefinitionKit\Lint\DerivedFromLinter;
@@ -83,7 +84,7 @@ foreach ($paths as $path) {
     // KindLinter's rules only apply once the document itself is schema-valid
     // — an array-typed $definition needs a normal (non-object-for-map) parse.
     /** @var array<string,mixed> $definition */
-    $definition = Yaml::parseFile($path) ?? [];
+    $definition = StructuralType::parseFile($path) ?? [];
     $findings = [
         ...$kindLinter->lint($path, $definition),
         ...$translatableInertLinter->lint($path, $definition),

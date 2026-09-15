@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace Parisek\DefinitionKit\Lint;
 
+use Parisek\DefinitionKit\Support\StructuralType;
 use Parisek\DefinitionKit\Generator\BlockJsonGenerator;
 use Parisek\DefinitionKit\Generator\FieldsGenerator;
 use Parisek\DefinitionKit\Support\KeyStyle;
 use Parisek\DefinitionKit\Schema\FieldsSchemaValidator;
 use Parisek\DefinitionKit\Support\StructuralDiff;
-use Symfony\Component\Yaml\Yaml;
 
 /**
  * The CI gate (ADR 0005): proves a component's committed acf.json (and,
@@ -72,7 +72,7 @@ final class DriftLinter
             return DriftResult::error($componentName, 'invalid definition: ' . implode('; ', $messages));
         }
 
-        $tree = Yaml::parseFile($yamlPath);
+        $tree = StructuralType::parseFile($yamlPath);
         if (!is_array($tree)) {
             return DriftResult::error($componentName, 'malformed YAML');
         }

@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace Parisek\DefinitionKit\Contract;
 
+use Parisek\DefinitionKit\Support\StructuralType;
 use Parisek\DefinitionKit\Baseline\DerivedProps;
 use Parisek\DefinitionKit\Baseline\FrameworkProps;
 use Parisek\DefinitionKit\Support\EntryDefinition;
-use Symfony\Component\Yaml\Yaml;
 
 /**
  * Proposes a role per prop from evidence (issue #27, phase 4).
@@ -67,7 +67,7 @@ final class RoleProposer
         }
 
         /** @var array<string,mixed> $definition */
-        $definition = Yaml::parseFile($yamlPath) ?? [];
+        $definition = StructuralType::parseFile($yamlPath) ?? [];
         $fields = isset($definition['fields']) && is_array($definition['fields']) ? $definition['fields'] : [];
 
         $acfNames = $this->acfBackedNames("{$componentDir}/acf.json");

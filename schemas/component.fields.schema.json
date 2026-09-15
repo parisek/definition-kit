@@ -203,6 +203,7 @@
             "additionalProperties": false,
             "properties": {
                 "type": {
+                    "description": "The abstract field type. `object` is one nested object and `list` is a list of objects; both enumerate `fields:` unless the field is `open: true` or borrows a component shape through `of:`. `group` and `repeater` are aliases of `object` and `list` with identical keys and identical projections (issue #79). Tooling writes the canonical names; `fields-migrate --rename-structural-types` rewrites existing definitions.",
                     "enum": [
                         "text",
                         "richtext",
@@ -212,6 +213,8 @@
                         "media",
                         "link",
                         "reference",
+                        "object",
+                        "list",
                         "group",
                         "repeater",
                         "flexible_content",
@@ -345,7 +348,7 @@
                 },
                 "open": {
                     "type": "boolean",
-                    "description": "This field is an open map whose keys are not knowable in advance — `picture.link_attributes`, an arbitrary attribute bag merged onto the `<a>`. A `group`/`repeater` normally has to enumerate `fields:`, which forces an author to either invent representative leaves or drop a real input from the contract; tailwind-base did the former and documented the leaves as approximations (docs/398-unresolved-roles.md). `open: true` states the openness instead, and the contract check stops descending at it — what is inside belongs to whoever fills the map. It does not excuse the field itself from carrying a role."
+                    "description": "This field is an open map whose keys are not knowable in advance — `picture.link_attributes`, an arbitrary attribute bag merged onto the `<a>`. An `object`/`list` normally has to enumerate `fields:`, which forces an author to either invent representative leaves or drop a real input from the contract; tailwind-base did the former and documented the leaves as approximations (docs/398-unresolved-roles.md). `open: true` states the openness instead, and the contract check stops descending at it — what is inside belongs to whoever fills the map. It does not excuse the field itself from carrying a role."
                 },
                 "resolved_from": {
                     "type": "array",
@@ -420,13 +423,15 @@
                     }
                 },
                 {
-                    "$comment": "A group/repeater must enumerate `fields:` — a container with nothing in it describes nothing. Two exceptions: an open map has no keys to declare, and a field borrowing another component's shape declares it there.",
+                    "$comment": "An object/list (or its alias group/repeater) must enumerate `fields:` — a container with nothing in it describes nothing. Two exceptions: an open map has no keys to declare, and a field borrowing another component's shape declares it there.",
                     "if": {
                         "allOf": [
                             {
                                 "properties": {
                                     "type": {
                                         "enum": [
+                                            "object",
+                                            "list",
                                             "group",
                                             "repeater"
                                         ]

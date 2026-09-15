@@ -48,7 +48,7 @@ final class FieldReconstructorTest extends TestCase
     public function test_container_type_always_reconstructs_wpml_three_even_if_translatable_set(): void
     {
         $out = $this->reconstructor->reconstruct(
-            ['type' => 'group', 'label' => 'T', 'translatable' => true, 'fields' => ['x' => ['type' => 'text', 'label' => 'X']]],
+            ['type' => 'object', 'label' => 'T', 'translatable' => true, 'fields' => ['x' => ['type' => 'text', 'label' => 'X']]],
             [],
         );
         self::assertSame(3, $out['wpml_cf_preferences']);
@@ -113,7 +113,7 @@ final class FieldReconstructorTest extends TestCase
     public function test_repeater_min_max_reconstructed_but_no_step_field_exists_in_acf(): void
     {
         $out = $this->reconstructor->reconstruct(
-            ['type' => 'repeater', 'label' => 'T', 'min' => 1, 'max' => 5, 'fields' => ['x' => ['type' => 'text', 'label' => 'X']]],
+            ['type' => 'list', 'label' => 'T', 'min' => 1, 'max' => 5, 'fields' => ['x' => ['type' => 'text', 'label' => 'X']]],
             [],
         );
         self::assertSame(1, $out['min']);

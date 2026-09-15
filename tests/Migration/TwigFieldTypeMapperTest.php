@@ -137,7 +137,7 @@ final class TwigFieldTypeMapperTest extends TestCase
             ],
         ], 'heading');
 
-        self::assertSame('group', $out['type']);
+        self::assertSame('object', $out['type']);
         self::assertSame(['type' => 'text', 'required' => true, 'role' => 'parent'], $out['fields']['title']);
         self::assertSame(['type' => 'text', 'multiline' => true, 'role' => 'parent'], $out['fields']['perex']);
     }
@@ -149,8 +149,24 @@ final class TwigFieldTypeMapperTest extends TestCase
             'fields' => ['url' => ['type' => 'url']],
         ], 'items');
 
-        self::assertSame('repeater', $out['type']);
+        self::assertSame('list', $out['type']);
         self::assertSame(['type' => 'link', 'shape' => 'url', 'role' => 'parent'], $out['fields']['url']);
+    }
+
+    public function test_canonical_object_and_list_are_accepted_as_twig_types(): void
+    {
+        $object = $this->mapper->map(['type' => 'object', 'fields' => ['title' => ['type' => 'text']]], 'heading');
+        $list = $this->mapper->map(['type' => 'list', 'fields' => ['url' => ['type' => 'url']]], 'items');
+
+        self::assertSame('object', $object['type']);
+        self::assertSame('list', $list['type']);
+    }
+
+    public function test_list_with_no_nested_fields_throws_with_the_twig_type_name(): void
+    {
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage("twig 'repeater' with no nested `fields:`");
+        $this->mapper->map(['type' => 'repeater'], 'empty');
     }
 
     public function test_group_with_no_nested_fields_throws(): void
@@ -169,7 +185,7 @@ final class TwigFieldTypeMapperTest extends TestCase
         $this->expectException(\DomainException::class);
         $this->expectExceptionMessage(
             "Field 'categories' has twig type 'array', which is ambiguous between a single nested object and a "
-            . "list — re-annotate it as 'group' (one nested object) or 'repeater' (a list) before migrating.",
+            . "list — re-annotate it as 'object' (one nested object) or 'list' (a list of objects) before migrating.",
         );
         $this->mapper->map([
             'type' => 'array',
@@ -182,7 +198,7 @@ final class TwigFieldTypeMapperTest extends TestCase
         $this->expectException(\DomainException::class);
         $this->expectExceptionMessage(
             "Field 'items' has twig type 'array', which is ambiguous between a single nested object and a "
-            . "list — re-annotate it as 'group' (one nested object) or 'repeater' (a list) before migrating.",
+            . "list — re-annotate it as 'object' (one nested object) or 'list' (a list of objects) before migrating.",
         );
         $this->mapper->map(['type' => 'array'], 'items');
     }
