@@ -195,13 +195,14 @@ final class AbstractTypeMapperTest extends TestCase
     public function test_group_consumes_sub_fields(): void
     {
         $result = $this->mapper->map(['type' => 'group', 'name' => 'f']);
-        self::assertSame('group', $result['type']);
+        self::assertSame('object', $result['type']);
         self::assertSame(['type', 'sub_fields'], $result['consumed']);
     }
 
     public function test_repeater_lifts_button_label_to_add_label(): void
     {
         $result = $this->mapper->map(['type' => 'repeater', 'name' => 'f', 'button_label' => 'Přidat řádek']);
+        self::assertSame('list', $result['type']);
         self::assertSame(['add_label' => 'Přidat řádek'], $result['extra']);
         self::assertSame(['type', 'sub_fields', 'button_label'], $result['consumed']);
     }

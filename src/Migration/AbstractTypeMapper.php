@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Parisek\DefinitionKit\Migration;
 
+use Parisek\DefinitionKit\Support\StructuralType;
+
 /**
  * Maps a raw ACF field array onto the abstract vocabulary from
  * component.fields.schema.json — decides ONLY `type` plus the type-specific
@@ -126,7 +128,7 @@ final class AbstractTypeMapper
             // baseline and anything else survives verbatim in the `wp:` bag.
             'taxonomy' => $this->taxonomy($acfField),
             'date_picker' => ['type' => 'date', 'extra' => [], 'consumed' => ['type']],
-            'group' => ['type' => 'group', 'extra' => [], 'consumed' => ['type', 'sub_fields']],
+            'group' => ['type' => StructuralType::OBJECT, 'extra' => [], 'consumed' => ['type', 'sub_fields']],
             'repeater' => $this->repeater($acfField),
             'flexible_content' => $this->flexibleContent($acfField),
             default => throw new \DomainException(sprintf(
@@ -232,7 +234,7 @@ final class AbstractTypeMapper
         if (!empty($acfField['button_label'])) {
             $extra['add_label'] = (string) $acfField['button_label'];
         }
-        return ['type' => 'repeater', 'extra' => $extra, 'consumed' => ['type', 'sub_fields', 'button_label']];
+        return ['type' => StructuralType::LIST, 'extra' => $extra, 'consumed' => ['type', 'sub_fields', 'button_label']];
     }
 
     /**

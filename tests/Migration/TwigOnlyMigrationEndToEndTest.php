@@ -98,9 +98,9 @@ final class TwigOnlyMigrationEndToEndTest extends TestCase
         self::assertStringContainsString('OK', $validateOut);
 
         $parsed = \Symfony\Component\Yaml\Yaml::parseFile("{$dir}/link-list.yaml");
-        self::assertSame('repeater', $parsed['fields']['items']['type']);
+        self::assertSame('list', $parsed['fields']['items']['type']);
         self::assertSame('parent', $parsed['fields']['items']['role']);
-        self::assertSame('group', $parsed['fields']['items']['fields']['link']['type']);
+        self::assertSame('object', $parsed['fields']['items']['fields']['link']['type']);
         self::assertSame('parent', $parsed['fields']['items']['fields']['link']['role']);
         self::assertSame('link', $parsed['fields']['items']['fields']['link']['fields']['url']['type']);
         self::assertSame('url', $parsed['fields']['items']['fields']['link']['fields']['url']['shape']);
