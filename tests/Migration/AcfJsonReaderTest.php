@@ -825,7 +825,8 @@ final class AcfJsonReaderTest extends TestCase
             . "\t\toptions: _blank, _self\n"
             . "#}\n";
 
-        $tree = $this->reader->read(['key' => 'group_button', 'title' => '', 'fields' => []], 'button', $twig, acfJsonExists: false);
+        $tree = (new AcfJsonReader(assumeRole: 'parent'))
+            ->read(['key' => 'group_button', 'title' => '', 'fields' => []], 'button', $twig, acfJsonExists: false);
 
         self::assertSame('Button', $tree['name']);
         self::assertSame('element', $tree['kind']);
@@ -853,7 +854,8 @@ final class AcfJsonReaderTest extends TestCase
     {
         $twig = "{#\nname: Demo\nfields:\n\ta:\n\t\ttype: text\n\tb:\n\t\ttype: url\n\tc:\n\t\ttype: select\n\t\toptions: x, y\n\td:\n\t\ttype: image\n#}\n";
 
-        $tree = $this->reader->read(['key' => 'group_demo', 'title' => '', 'fields' => []], 'demo', $twig, acfJsonExists: false);
+        $tree = (new AcfJsonReader(assumeRole: 'parent'))
+            ->read(['key' => 'group_demo', 'title' => '', 'fields' => []], 'demo', $twig, acfJsonExists: false);
 
         self::assertSame(['a', 'b', 'c', 'd'], array_keys($tree['fields']));
     }
@@ -891,5 +893,57 @@ final class AcfJsonReaderTest extends TestCase
         $tree = $this->reader->read(['key' => 'group_demo', 'title' => 'Demo', 'fields' => []], 'demo', $twig);
 
         self::assertSame([], $tree['fields']);
+    }
+
+    /**
+     * Codex review round 5, finding 2: `readFields()` used to run
+     * unconditionally, before `$acfJsonExists` was even checked — a
+     * stale/malformed twig `fields:` block next to a valid, authoritative
+     * acf.json aborted migration for twig fields that were never going to
+     * be used. acf.json must stay authoritative even when the twig
+     * annotation beside it cannot be parsed at all.
+     */
+    public function test_malformed_twig_fields_block_does_not_abort_an_acf_json_backed_migration(): void
+    {
+        $twig = "{#\nname: Card\nfields:\n\told: [unfinished\n#}\n";
+
+        $tree = $this->reader->read($this->group([
+            ['key' => 'field_demo_title', 'name' => 'title', 'label' => 'Nadpis', 'type' => 'text'],
+        ]), 'demo', $twig);
+
+        self::assertSame(['title'], array_keys($tree['fields']));
+    }
+
+    /**
+     * Codex review round 5, finding 1 (option B): without an explicit
+     * `role:` annotation and without `assumeRole`, a twig-only field's
+     * provenance is ambiguous and migration refuses it — see
+     * TwigFieldTypeMapperTest for the exhaustive coverage of this behaviour
+     * at the mapper level; this proves the reader actually wires
+     * `assumeRole` through to it.
+     */
+    public function test_no_assume_role_and_no_twig_role_annotation_refuses_the_component(): void
+    {
+        $twig = "{#\nname: Search Box\nfields:\n\tmode:\n\t\ttype: text\n#}\n";
+
+        $this->expectException(\DomainException::class);
+        $this->expectExceptionMessage("Field 'mode' has ambiguous provenance");
+        $this->reader->read(['key' => 'group_search-box', 'title' => '', 'fields' => []], 'search-box', $twig, acfJsonExists: false);
+    }
+
+    public function test_assume_role_is_ignored_for_an_acf_json_backed_component(): void
+    {
+        // "acf.json-backed components ignore the flag entirely" — the twig
+        // fallback never fires when acf.json genuinely has fields, so
+        // assumeRole is irrelevant here and must not leak into the
+        // ACF-derived field's `role`.
+        $twig = "{#\nname: Demo\nfields:\n\tstale:\n\t\ttype: text\n#}\n";
+
+        $tree = (new AcfJsonReader(assumeRole: 'global'))->read($this->group([
+            ['key' => 'field_demo_title', 'name' => 'title', 'label' => 'Nadpis', 'type' => 'text'],
+        ]), 'demo', $twig);
+
+        self::assertSame(['title'], array_keys($tree['fields']));
+        self::assertSame('field', $tree['fields']['title']['role']);
     }
 }

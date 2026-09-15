@@ -13,7 +13,12 @@ final class TwigFieldTypeMapperTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->mapper = new TwigFieldTypeMapper();
+        // Most tests below exercise type mapping, not provenance — an
+        // `--assume-role=parent` equivalent keeps them focused on that.
+        // Role-resolution behaviour itself (Codex review round 5, finding 1)
+        // is tested explicitly below with fresh, differently-configured
+        // instances.
+        $this->mapper = new TwigFieldTypeMapper('parent');
     }
 
     /** @return iterable<string, array{0: array<string, mixed>, 1: array<string, mixed>}> */
@@ -390,5 +395,139 @@ final class TwigFieldTypeMapperTest extends TestCase
         $this->expectException(\DomainException::class);
         $this->expectExceptionMessage("Field 'email' has a `placeholder:` that is not a string (got bool).");
         $this->mapper->map(['type' => 'text', 'placeholder' => true], 'email');
+    }
+
+    // --- Codex review round 5, finding 1: role is not inferred, option B ---
+
+    public function test_field_with_no_role_annotation_and_no_assume_role_is_refused(): void
+    {
+        $mapper = new TwigFieldTypeMapper();
+        $this->expectException(\DomainException::class);
+        $this->expectExceptionMessage("Field 'title' has ambiguous provenance");
+        $mapper->map(['type' => 'text'], 'title');
+    }
+
+    public function test_constructing_with_an_invalid_assume_role_throws(): void
+    {
+        $this->expectException(\DomainException::class);
+        $this->expectExceptionMessage(
+            "Invalid --assume-role 'field' — must be one of: parent, query, global.",
+        );
+        new TwigFieldTypeMapper('field');
+    }
+
+    public function test_constructing_with_derived_as_assume_role_throws(): void
+    {
+        $this->expectException(\DomainException::class);
+        new TwigFieldTypeMapper('derived');
+    }
+
+    public function test_constructing_with_inherited_as_assume_role_throws(): void
+    {
+        $this->expectException(\DomainException::class);
+        new TwigFieldTypeMapper('inherited');
+    }
+
+    /** @return iterable<string, array{0: string}> */
+    public static function assumableRoleCases(): iterable
+    {
+        yield 'parent' => ['parent'];
+        yield 'query' => ['query'];
+        yield 'global' => ['global'];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('assumableRoleCases')]
+    public function test_assume_role_applies_to_an_un_annotated_top_level_field(string $role): void
+    {
+        $mapper = new TwigFieldTypeMapper($role);
+        $out = $mapper->map(['type' => 'text'], 'title');
+        self::assertSame($role, $out['role']);
+    }
+
+    public function test_assume_role_applies_to_nested_fields_too(): void
+    {
+        // "The flag applies to every derived field without an explicit
+        // role, nested ones inherit" — same mapper instance recurses.
+        $mapper = new TwigFieldTypeMapper('query');
+        $out = $mapper->map([
+            'type' => 'repeater',
+            'fields' => ['title' => ['type' => 'text']],
+        ], 'items');
+        self::assertSame('query', $out['role']);
+        self::assertSame('query', $out['fields']['title']['role']);
+    }
+
+    public function test_explicit_twig_role_wins_over_assume_role(): void
+    {
+        $mapper = new TwigFieldTypeMapper('parent');
+        $out = $mapper->map(['type' => 'text', 'role' => 'global'], 'site_name');
+        self::assertSame('global', $out['role']);
+    }
+
+    public function test_explicit_twig_role_wins_even_without_an_assume_role_flag(): void
+    {
+        $mapper = new TwigFieldTypeMapper();
+        $out = $mapper->map(['type' => 'text', 'role' => 'query'], 'total');
+        self::assertSame('query', $out['role']);
+    }
+
+    public function test_explicit_role_field_is_accepted_on_a_field_annotation(): void
+    {
+        // The schema's full role enum is valid for a field's own `role:` —
+        // only the CLI FLAG is restricted to parent/query/global.
+        $mapper = new TwigFieldTypeMapper();
+        $out = $mapper->map(['type' => 'text', 'role' => 'field'], 'title');
+        self::assertSame('field', $out['role']);
+    }
+
+    public function test_invalid_role_value_on_a_field_throws(): void
+    {
+        $mapper = new TwigFieldTypeMapper();
+        $this->expectException(\DomainException::class);
+        $this->expectExceptionMessage("Field 'title' has an invalid `role:`");
+        $mapper->map(['type' => 'text', 'role' => 'nonsense'], 'title');
+    }
+
+    public function test_role_derived_without_from_throws(): void
+    {
+        $mapper = new TwigFieldTypeMapper();
+        $this->expectException(\DomainException::class);
+        $this->expectExceptionMessage("Field 'sources' has `role: derived` but no `from:`");
+        $mapper->map(['type' => 'text', 'role' => 'derived'], 'sources');
+    }
+
+    public function test_role_derived_with_from_is_accepted(): void
+    {
+        $mapper = new TwigFieldTypeMapper();
+        $out = $mapper->map(['type' => 'text', 'role' => 'derived', 'from' => 'video'], 'sources');
+        self::assertSame('derived', $out['role']);
+        self::assertSame('video', $out['from']);
+    }
+
+    public function test_from_without_role_derived_throws(): void
+    {
+        $mapper = new TwigFieldTypeMapper('parent');
+        $this->expectException(\DomainException::class);
+        $this->expectExceptionMessage("Field 'sources' has `from:` but no `role: derived`");
+        $mapper->map(['type' => 'text', 'from' => 'video'], 'sources');
+    }
+
+    public function test_from_with_a_non_derived_role_throws(): void
+    {
+        $mapper = new TwigFieldTypeMapper();
+        $this->expectException(\DomainException::class);
+        $this->expectExceptionMessage("Field 'sources' has `from:` but `role:` is not 'derived'");
+        $mapper->map(['type' => 'text', 'role' => 'parent', 'from' => 'video'], 'sources');
+    }
+
+    public function test_unmapped_prop_is_reported_before_ambiguous_provenance(): void
+    {
+        // A malformed annotation (a typo'd prop) is a more basic problem
+        // than an ambiguous-but-otherwise-valid one; the leftover-prop
+        // check runs first (see map()'s own ordering comment).
+        $mapper = new TwigFieldTypeMapper();
+        $this->expectException(\DomainException::class);
+        $this->expectExceptionMessage('has twig annotation prop(s) with no mapping');
+        $mapper->map(['type' => 'text', 'cms_type' => 'string'], 'search');
     }
 }

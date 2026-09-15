@@ -14,14 +14,23 @@ namespace Parisek\DefinitionKit\Migration;
  * front-comment once a component has a YAML) discards documentation with no
  * other home.
  *
- * Every field this reader can attribute to the calling template rather than
- * to the CMS gets `role: parent` (issue #14's "source: parent" axis) — a
- * component with no acf.json has, by definition, nothing an editor fills in;
- * every one of these values is passed in by whoever calls `component_*()`.
- * `role: parent` also happens to be the one role the schema does NOT require
- * `type`/`label` for, but they are emitted anyway wherever the twig
- * annotation states them — dropping accurate type information just because
- * the schema does not demand it would defeat the point of this migration.
+ * Provenance (`role:`) is NOT inferred from missing acf.json alone (Codex
+ * review round 5, finding 1, decided by @parisek as "option B"): the
+ * absence of acf.json proves only that a value is not editor-authored — it
+ * could equally be `query` (a PHP sidecar's own database read, e.g.
+ * upstream tailwind-base's `pagination.yaml` `items`) or `global` (site-wide
+ * options), not necessarily `parent` (passed in by the calling template).
+ * A field's own twig `role:` annotation, when present, always wins (see
+ * `map()`); absent that, every field falls back to the caller-supplied
+ * `$assumeRole` — and if neither is given, `map()` throws rather than
+ * guess, naming the field and pointing to `fields-migrate --assume-role`.
+ * `$assumeRole` is restricted to `parent`/`query`/`global` (the roles valid
+ * for a component with nothing ACF-backed); `field`/`inherited`/`derived`
+ * are refused at construction. `role: parent` (and `query`/`global`) are
+ * also the ones the schema does NOT require `type`/`label` for, but they
+ * are emitted anyway wherever the twig annotation states them — dropping
+ * accurate type information just because the schema does not demand it
+ * would defeat the point of this migration.
  *
  * Every raw prop on a twig field is tracked as consumed or not (mirroring
  * AbstractTypeMapper's own `consumed` contract for ACF fields, per a
@@ -82,7 +91,37 @@ namespace Parisek\DefinitionKit\Migration;
 final class TwigFieldTypeMapper
 {
     /** Props every twig field annotation may carry, regardless of type. */
-    private const BASE_PROPS = ['type', 'title', 'description', 'placeholder', 'required'];
+    private const BASE_PROPS = ['type', 'title', 'description', 'placeholder', 'required', 'role', 'from'];
+
+    /** The full schema `role` enum — what a twig field's own `role:` annotation may state. */
+    private const SCHEMA_ROLES = ['field', 'query', 'global', 'parent', 'inherited', 'derived'];
+
+    /**
+     * Roles `--assume-role` may set: valid for a field with nothing
+     * ACF-backed to project. `field` (implies acf.json backing),
+     * `inherited` (framework-injected, never authored in a definition) and
+     * `derived` (needs a `from:` this flag cannot supply per-field) are
+     * refused here — see the class doc header.
+     */
+    private const ASSUMABLE_ROLES = ['parent', 'query', 'global'];
+
+    /**
+     * @param string|null $assumeRole Fallback role for a field with no
+     *                                explicit twig `role:` annotation. Must be
+     *                                one of ASSUMABLE_ROLES, or null (in which
+     *                                case an un-annotated field's role is
+     *                                ambiguous and `map()` throws).
+     */
+    public function __construct(private readonly ?string $assumeRole = null)
+    {
+        if (null !== $this->assumeRole && !in_array($this->assumeRole, self::ASSUMABLE_ROLES, true)) {
+            throw new \DomainException(sprintf(
+                "Invalid --assume-role '%s' — must be one of: %s.",
+                $this->assumeRole,
+                implode(', ', self::ASSUMABLE_ROLES),
+            ));
+        }
+    }
 
     /**
      * @param array<string,mixed> $twigField
@@ -157,15 +196,14 @@ final class TwigFieldTypeMapper
             }
         }
 
-        // Every field this reader touches is, by construction, passed in by
-        // the calling template — see the class doc header.
-        $out['role'] = 'parent';
-
         // A raw twig annotation prop with no semantic home above is never
-        // silently dropped — see the class doc header. `required` is
-        // consumed regardless of its value (an unrecognised value, e.g.
-        // `required: yes`, still occupied the slot; it simply doesn't
-        // become `true`).
+        // silently dropped — see the class doc header. Checked BEFORE role
+        // resolution below: a fundamentally malformed annotation (a typo'd
+        // prop) is a more basic problem than an ambiguous-but-otherwise-
+        // valid one, and should be the error an author sees first.
+        // `required` is consumed regardless of its value (an unrecognised
+        // value, e.g. `required: yes`, still occupied the slot; it simply
+        // doesn't become `true`).
         $consumed = [...self::BASE_PROPS, ...$typeConsumed];
         $leftover = array_diff(array_keys($twigField), $consumed);
         if ([] !== $leftover) {
@@ -177,13 +215,60 @@ final class TwigFieldTypeMapper
             ));
         }
 
+        // Codex review round 5, finding 1 (option B): provenance is not
+        // inferred from missing acf.json alone. A field's own `role:`
+        // annotation always wins; absent that, the CLI-supplied
+        // `$assumeRole` fallback applies; absent BOTH, provenance is
+        // genuinely ambiguous and this reader refuses to guess.
+        if (array_key_exists('role', $twigField)) {
+            $role = $twigField['role'];
+            if (!is_string($role) || !in_array($role, self::SCHEMA_ROLES, true)) {
+                throw new \DomainException(sprintf(
+                    "Field '%s' has an invalid `role:` (%s) — must be one of: %s.",
+                    $fieldName,
+                    is_string($role) ? "'{$role}'" : get_debug_type($role),
+                    implode(', ', self::SCHEMA_ROLES),
+                ));
+            }
+            if ('derived' === $role) {
+                $from = $twigField['from'] ?? null;
+                if (!is_string($from) || '' === $from) {
+                    throw new \DomainException(sprintf(
+                        "Field '%s' has `role: derived` but no `from:` naming the sibling field it derives from.",
+                        $fieldName,
+                    ));
+                }
+                $out['from'] = $from;
+            } elseif (array_key_exists('from', $twigField)) {
+                throw new \DomainException(sprintf(
+                    "Field '%s' has `from:` but `role:` is not 'derived' — `from:` is only valid with role: derived.",
+                    $fieldName,
+                ));
+            }
+        } else {
+            if (array_key_exists('from', $twigField)) {
+                throw new \DomainException(sprintf(
+                    "Field '%s' has `from:` but no `role: derived` — `from:` is only valid with role: derived.",
+                    $fieldName,
+                ));
+            }
+            if (null === $this->assumeRole) {
+                throw new \DomainException(sprintf(
+                    "Field '%s' has ambiguous provenance — no acf.json means it is not editor-authored, but that "
+                    . "does not say whether it comes from the calling template (parent), a PHP sidecar's own "
+                    . "query (query), or site-wide options (global). Annotate this field with an explicit "
+                    . '`role:`, or pass `--assume-role=parent|query|global` to fields-migrate for the whole '
+                    . 'component.',
+                    $fieldName,
+                ));
+            }
+            $role = $this->assumeRole;
+        }
+        $out['role'] = $role;
+
         return $out;
     }
 
-    /**
-     * @param array<string,mixed> $twigField
-     * @return array<string,mixed>
-     */
     /**
      * Reads a free-text prop (`title`/`description`/`placeholder`) as a
      * string, or `null` when absent/empty. Codex review round 4, finding 2:

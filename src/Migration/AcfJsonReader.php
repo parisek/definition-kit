@@ -36,6 +36,14 @@ final class AcfJsonReader
         private readonly WpmlTranslatableMapper $wpmlMapper = new WpmlTranslatableMapper(),
         private readonly AccordionResidualCapturer $accordionCapturer = new AccordionResidualCapturer(),
         private readonly KeyStyle $keyStyle = KeyStyle::Slug,
+        /**
+         * Fallback `role:` for a twig-derived field with no explicit `role:`
+         * annotation of its own — see TwigFieldTypeMapper's class doc header
+         * and Codex review round 5, finding 1. `null` (the default) means an
+         * un-annotated field's provenance is ambiguous and migration refuses
+         * it; `fields-migrate` sets this from its `--assume-role` flag.
+         */
+        private readonly ?string $assumeRole = null,
     ) {
     }
 
@@ -134,11 +142,18 @@ final class AcfJsonReader
         // the twig once the YAML existed — silently discarding it with no
         // other home. When acf.json genuinely has zero fields, defer to the
         // twig annotation as the field source instead of emitting an empty map.
-        $twigFields = null !== $twigSource ? $this->twigMetadataReader->readFields($twigSource) : [];
+        // Codex review round 5, finding 2: `readFields()` used to run
+        // unconditionally, before `$acfJsonExists` was even checked — a
+        // stale/malformed twig `fields:` block next to a perfectly valid,
+        // authoritative acf.json aborted migration with a YAML error for
+        // twig fields that were never going to be used. Only parse the twig
+        // annotation at all when acf.json is genuinely absent.
+        $twigFields = (!$acfJsonExists && null !== $twigSource) ? $this->twigMetadataReader->readFields($twigSource) : [];
         if (!$acfJsonExists && [] === (array) ($acfJson['fields'] ?? []) && [] !== $twigFields) {
+            $mapper = null !== $this->assumeRole ? new TwigFieldTypeMapper($this->assumeRole) : $this->twigFieldTypeMapper;
             $fields = [];
             foreach ($twigFields as $fieldName => $twigField) {
-                $fields[(string) $fieldName] = $this->twigFieldTypeMapper->map((array) $twigField, (string) $fieldName);
+                $fields[(string) $fieldName] = $mapper->map((array) $twigField, (string) $fieldName);
             }
             $root['fields'] = $fields;
             return $root;

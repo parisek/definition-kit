@@ -40,12 +40,25 @@ final class TwigOnlyMigrationEndToEndTest extends TestCase
         return $output;
     }
 
+    /** fields-migrate specifically, with an --assume-role flag before the positional arg. */
+    private function migrate(string $dir, string $assumeRole = 'parent'): string
+    {
+        $output = shell_exec(sprintf(
+            'php %s --assume-role=%s %s 2>&1',
+            escapeshellarg($this->migrateBin),
+            escapeshellarg($assumeRole),
+            escapeshellarg($dir),
+        ));
+        self::assertIsString($output);
+        return $output;
+    }
+
     public function test_twig_only_element_migrates_validates_and_generates_no_projection(): void
     {
         $dir = $this->makeDir('search-box');
         file_put_contents("{$dir}/search-box.twig", "{#\nname: Search Box\nkind: element\ncategory: Basic\nfields:\n\tplaceholder_text:\n\t\ttitle: Placeholder\n\t\ttype: text\n\t\tplaceholder: \"Search…\"\n\tmode:\n\t\ttitle: Mode\n\t\ttype: select\n\t\toptions: compact, expanded\n#}\n<div></div>\n");
 
-        $migrateOut = $this->runCli($this->migrateBin, $dir);
+        $migrateOut = $this->migrate($dir);
         self::assertStringContainsString('OK   search-box', $migrateOut);
         self::assertFileExists("{$dir}/search-box.yaml");
 
@@ -71,7 +84,7 @@ final class TwigOnlyMigrationEndToEndTest extends TestCase
         $dir = $this->makeDir('link-list');
         file_put_contents("{$dir}/link-list.twig", "{#\nname: Link List\nkind: utility\ncategory: Basic\nfields:\n\titems:\n\t\ttitle: Items\n\t\ttype: repeater\n\t\tfields:\n\t\t\tlink:\n\t\t\t\ttitle: Link\n\t\t\t\ttype: group\n\t\t\t\tfields:\n\t\t\t\t\turl:\n\t\t\t\t\t\ttitle: Url\n\t\t\t\t\t\ttype: url\n\t\t\t\t\ttitle:\n\t\t\t\t\t\ttitle: Title\n\t\t\t\t\t\ttype: text\n#}\n<div></div>\n");
 
-        $this->runCli($this->migrateBin, $dir);
+        $this->migrate($dir);
         self::assertFileExists("{$dir}/link-list.yaml");
 
         $validateOut = $this->runCli($this->validateBin, "{$dir}/link-list.yaml");
@@ -120,12 +133,84 @@ final class TwigOnlyMigrationEndToEndTest extends TestCase
         $dir = $this->makeDir('legacy-card');
         file_put_contents("{$dir}/legacy-card.twig", "{#\nname: Legacy Card\ncategory: Basic\nfields:\n\ttitle:\n\t\ttitle: Title\n\t\ttype: text\n\t\trequired: 1\n#}\n<div></div>\n");
 
-        $this->runCli($this->migrateBin, $dir);
+        $this->migrate($dir);
         self::assertFileExists("{$dir}/legacy-card.yaml");
 
         $generateOut = $this->runCli($this->generateBin, $dir);
         self::assertStringContainsString('OK   legacy-card', $generateOut);
         self::assertFileExists("{$dir}/block.json");
         self::assertFileDoesNotExist("{$dir}/acf.json");
+    }
+
+    // --- Codex review round 5, finding 1: --assume-role, end-to-end -----
+
+    public function test_without_assume_role_a_twig_only_component_is_refused(): void
+    {
+        $dir = $this->makeDir('search-box');
+        file_put_contents("{$dir}/search-box.twig", "{#\nname: Search Box\nkind: element\ncategory: Basic\nfields:\n\tmode:\n\t\ttitle: Mode\n\t\ttype: text\n#}\n<div></div>\n");
+
+        $output = $this->runCli($this->migrateBin, $dir);
+
+        self::assertStringContainsString('FAIL search-box', $output);
+        self::assertStringContainsString('ambiguous provenance', $output);
+        self::assertFileDoesNotExist("{$dir}/search-box.yaml");
+    }
+
+    public function test_assume_role_query_is_applied_top_level_and_nested(): void
+    {
+        $dir = $this->makeDir('pagination-like');
+        file_put_contents("{$dir}/pagination-like.twig", "{#\nname: Pagination Like\nkind: utility\ncategory: Basic\nfields:\n\titems:\n\t\ttitle: Items\n\t\ttype: repeater\n\t\tfields:\n\t\t\turl:\n\t\t\t\ttitle: Url\n\t\t\t\ttype: url\n#}\n<div></div>\n");
+
+        $output = $this->migrate($dir, 'query');
+
+        self::assertStringContainsString('OK   pagination-like', $output);
+        $yaml = file_get_contents("{$dir}/pagination-like.yaml");
+        self::assertIsString($yaml);
+        self::assertSame(2, substr_count($yaml, 'role: query'), 'both items (repeater) and its nested url must be role: query');
+    }
+
+    public function test_explicit_twig_role_overrides_assume_role_end_to_end(): void
+    {
+        $dir = $this->makeDir('search-box');
+        file_put_contents("{$dir}/search-box.twig", "{#\nname: Search Box\nkind: element\ncategory: Basic\nfields:\n\tmode:\n\t\ttitle: Mode\n\t\ttype: text\n\t\trole: global\n#}\n<div></div>\n");
+
+        $output = $this->migrate($dir, 'parent');
+
+        self::assertStringContainsString('OK   search-box', $output);
+        $yaml = file_get_contents("{$dir}/search-box.yaml");
+        self::assertIsString($yaml);
+        self::assertStringContainsString('role: global', $yaml);
+        self::assertStringNotContainsString('role: parent', $yaml);
+    }
+
+    public function test_invalid_assume_role_value_is_refused_at_the_cli(): void
+    {
+        $dir = $this->makeDir('search-box');
+        file_put_contents("{$dir}/search-box.twig", "{#\nname: Search Box\nkind: element\ncategory: Basic\nfields:\n\tmode:\n\t\ttitle: Mode\n\t\ttype: text\n#}\n<div></div>\n");
+
+        $output = $this->migrate($dir, 'field');
+
+        self::assertStringContainsString('invalid --assume-role', $output);
+        self::assertFileDoesNotExist("{$dir}/search-box.yaml");
+    }
+
+    public function test_assume_role_is_ignored_for_an_acf_json_backed_component_end_to_end(): void
+    {
+        $dir = $this->makeDir('demo');
+        file_put_contents("{$dir}/acf.json", json_encode([
+            'key' => 'group_demo',
+            'title' => 'Demo',
+            'fields' => [
+                ['key' => 'field_demo_title', 'name' => 'title', 'label' => 'Title', 'type' => 'text'],
+            ],
+        ], JSON_PRETTY_PRINT));
+        file_put_contents("{$dir}/demo.twig", "{#\nname: Demo\ncategory: Basic\n#}\n<div></div>\n");
+
+        $output = $this->migrate($dir, 'global');
+
+        self::assertStringContainsString('OK   demo', $output);
+        $yaml = file_get_contents("{$dir}/demo.yaml");
+        self::assertIsString($yaml);
+        self::assertStringNotContainsString('role: global', $yaml);
     }
 }

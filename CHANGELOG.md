@@ -20,8 +20,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the new `TwigMetadataReader::readFields()` / `TwigFieldTypeMapper` when
   `acf.json` has no fields but the twig annotation does, translating the
   twig type vocabulary (`text`/`textarea`/`url`/`link`/`select`/`image`/…)
-  into the abstract schema and assigning every field `role: parent`. When
-  `acf.json` genuinely has fields, behaviour is unchanged. A twig field
+  into the abstract schema. When `acf.json` genuinely has fields, behaviour
+  is unchanged. A twig field
   annotated `type: array` (with or without nested `fields:`) is refused with
   a `\DomainException` naming the field, rather than guessed — see the
   linked issue for the decision and its rejected alternatives. A twig
@@ -49,7 +49,21 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `choices:` for that shape. `title:`, `description:` and `placeholder:`
   now require an actual string; a YAML list or map there used to be cast
   straight to the literal string `"Array"` via PHP's array-to-string
-  coercion, producing schema-valid but corrupted output. Closes #75.
+  coercion, producing schema-valid but corrupted output. **Provenance
+  (`role:`) is no longer inferred from missing `acf.json` alone** — absence
+  of `acf.json` proves only that a field is not editor-authored, not that
+  it is `parent` (it could be `query`, e.g. a PHP sidecar's own database
+  read, or `global`). A field's own twig `role:` annotation always wins
+  (validated against the full schema role enum; `role: derived` requires
+  `from:`); absent that, `fields-migrate` now requires an explicit
+  `--assume-role=parent|query|global` for the whole component and refuses
+  the component by field path when neither is given. The flag is restricted
+  to those three roles (`field`/`inherited`/`derived` make no sense as a
+  blanket assumption) and is ignored entirely for an `acf.json`-backed
+  component. `AcfJsonReader::readFields()`'s twig-annotation parse now also
+  only runs when `acf.json` is genuinely absent, so a stale/malformed twig
+  `fields:` block next to a valid `acf.json` no longer aborts migration for
+  fields that were never going to be used. Closes #75.
 
 ## [0.13.0] - 2026-09-15
 
