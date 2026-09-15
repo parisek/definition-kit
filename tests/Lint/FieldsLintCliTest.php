@@ -155,6 +155,7 @@ final class FieldsLintCliTest extends TestCase
         self::assertSame(0, $exitCode);
         self::assertStringContainsString('OK   demo-card', $joined);
         self::assertStringContainsString('SKIP legacy-not-yet-migrated', $joined);
+        self::assertStringContainsString('2 component(s), 0 failed, 1 skipped', $joined);
     }
 
     public function test_batch_root_mode_one_bad_component_does_not_abort_the_rest(): void
@@ -171,5 +172,156 @@ final class FieldsLintCliTest extends TestCase
         self::assertSame(1, $exitCode);
         self::assertStringContainsString('OK   demo-card', $joined);
         self::assertStringContainsString('FAIL broken', $joined);
+    }
+
+    private function makeUnprojectedComponent(string $slug, ?string $kind): string
+    {
+        $dir = "{$this->root}/{$slug}";
+        mkdir($dir, 0777, true);
+        $tree = ['name' => ucfirst($slug), 'category' => 'Content'];
+        if (null !== $kind) {
+            $tree['kind'] = $kind;
+        }
+        $tree['fields'] = ['title' => ['type' => 'text', 'label' => 'Title', 'role' => 'field']];
+        file_put_contents("{$dir}/{$slug}.yaml", Yaml::dump($tree, 10, 2));
+        file_put_contents("{$dir}/{$slug}.twig", '{{ content.title }}');
+        return $dir;
+    }
+
+    /** @return array{int, string} */
+    private function runLint(string ...$args): array
+    {
+        $output = [];
+        $exitCode = null;
+        exec(escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg($this->bin) . ' '
+            . implode(' ', array_map('escapeshellarg', $args)) . ' 2>&1', $output, $exitCode);
+        return [(int) $exitCode, implode("\n", $output)];
+    }
+
+    /** @return list<array{string}> */
+    public static function nonBlockKindProvider(): array
+    {
+        return [['section'], ['element'], ['part'], ['utility']];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('nonBlockKindProvider')]
+    public function test_a_non_block_kind_without_acf_json_is_skipped(string $kind): void
+    {
+        $dir = $this->makeUnprojectedComponent('alert', $kind);
+
+        [$exitCode, $text] = $this->runLint($dir);
+
+        self::assertSame(0, $exitCode, $text);
+        self::assertStringContainsString("SKIP alert: kind {$kind} has no CMS projection", $text);
+        self::assertStringNotContainsString('acf.json missing', $text);
+        self::assertStringContainsString('1 component(s), 0 failed, 1 skipped', $text);
+    }
+
+    public function test_a_block_without_acf_json_still_fails(): void
+    {
+        $dir = $this->makeUnprojectedComponent('hero', 'block');
+
+        [$exitCode, $text] = $this->runLint($dir);
+
+        self::assertSame(1, $exitCode, $text);
+        self::assertStringContainsString('FAIL hero: acf.json missing', $text);
+    }
+
+    public function test_a_definition_without_kind_still_fails(): void
+    {
+        // No `kind` means the backfill has not reached the file, not "not a block".
+        $dir = $this->makeUnprojectedComponent('legacy', null);
+
+        [$exitCode, $text] = $this->runLint($dir);
+
+        self::assertSame(1, $exitCode, $text);
+        self::assertStringContainsString('FAIL legacy: acf.json missing', $text);
+    }
+
+    public function test_root_mode_counts_skips_apart_from_failures(): void
+    {
+        $this->makeCleanComponent('demo-card');
+        $this->makeUnprojectedComponent('alert', 'element');
+        $this->makeUnprojectedComponent('teaser', 'part');
+        $this->makeUnprojectedComponent('hero', 'block');
+
+        [$exitCode, $text] = $this->runLint('--root=' . $this->root);
+
+        self::assertSame(1, $exitCode, $text);
+        self::assertStringContainsString('SKIP alert: kind element has no CMS projection', $text);
+        self::assertStringContainsString('SKIP teaser: kind part has no CMS projection', $text);
+        self::assertStringContainsString('FAIL hero: acf.json missing', $text);
+        self::assertStringContainsString('4 component(s), 1 failed, 2 skipped', $text);
+    }
+
+    public function test_root_mode_with_only_skips_exits_zero(): void
+    {
+        $this->makeCleanComponent('demo-card');
+        $this->makeUnprojectedComponent('alert', 'element');
+
+        [$exitCode, $text] = $this->runLint('--root=' . $this->root);
+
+        self::assertSame(0, $exitCode, $text);
+        self::assertStringContainsString('2 component(s), 0 failed, 1 skipped', $text);
+    }
+
+    public function test_a_non_block_kind_with_acf_json_is_still_drift_checked(): void
+    {
+        // fields-generate writes acf.json for a non-block kind (#50), so a
+        // committed one is a real projection, not a leftover: it is compared.
+        $this->makeCleanComponent('teaser');
+        $yaml = "{$this->root}/teaser/teaser.yaml";
+        $tree = Yaml::parseFile($yaml);
+        self::assertIsArray($tree);
+        file_put_contents($yaml, Yaml::dump(['kind' => 'part'] + $tree, 10, 2));
+
+        [$exitCode, $text] = $this->runLint("{$this->root}/teaser");
+        self::assertSame(0, $exitCode, $text);
+        self::assertStringContainsString('OK   teaser', $text);
+
+        $acf = json_decode((string) file_get_contents("{$this->root}/teaser/acf.json"), true);
+        self::assertIsArray($acf);
+        $acf['fields'][0]['label'] = 'Hand-edited';
+        file_put_contents("{$this->root}/teaser/acf.json", json_encode($acf));
+
+        [$exitCode, $text] = $this->runLint("{$this->root}/teaser");
+        self::assertSame(1, $exitCode, $text);
+        self::assertStringContainsString('DRIFT teaser', $text);
+    }
+
+    public function test_a_non_block_kind_with_a_stale_block_json_still_fails(): void
+    {
+        $dir = $this->makeUnprojectedComponent('alert', 'element');
+        file_put_contents("{$dir}/block.json", '{"name":"acf/alert"}');
+
+        [$exitCode, $text] = $this->runLint($dir);
+
+        self::assertSame(1, $exitCode, $text);
+        self::assertStringContainsString('FAIL alert', $text);
+        self::assertStringNotContainsString('SKIP alert', $text);
+    }
+
+    public function test_an_invalid_non_block_definition_is_not_skipped(): void
+    {
+        $dir = "{$this->root}/alert";
+        mkdir($dir, 0777, true);
+        file_put_contents("{$dir}/alert.yaml", "name: Alert\ncategory: Content\nkind: element\nfields:\n  title:\n    type: nope\n    label: T\n");
+
+        [$exitCode, $text] = $this->runLint($dir);
+
+        self::assertSame(1, $exitCode, $text);
+        self::assertStringContainsString('FAIL alert: invalid definition', $text);
+    }
+
+    public function test_contract_only_output_is_unchanged_for_a_non_block_kind(): void
+    {
+        $dir = $this->makeUnprojectedComponent('alert', 'element');
+
+        [$exitCode, $text] = $this->runLint('--contract-only', $dir);
+
+        self::assertSame(0, $exitCode, $text);
+        self::assertStringNotContainsString('SKIP alert', $text);
+        self::assertStringContainsString('1 component(s), 0 failed', $text);
+        self::assertStringNotContainsString('skipped', $text);
     }
 }

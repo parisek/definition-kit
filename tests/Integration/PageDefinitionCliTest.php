@@ -126,6 +126,8 @@ final class PageDefinitionCliTest extends TestCase
         [$out, $code] = $this->runBin('fields-lint', ["{$this->root}/page/home"]);
         self::assertSame(0, $code, $out);
         self::assertStringContainsString('SKIP home', $out);
+        // A page is not a component, so it is not in the summary's skip count.
+        self::assertStringNotContainsString('skipped', $out);
 
         [$out, $code] = $this->runBin('fields-lint', ['--contract-only', "--root={$this->root}/page"]);
         self::assertSame(0, $code, $out);

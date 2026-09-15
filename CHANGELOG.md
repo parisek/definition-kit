@@ -8,6 +8,18 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 <!-- New entries go directly under this line. It is the anchor that keeps a branch's
      changelog edit from merging into a version that shipped without it. -->
 
+### Fixed
+
+- **`fields-lint` skips a component whose `kind` is not `block`.** In drift
+  mode it reported `acf.json missing` for every `section`, `element`, `part`
+  and `utility` component, which never has a CMS projection. Such a component
+  now prints `SKIP <name>: kind <kind> has no CMS projection` and does not
+  fail. It is still compared when it has a committed `acf.json`, and still
+  fails when it has a stale `block.json` or an invalid definition. A
+  definition with no `kind` fails as before. `--contract-only` is unchanged.
+  The summary line ends in `, N skipped` when a component was skipped; the
+  `N component(s), N failed` prefix is unchanged. Closes #69.
+
 ## [0.11.0] - 2026-09-14
 
 ### Changed
