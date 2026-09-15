@@ -63,7 +63,12 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   component. `AcfJsonReader::readFields()`'s twig-annotation parse now also
   only runs when `acf.json` is genuinely absent, so a stale/malformed twig
   `fields:` block next to a valid `acf.json` no longer aborts migration for
-  fields that were never going to be used. Closes #75.
+  fields that were never going to be used. An un-annotated child field now
+  inherits its container's own resolved `role:` (e.g. `role: query` on a
+  `repeater`) instead of falling straight back to `--assume-role`, matching
+  the schema's "a descendant inherits its ancestor's role" contract; this
+  also means an explicit container `role:` lets its un-annotated children
+  through even without `--assume-role` at all. Closes #75.
 
 ## [0.13.0] - 2026-09-15
 

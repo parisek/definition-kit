@@ -457,6 +457,65 @@ final class TwigFieldTypeMapperTest extends TestCase
         self::assertSame('query', $out['fields']['title']['role']);
     }
 
+    public function test_a_container_own_explicit_role_is_inherited_by_un_annotated_children_not_assume_role(): void
+    {
+        // Codex review round 6: children used to fall straight back to
+        // `--assume-role`, bypassing an explicit `role:` this container
+        // itself carried — contradicting the schema's own "a descendant
+        // inherits its ancestor's role" documentation.
+        $mapper = new TwigFieldTypeMapper('parent');
+        $out = $mapper->map([
+            'type' => 'repeater',
+            'role' => 'query',
+            'fields' => ['title' => ['type' => 'text']],
+        ], 'items');
+        self::assertSame('query', $out['role']);
+        self::assertSame('query', $out['fields']['title']['role'], 'child must inherit the container\'s own role, not --assume-role');
+    }
+
+    public function test_a_child_own_explicit_role_still_wins_over_an_inherited_container_role(): void
+    {
+        $mapper = new TwigFieldTypeMapper();
+        $out = $mapper->map([
+            'type' => 'repeater',
+            'role' => 'query',
+            'fields' => ['title' => ['type' => 'text', 'role' => 'global']],
+        ], 'items');
+        self::assertSame('query', $out['role']);
+        self::assertSame('global', $out['fields']['title']['role']);
+    }
+
+    public function test_without_assume_role_an_explicit_container_role_still_lets_un_annotated_children_through(): void
+    {
+        // The exact case round 6 called out: "without --assume-role, the
+        // same valid inheritance pattern is rejected as ambiguous" — it
+        // must not be, once the container itself states its role.
+        $mapper = new TwigFieldTypeMapper();
+        $out = $mapper->map([
+            'type' => 'repeater',
+            'role' => 'query',
+            'fields' => ['title' => ['type' => 'text']],
+        ], 'items');
+        self::assertSame('query', $out['fields']['title']['role']);
+    }
+
+    public function test_role_inheritance_reaches_a_second_nesting_level(): void
+    {
+        $mapper = new TwigFieldTypeMapper();
+        $out = $mapper->map([
+            'type' => 'repeater',
+            'role' => 'query',
+            'fields' => [
+                'link' => [
+                    'type' => 'group',
+                    'fields' => ['url' => ['type' => 'url']],
+                ],
+            ],
+        ], 'items');
+        self::assertSame('query', $out['fields']['link']['role']);
+        self::assertSame('query', $out['fields']['link']['fields']['url']['role']);
+    }
+
     public function test_explicit_twig_role_wins_over_assume_role(): void
     {
         $mapper = new TwigFieldTypeMapper('parent');

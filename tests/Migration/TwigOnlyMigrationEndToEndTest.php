@@ -114,7 +114,11 @@ final class TwigOnlyMigrationEndToEndTest extends TestCase
         $dir = $this->makeDir('search-box');
         file_put_contents("{$dir}/search-box.twig", "{#\nname: Search Box\nkind: element\ncategory: Basic\nfields:\n\tmode:\n\t\ttitle: Mode\n\t\ttype: select\n#}\n<div></div>\n");
 
-        $output = $this->runCli($this->migrateBin, $dir);
+        // --assume-role: this test targets the select-options validation, not
+        // provenance — since round 6, role is resolved before a select's own
+        // options are validated, so an ambiguous-provenance field would fail
+        // on that first instead.
+        $output = $this->migrate($dir);
 
         self::assertStringContainsString('FAIL search-box', $output);
         self::assertStringContainsString('select', $output);

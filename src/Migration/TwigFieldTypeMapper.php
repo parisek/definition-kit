@@ -124,48 +124,177 @@ final class TwigFieldTypeMapper
     }
 
     /**
+     * Every type's raw-prop footprint, independent of actually building its
+     * shape — used to run the leftover-unmapped-prop check (and hence throw
+     * on a malformed annotation) before role resolution touches anything,
+     * without first recursing into a group/repeater's children. Recursion
+     * needs THIS field's own resolved role (to pass down as the fallback
+     * for un-annotated children — see Codex review round 6), so it cannot
+     * happen before role resolution; the leftover check must still happen
+     * before it, per round 5's ordering. Splitting "which props does this
+     * type consume" from "build the actual shape" is what makes both true.
+     *
+     * @return list<string>
+     */
+    private function typeConsumedProps(string $twigType): array
+    {
+        return match ($twigType) {
+            'select' => ['options', 'choices'],
+            'group', 'repeater' => ['fields'],
+            default => [],
+        };
+    }
+
+    /**
      * @param array<string,mixed> $twigField
+     * @param string|null $inheritedRole The resolved `role:` of the field
+     *                                   that recursed into this one via
+     *                                   `fields:` (a group/repeater's own
+     *                                   `container()` call), used as the
+     *                                   fallback for a child with no
+     *                                   explicit `role:` of its own — see
+     *                                   the class doc header ("nested ones
+     *                                   inherit"). `null` at the root
+     *                                   (falls back to `$assumeRole`
+     *                                   instead — see role resolution
+     *                                   below).
      * @return array<string,mixed>
      */
-    public function map(array $twigField, string $fieldName): array
+    public function map(array $twigField, string $fieldName, ?string $inheritedRole = null): array
     {
         $twigType = (string) ($twigField['type'] ?? '');
 
-        [$shape, $typeConsumed] = match ($twigType) {
-            'text' => [['type' => 'text'], []],
-            'textarea' => [['type' => 'text', 'multiline' => true], []],
-            'wysiwyg' => [['type' => 'richtext'], []],
-            'html' => [['type' => 'richtext', 'wp' => ['twig_type' => 'html']], []],
-            'url' => [['type' => 'link', 'shape' => 'url'], []],
-            'link' => [['type' => 'link', 'shape' => 'link'], []],
-            'email' => [['type' => 'text', 'wp' => ['acf_type' => 'email']], []],
-            'phone' => [['type' => 'text', 'wp' => ['acf_type' => 'phone']], []],
-            'number' => [['type' => 'number'], []],
-            'boolean' => [['type' => 'boolean'], []],
-            'true_false' => [['type' => 'boolean', 'wp' => ['acf_type' => 'true_false']], []],
-            'select' => [$this->select($twigField, $fieldName), ['options', 'choices']],
-            'image' => [['type' => 'media', 'kind' => 'image'], []],
-            'file' => [['type' => 'media', 'kind' => 'file'], []],
-            'gallery' => [['type' => 'media', 'kind' => 'gallery', 'multiple' => true], []],
-            'video' => [['type' => 'media', 'kind' => 'file', 'wp' => ['twig_type' => 'video']], []],
-            'date' => [['type' => 'date'], []],
-            'post_object' => [['type' => 'reference'], []],
-            'group' => [$this->container('group', $twigField, $fieldName), ['fields']],
-            'repeater' => [$this->container('repeater', $twigField, $fieldName), ['fields']],
-            'array' => throw new \DomainException(sprintf(
-                "Field '%s' has twig type 'array', which is ambiguous between a single nested object and a list — "
-                . "re-annotate it as 'group' (one nested object) or 'repeater' (a list) before migrating.",
-                $fieldName,
-            )),
-            default => throw new \DomainException(sprintf(
+        // Type validity (including the 'array' refusal and the unsupported-
+        // type refusal) is checked here, up front, throwing exactly the
+        // messages the type-building match below used to throw — but
+        // before the leftover-prop check, since an unsupported `type:`
+        // makes every other prop on the field moot.
+        if (!in_array($twigType, ['text', 'textarea', 'wysiwyg', 'html', 'url', 'link', 'email', 'phone',
+            'number', 'boolean', 'true_false', 'select', 'image', 'file', 'gallery', 'video', 'date',
+            'post_object', 'group', 'repeater'], true)) {
+            if ('array' === $twigType) {
+                throw new \DomainException(sprintf(
+                    "Field '%s' has twig type 'array', which is ambiguous between a single nested object and a "
+                    . "list — re-annotate it as 'group' (one nested object) or 'repeater' (a list) before "
+                    . 'migrating.',
+                    $fieldName,
+                ));
+            }
+            throw new \DomainException(sprintf(
                 "Unsupported twig field type '%s' for field '%s' — add a case to TwigFieldTypeMapper::map(), "
                 . 'or migrate the field type by hand and add a `wp:` marker to preserve provenance.',
                 $twigType,
                 $fieldName,
-            )),
+            ));
+        }
+
+        // A raw twig annotation prop with no semantic home is never
+        // silently dropped — see the class doc header. Checked before role
+        // resolution (a malformed annotation is a more basic problem than
+        // an ambiguous-but-otherwise-valid one) and before recursing into
+        // any nested `fields:` (this field's own props, not its children's).
+        // `required` is consumed regardless of its value (an unrecognised
+        // value, e.g. `required: yes`, still occupied the slot; it simply
+        // doesn't become `true`).
+        $consumed = [...self::BASE_PROPS, ...$this->typeConsumedProps($twigType)];
+        $leftover = array_diff(array_keys($twigField), $consumed);
+        if ([] !== $leftover) {
+            throw new \DomainException(sprintf(
+                "Field '%s' has twig annotation prop(s) with no mapping to the abstract schema: %s. "
+                . 'Add a mapping to TwigFieldTypeMapper::map(), or remove the prop from the annotation.',
+                $fieldName,
+                implode(', ', array_map(static fn (int|string $p): string => "'{$p}'", $leftover)),
+            ));
+        }
+
+        // Codex review round 5, finding 1 (option B) + round 6: provenance
+        // is not inferred from missing acf.json alone, and resolved BEFORE
+        // building this field's shape — a group/repeater needs its own
+        // resolved role in hand to pass down to `container()` as the
+        // fallback for un-annotated children (round 6's fix: children used
+        // to fall back straight to `$assumeRole`, skipping an explicit
+        // parent `role:` entirely). A field's own `role:` annotation always
+        // wins; absent that, `$inheritedRole` (the parent's resolved role,
+        // root fields have none) applies; absent THAT, `$assumeRole`;
+        // absent all three, provenance is genuinely ambiguous and this
+        // reader refuses to guess.
+        $role = null;
+        $fromValue = null;
+        if (array_key_exists('role', $twigField)) {
+            $role = $twigField['role'];
+            if (!is_string($role) || !in_array($role, self::SCHEMA_ROLES, true)) {
+                throw new \DomainException(sprintf(
+                    "Field '%s' has an invalid `role:` (%s) — must be one of: %s.",
+                    $fieldName,
+                    is_string($role) ? "'{$role}'" : get_debug_type($role),
+                    implode(', ', self::SCHEMA_ROLES),
+                ));
+            }
+            if ('derived' === $role) {
+                $from = $twigField['from'] ?? null;
+                if (!is_string($from) || '' === $from) {
+                    throw new \DomainException(sprintf(
+                        "Field '%s' has `role: derived` but no `from:` naming the sibling field it derives from.",
+                        $fieldName,
+                    ));
+                }
+                $fromValue = $from;
+            } elseif (array_key_exists('from', $twigField)) {
+                throw new \DomainException(sprintf(
+                    "Field '%s' has `from:` but `role:` is not 'derived' — `from:` is only valid with role: derived.",
+                    $fieldName,
+                ));
+            }
+        } else {
+            if (array_key_exists('from', $twigField)) {
+                throw new \DomainException(sprintf(
+                    "Field '%s' has `from:` but no `role: derived` — `from:` is only valid with role: derived.",
+                    $fieldName,
+                ));
+            }
+            $role = $inheritedRole ?? $this->assumeRole;
+            if (null === $role) {
+                throw new \DomainException(sprintf(
+                    "Field '%s' has ambiguous provenance — no acf.json means it is not editor-authored, but that "
+                    . "does not say whether it comes from the calling template (parent), a PHP sidecar's own "
+                    . "query (query), or site-wide options (global). Annotate this field with an explicit "
+                    . '`role:`, or pass `--assume-role=parent|query|global` to fields-migrate for the whole '
+                    . 'component.',
+                    $fieldName,
+                ));
+            }
+        }
+
+        $shape = match ($twigType) {
+            'text' => ['type' => 'text'],
+            'textarea' => ['type' => 'text', 'multiline' => true],
+            'wysiwyg' => ['type' => 'richtext'],
+            'html' => ['type' => 'richtext', 'wp' => ['twig_type' => 'html']],
+            'url' => ['type' => 'link', 'shape' => 'url'],
+            'link' => ['type' => 'link', 'shape' => 'link'],
+            'email' => ['type' => 'text', 'wp' => ['acf_type' => 'email']],
+            'phone' => ['type' => 'text', 'wp' => ['acf_type' => 'phone']],
+            'number' => ['type' => 'number'],
+            'boolean' => ['type' => 'boolean'],
+            'true_false' => ['type' => 'boolean', 'wp' => ['acf_type' => 'true_false']],
+            'select' => $this->select($twigField, $fieldName),
+            'image' => ['type' => 'media', 'kind' => 'image'],
+            'file' => ['type' => 'media', 'kind' => 'file'],
+            'gallery' => ['type' => 'media', 'kind' => 'gallery', 'multiple' => true],
+            'video' => ['type' => 'media', 'kind' => 'file', 'wp' => ['twig_type' => 'video']],
+            'date' => ['type' => 'date'],
+            'post_object' => ['type' => 'reference'],
+            // The parent's OWN resolved $role (never $inheritedRole or
+            // $assumeRole directly) is what a child with no explicit
+            // `role:` of its own falls back to — this is the round-6 fix.
+            'group' => $this->container('group', $twigField, $fieldName, $role),
+            'repeater' => $this->container('repeater', $twigField, $fieldName, $role),
         };
 
         $out = $shape;
+        if (null !== $fromValue) {
+            $out['from'] = $fromValue;
+        }
 
         $label = $this->stringProp($twigField, 'title', $fieldName);
         if (null !== $label) {
@@ -196,74 +325,6 @@ final class TwigFieldTypeMapper
             }
         }
 
-        // A raw twig annotation prop with no semantic home above is never
-        // silently dropped — see the class doc header. Checked BEFORE role
-        // resolution below: a fundamentally malformed annotation (a typo'd
-        // prop) is a more basic problem than an ambiguous-but-otherwise-
-        // valid one, and should be the error an author sees first.
-        // `required` is consumed regardless of its value (an unrecognised
-        // value, e.g. `required: yes`, still occupied the slot; it simply
-        // doesn't become `true`).
-        $consumed = [...self::BASE_PROPS, ...$typeConsumed];
-        $leftover = array_diff(array_keys($twigField), $consumed);
-        if ([] !== $leftover) {
-            throw new \DomainException(sprintf(
-                "Field '%s' has twig annotation prop(s) with no mapping to the abstract schema: %s. "
-                . 'Add a mapping to TwigFieldTypeMapper::map(), or remove the prop from the annotation.',
-                $fieldName,
-                implode(', ', array_map(static fn (int|string $p): string => "'{$p}'", $leftover)),
-            ));
-        }
-
-        // Codex review round 5, finding 1 (option B): provenance is not
-        // inferred from missing acf.json alone. A field's own `role:`
-        // annotation always wins; absent that, the CLI-supplied
-        // `$assumeRole` fallback applies; absent BOTH, provenance is
-        // genuinely ambiguous and this reader refuses to guess.
-        if (array_key_exists('role', $twigField)) {
-            $role = $twigField['role'];
-            if (!is_string($role) || !in_array($role, self::SCHEMA_ROLES, true)) {
-                throw new \DomainException(sprintf(
-                    "Field '%s' has an invalid `role:` (%s) — must be one of: %s.",
-                    $fieldName,
-                    is_string($role) ? "'{$role}'" : get_debug_type($role),
-                    implode(', ', self::SCHEMA_ROLES),
-                ));
-            }
-            if ('derived' === $role) {
-                $from = $twigField['from'] ?? null;
-                if (!is_string($from) || '' === $from) {
-                    throw new \DomainException(sprintf(
-                        "Field '%s' has `role: derived` but no `from:` naming the sibling field it derives from.",
-                        $fieldName,
-                    ));
-                }
-                $out['from'] = $from;
-            } elseif (array_key_exists('from', $twigField)) {
-                throw new \DomainException(sprintf(
-                    "Field '%s' has `from:` but `role:` is not 'derived' — `from:` is only valid with role: derived.",
-                    $fieldName,
-                ));
-            }
-        } else {
-            if (array_key_exists('from', $twigField)) {
-                throw new \DomainException(sprintf(
-                    "Field '%s' has `from:` but no `role: derived` — `from:` is only valid with role: derived.",
-                    $fieldName,
-                ));
-            }
-            if (null === $this->assumeRole) {
-                throw new \DomainException(sprintf(
-                    "Field '%s' has ambiguous provenance — no acf.json means it is not editor-authored, but that "
-                    . "does not say whether it comes from the calling template (parent), a PHP sidecar's own "
-                    . "query (query), or site-wide options (global). Annotate this field with an explicit "
-                    . '`role:`, or pass `--assume-role=parent|query|global` to fields-migrate for the whole '
-                    . 'component.',
-                    $fieldName,
-                ));
-            }
-            $role = $this->assumeRole;
-        }
         $out['role'] = $role;
 
         return $out;
@@ -462,7 +523,7 @@ final class TwigFieldTypeMapper
      * @param array<string,mixed> $twigField
      * @return array<string,mixed>
      */
-    private function container(string $type, array $twigField, string $fieldName): array
+    private function container(string $type, array $twigField, string $fieldName, string $role): array
     {
         $children = (array) ($twigField['fields'] ?? []);
         if ([] === $children) {
@@ -476,7 +537,12 @@ final class TwigFieldTypeMapper
         $out = ['type' => $type];
         $mappedChildren = [];
         foreach ($children as $childName => $childField) {
-            $mappedChildren[(string) $childName] = $this->map((array) $childField, $fieldName . '.' . $childName);
+            // Codex review round 6: a child with no explicit `role:` of its
+            // own inherits THIS field's resolved role — not `$assumeRole`
+            // directly, which would skip right past an explicit `role:`
+            // this container itself carries (see the class doc header,
+            // "nested ones inherit").
+            $mappedChildren[(string) $childName] = $this->map((array) $childField, $fieldName . '.' . $childName, $role);
         }
         $out['fields'] = $mappedChildren;
 
