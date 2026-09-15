@@ -163,59 +163,69 @@ final class FieldsGenerateCliTest extends TestCase
     }
 
     #[\PHPUnit\Framework\Attributes\DataProvider('nonBlockKindProvider')]
-    public function test_a_non_block_kind_gets_no_block_json(string $kind): void
+    public function test_a_non_block_kind_gets_neither_acf_json_nor_block_json(string $kind): void
     {
-        // Generating block.json for a component that is not editor-insertable
-        // manufactures the contradiction KindLinter reports as an error. acf.json
-        // is unaffected — a `part` still projects its fields.
+        // Only `kind: block` registers a Gutenberg block (ADR 0012). The root
+        // location of a generated field group is always `block == acf/<slug>`,
+        // so an acf.json for any other kind attaches to a block that does not
+        // exist: an orphan group that shows in ACF's list and never in the editor.
         $dir = $this->makeComponentDir(
             'demo',
             "name: Demo\ncategory: Content\nkind: {$kind}\nfields:\n  title:\n    type: text\n    label: Nadpis\n",
         );
 
-        $output = shell_exec(sprintf('php %s %s 2>&1', escapeshellarg($this->binPath), escapeshellarg($dir)));
+        exec(sprintf('php %s %s 2>&1', escapeshellarg($this->binPath), escapeshellarg($dir)), $lines, $exitCode);
+        $output = implode("\n", $lines);
 
-        self::assertIsString($output);
-        self::assertStringContainsString('OK   demo', $output);
-        self::assertFileExists("{$dir}/acf.json");
+        self::assertSame(0, $exitCode, $output);
+        self::assertStringContainsString("SKIP demo: kind {$kind} has no CMS projection", $output);
+        self::assertStringContainsString('1 component(s), 0 failed, 1 skipped', $output);
+        self::assertFileDoesNotExist("{$dir}/acf.json");
         self::assertFileDoesNotExist("{$dir}/block.json");
     }
 
-    public function test_kind_block_still_gets_a_block_json(): void
+    public function test_kind_block_still_gets_both_files(): void
     {
         $dir = $this->makeComponentDir(
             'demo',
             "name: Demo\ncategory: Content\nkind: block\nfields:\n  title:\n    type: text\n    label: Nadpis\n",
         );
 
-        shell_exec(sprintf('php %s %s 2>&1', escapeshellarg($this->binPath), escapeshellarg($dir)));
+        $output = shell_exec(sprintf('php %s %s 2>&1', escapeshellarg($this->binPath), escapeshellarg($dir)));
 
+        self::assertIsString($output);
+        self::assertStringContainsString('OK   demo', $output);
+        self::assertStringContainsString("1 component(s), 0 failed\n", $output);
+        self::assertStringNotContainsString('skipped', $output);
+        self::assertFileExists("{$dir}/acf.json");
         self::assertFileExists("{$dir}/block.json");
     }
 
-    public function test_a_non_block_kind_leaves_an_already_committed_block_json_alone(): void
+    public function test_a_non_block_kind_leaves_already_committed_projections_alone(): void
     {
-        // Rule 4 semantics: generation stops WRITING, it never deletes. The
-        // leftover file is DriftLinter's/KindLinter's to report, not this
-        // script's to remove.
+        // Rule 4 semantics: generation stops WRITING, it never deletes — and it
+        // does not refresh either. Before #72 a committed acf.json on a non-block
+        // kind was rewritten on every run. Now both files stay byte-identical.
         //
         // The run itself must be asserted to have SUCCEEDED. Without that, a
         // regression that aborts the CLI before it ever reaches the gate would
-        // also leave the file untouched and this test would still pass.
+        // also leave the files untouched and this test would still pass.
         $dir = $this->makeComponentDir(
             'demo',
             "name: Demo\ncategory: Content\nkind: part\nfields:\n  title:\n    type: text\n    label: Nadpis\n",
             ['name' => 'acf/demo', 'sentinel' => true],
         );
+        $acfBytes = "{\n    \"key\": \"group_demo\",\n    \"title\": \"Stale title\",\n    \"modified\": 1700000000\n}\n";
+        file_put_contents("{$dir}/acf.json", $acfBytes);
+        $blockBytes = file_get_contents("{$dir}/block.json");
 
-        $output = shell_exec(sprintf('php %s %s 2>&1', escapeshellarg($this->binPath), escapeshellarg($dir)));
+        exec(sprintf('php %s %s 2>&1', escapeshellarg($this->binPath), escapeshellarg($dir)), $lines, $exitCode);
+        $output = implode("\n", $lines);
 
-        self::assertIsString($output);
-        self::assertStringContainsString('OK   demo', $output);
-
-        $raw = file_get_contents("{$dir}/block.json");
-        self::assertIsString($raw);
-        self::assertSame(['name' => 'acf/demo', 'sentinel' => true], json_decode($raw, true));
+        self::assertSame(0, $exitCode, $output);
+        self::assertStringContainsString('SKIP demo: kind part has no CMS projection', $output);
+        self::assertSame($acfBytes, file_get_contents("{$dir}/acf.json"));
+        self::assertSame($blockBytes, file_get_contents("{$dir}/block.json"));
     }
 
     public function test_the_gate_also_holds_in_dry_run_and_batch_mode(): void
@@ -235,20 +245,61 @@ final class FieldsGenerateCliTest extends TestCase
         ));
 
         self::assertIsString($dryRun);
-        self::assertStringContainsString('OK   demo', $dryRun);
+        self::assertStringContainsString('SKIP demo: kind utility has no CMS projection', $dryRun);
         self::assertFileDoesNotExist("{$dir}/block.json");
         self::assertFileDoesNotExist("{$dir}/acf.json");
 
-        $batch = shell_exec(sprintf(
-            'php %s --root=%s 2>&1',
-            escapeshellarg($this->binPath),
-            escapeshellarg(dirname($dir)),
-        ));
+        foreach (['--root=%s --dry-run', '--root=%s'] as $pattern) {
+            exec(sprintf('php %s ' . $pattern . ' 2>&1', escapeshellarg($this->binPath), escapeshellarg(dirname($dir))), $lines, $exitCode);
+            $batch = implode("\n", $lines);
+            $lines = [];
 
-        self::assertIsString($batch);
-        self::assertStringContainsString('OK   demo', $batch);
-        self::assertFileExists("{$dir}/acf.json");
-        self::assertFileDoesNotExist("{$dir}/block.json");
+            self::assertSame(0, $exitCode, $batch);
+            self::assertStringContainsString('SKIP demo: kind utility has no CMS projection', $batch);
+            self::assertStringContainsString('1 component(s), 0 failed, 1 skipped', $batch);
+            self::assertFileDoesNotExist("{$dir}/acf.json");
+            self::assertFileDoesNotExist("{$dir}/block.json");
+        }
+    }
+
+    public function test_a_mixed_tree_generates_then_lints_clean(): void
+    {
+        // #72: generate and lint must agree on whether a non-block component
+        // owns an acf.json. Before, `fields-generate --root` created the orphan
+        // and the next `fields-lint --root` compared it instead of skipping.
+        $root = sys_get_temp_dir() . '/fields-generate-cli-' . uniqid('', true);
+        $defs = [
+            'hero' => "kind: block\n",
+            'legacy' => '',
+            'alert' => "kind: element\n",
+            'teaser' => "kind: part\n",
+        ];
+        foreach ($defs as $name => $kindLine) {
+            mkdir("{$root}/{$name}", 0777, true);
+            file_put_contents(
+                "{$root}/{$name}/{$name}.yaml",
+                "name: " . ucfirst($name) . "\ncategory: Content\n{$kindLine}fields:\n  title:\n    type: text\n    label: Nadpis\n",
+            );
+        }
+
+        exec(sprintf('php %s --root=%s 2>&1', escapeshellarg($this->binPath), escapeshellarg($root)), $genLines, $genExit);
+        $generated = implode("\n", $genLines);
+        self::assertSame(0, $genExit, $generated);
+        self::assertStringContainsString('4 component(s), 0 failed, 2 skipped', $generated);
+        self::assertFileExists("{$root}/hero/acf.json");
+        self::assertFileExists("{$root}/legacy/acf.json");
+        self::assertFileDoesNotExist("{$root}/alert/acf.json");
+        self::assertFileDoesNotExist("{$root}/teaser/acf.json");
+
+        $lintBin = __DIR__ . '/../../bin/fields-lint';
+        exec(sprintf('php %s --root=%s 2>&1', escapeshellarg($lintBin), escapeshellarg($root)), $lintLines, $lintExit);
+        $linted = implode("\n", $lintLines);
+        self::assertSame(0, $lintExit, $linted);
+        self::assertStringContainsString('OK   hero', $linted);
+        self::assertStringContainsString('OK   legacy', $linted);
+        self::assertStringContainsString('SKIP alert: kind element has no CMS projection', $linted);
+        self::assertStringContainsString('SKIP teaser: kind part has no CMS projection', $linted);
+        self::assertStringContainsString('4 component(s), 0 failed, 2 skipped', $linted);
     }
 
     public function test_a_definition_with_no_kind_keeps_getting_a_block_json(): void
@@ -260,6 +311,7 @@ final class FieldsGenerateCliTest extends TestCase
 
         shell_exec(sprintf('php %s %s 2>&1', escapeshellarg($this->binPath), escapeshellarg($dir)));
 
+        self::assertFileExists("{$dir}/acf.json");
         self::assertFileExists("{$dir}/block.json");
     }
 

@@ -267,8 +267,10 @@ final class FieldsLintCliTest extends TestCase
 
     public function test_a_non_block_kind_with_acf_json_is_still_drift_checked(): void
     {
-        // fields-generate writes acf.json for a non-block kind (#50), so a
-        // committed one is a real projection, not a leftover: it is compared.
+        // A committed acf.json on a non-block kind is still compared, so a
+        // hand edit or a stale definition stays visible. fields-generate no
+        // longer rewrites that file (#72), so the fix line must not send the
+        // user to a command that cannot change it.
         $this->makeCleanComponent('teaser');
         $yaml = "{$this->root}/teaser/teaser.yaml";
         $tree = Yaml::parseFile($yaml);
@@ -287,6 +289,22 @@ final class FieldsLintCliTest extends TestCase
         [$exitCode, $text] = $this->runLint("{$this->root}/teaser");
         self::assertSame(1, $exitCode, $text);
         self::assertStringContainsString('DRIFT teaser', $text);
+        self::assertStringNotContainsString('fix: vendor/bin/fields-generate teaser', $text);
+        self::assertStringContainsString('fields-generate does not write acf.json for kind part', $text);
+    }
+
+    public function test_a_block_with_drift_still_points_at_fields_generate(): void
+    {
+        $this->makeCleanComponent('hero');
+        $acf = json_decode((string) file_get_contents("{$this->root}/hero/acf.json"), true);
+        self::assertIsArray($acf);
+        $acf['fields'][0]['label'] = 'Hand-edited';
+        file_put_contents("{$this->root}/hero/acf.json", json_encode($acf));
+
+        [$exitCode, $text] = $this->runLint("{$this->root}/hero");
+
+        self::assertSame(1, $exitCode, $text);
+        self::assertStringContainsString('fix: vendor/bin/fields-generate hero', $text);
     }
 
     public function test_a_non_block_kind_with_a_stale_block_json_still_fails(): void
@@ -299,6 +317,11 @@ final class FieldsLintCliTest extends TestCase
         self::assertSame(1, $exitCode, $text);
         self::assertStringContainsString('FAIL alert', $text);
         self::assertStringNotContainsString('SKIP alert', $text);
+        // No acf.json either, and fields-generate will not write one for a
+        // non-block kind (#72). The failure must name the stale block.json,
+        // not send the user to a generator run that changes nothing.
+        self::assertStringContainsString('block.json is present but the definition declares `kind: element`', $text);
+        self::assertStringNotContainsString('run fields-generate', $text);
     }
 
     public function test_an_invalid_non_block_definition_is_not_skipped(): void

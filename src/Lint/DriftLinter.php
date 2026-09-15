@@ -123,6 +123,13 @@ final class DriftLinter
             }
             $acfDiffs = [];
         } elseif (!$acfJsonExists) {
+            // A non-block kind gets no acf.json from fields-generate (#72), so
+            // "run fields-generate" would be a loop. When the only thing on
+            // disk is a stale block.json, that file is the finding.
+            $kind = $tree['kind'] ?? null;
+            if (is_string($kind) && 'block' !== $kind && is_file($blockJsonPath)) {
+                return $this->staleBlockJson($componentName, $kind);
+            }
             return DriftResult::error($componentName, 'acf.json missing — run fields-generate');
         } else {
             /** @var array<string,mixed> $committedAcf */
@@ -148,16 +155,7 @@ final class DriftLinter
             // reasoning, as the stale-acf.json branch above.
             $kind = $tree['kind'] ?? null;
             if (is_string($kind) && 'block' !== $kind) {
-                return DriftResult::error(
-                    $componentName,
-                    sprintf(
-                        'block.json is present but the definition declares `kind: %s` — only an '
-                        . 'editor-insertable `kind: block` component has one, so this block.json is '
-                        . 'stale. Delete it (fields-generate will not delete it for you). If the '
-                        . 'component really is a Gutenberg block, fix the `kind` instead.',
-                        $kind,
-                    ),
-                );
+                return $this->staleBlockJson($componentName, $kind);
             }
 
             $blockJsonRaw = file_get_contents($blockJsonPath);
@@ -199,6 +197,20 @@ final class DriftLinter
             $componentName,
             array_map(StructuralDiff::formatEntry(...), $acfDiffs),
             array_map(StructuralDiff::formatEntry(...), $blockDiffs),
+        );
+    }
+
+    private function staleBlockJson(string $componentName, string $kind): DriftResult
+    {
+        return DriftResult::error(
+            $componentName,
+            sprintf(
+                'block.json is present but the definition declares `kind: %s` — only an '
+                . 'editor-insertable `kind: block` component has one, so this block.json is '
+                . 'stale. Delete it (fields-generate will not delete it for you). If the '
+                . 'component really is a Gutenberg block, fix the `kind` instead.',
+                $kind,
+            ),
         );
     }
 }

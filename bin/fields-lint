@@ -19,7 +19,7 @@ foreach ([__DIR__ . '/../vendor/autoload.php', __DIR__ . '/../../../autoload.php
     }
 }
 
-/** @return array{status: 'ok'|'drift'|'skip'|'fail', component: string, entry?: true, acfDrift?: list<string>, blockDrift?: list<string>, reason?: string} */
+/** @return array{status: 'ok'|'drift'|'skip'|'fail', component: string, entry?: true, acfDrift?: list<string>, blockDrift?: list<string>, reason?: string, nonBlockKind?: string} */
 function fields_lint_one(string $componentDir, KeyStyle $keyStyle): array
 {
     $componentDir = rtrim($componentDir, '/');
@@ -38,8 +38,9 @@ function fields_lint_one(string $componentDir, KeyStyle $keyStyle): array
     // `kind` with nothing projected on disk is the correct end state, not a
     // missing acf.json. Three cases still go to the drift linter:
     //   - an invalid definition, so the schema error is not hidden by a SKIP;
-    //   - a committed acf.json, because fields-generate writes one for a
-    //     non-block kind (#50) and it can drift like any other;
+    //   - a committed acf.json. fields-generate no longer writes one for a
+    //     non-block kind (#72), but it never deletes a committed one, so a
+    //     leftover is compared rather than silently trusted;
     //   - a committed block.json, which the drift linter reports as stale.
     // A definition with no `kind` is not skipped: absence means the backfill
     // has not reached the file, not "not a block".
@@ -58,7 +59,10 @@ function fields_lint_one(string $componentDir, KeyStyle $keyStyle): array
         return ['status' => 'fail', 'component' => $componentName, 'reason' => $result->error];
     }
     if (!$result->clean) {
-        return ['status' => 'drift', 'component' => $componentName, 'acfDrift' => $result->acfDrift, 'blockDrift' => $result->blockDrift];
+        $tree = Yaml::parseFile($yamlPath);
+        $kind = is_array($tree) && is_string($tree['kind'] ?? null) ? $tree['kind'] : null;
+        return ['status' => 'drift', 'component' => $componentName, 'acfDrift' => $result->acfDrift, 'blockDrift' => $result->blockDrift]
+            + (null !== $kind && 'block' !== $kind ? ['nonBlockKind' => $kind] : []);
     }
     return ['status' => 'ok', 'component' => $componentName];
 }
@@ -173,7 +177,14 @@ foreach ($results as $result) {
                     echo "    {$line}\n";
                 }
             }
-            echo "  fix: vendor/bin/fields-generate {$result['component']}\n";
+            // fields-generate skips a present, non-block `kind` and leaves its
+            // committed acf.json untouched (#72). Pointing at it would send the
+            // user round a loop that never changes the file — the same trap
+            // DriftLinter's stale-block.json branch avoids (#50).
+            echo isset($result['nonBlockKind'])
+                ? "  fix: fields-generate does not write acf.json for kind {$result['nonBlockKind']}. "
+                    . "Delete the stale acf.json, or set `kind: block` if the component is a Gutenberg block\n"
+                : "  fix: vendor/bin/fields-generate {$result['component']}\n";
             break;
         case 'fail':
             $failures++;

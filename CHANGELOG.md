@@ -8,6 +8,30 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 <!-- New entries go directly under this line. It is the anchor that keeps a branch's
      changelog edit from merging into a version that shipped without it. -->
 
+### Changed
+
+- **`fields-generate` writes no `acf.json` for a component whose `kind` is
+  not `block`.** Its field group was always located at `block == acf/<slug>`,
+  a block that a `section`, `element`, `part` or `utility` component never
+  registers. The group showed in ACF's list and never in the editor. Such a
+  component now prints `SKIP <name>: kind <kind> has no CMS projection`, the
+  same line `fields-lint` prints, and gets neither file. A committed
+  `acf.json` or `block.json` stays byte-identical: the generator neither
+  deletes nor rewrites it. A definition with no `kind` gets both files as
+  before. The summary line ends in `, N skipped` when a component was
+  skipped, and a page or doc is no longer in the `component(s)` total.
+  Closes #72.
+
+### Fixed
+
+- **`fields-lint` no longer sends a drifting non-block `acf.json` to
+  `fields-generate`.** That command does not rewrite the file, so the old fix
+  line never cleared the drift. The fix line now says to delete the stale
+  file or set `kind: block`.
+- **A non-block component with a stale `block.json` and no `acf.json`**
+  now fails with the stale-`block.json` message. It used to say `acf.json
+  missing — run fields-generate`, which no longer writes that file.
+
 ## [0.12.0] - 2026-09-15
 
 ### Added
