@@ -343,4 +343,52 @@ final class TwigFieldTypeMapperTest extends TestCase
         $this->expectException(\DomainException::class);
         $this->mapper->map(['type' => 'select', 'options' => 'a, a'], 'mode');
     }
+
+    // --- Codex review round 4 -------------------------------------------
+
+    public function test_select_associative_options_map_is_refused_not_re_keyed(): void
+    {
+        // Finding 1: an associative `options:` map used to have its own
+        // keys silently discarded — the loop only ever read values, so
+        // `{draft: Draft, published: Published}` re-keyed itself as
+        // `{Draft: Draft, Published: Published}` with no diagnostic.
+        $this->expectException(\DomainException::class);
+        $this->expectExceptionMessage(
+            "Field 'status' has an `options:` map with its own keys ('draft', 'published') — "
+            . 'a keyed option map is `choices:`, not `options:`.',
+        );
+        $this->mapper->map(['type' => 'select', 'options' => ['draft' => 'Draft', 'published' => 'Published']], 'status');
+    }
+
+    public function test_select_options_as_a_plain_list_still_works(): void
+    {
+        // Regression guard for the fix above: a genuine list (int keys 0..n-1)
+        // must still take the existing list path, not the new refusal.
+        $out = $this->mapper->map(['type' => 'select', 'options' => ['compact', 'expanded']], 'mode');
+        self::assertSame(['compact' => 'compact', 'expanded' => 'expanded'], $out['options']);
+    }
+
+    public function test_title_that_is_a_list_throws_instead_of_becoming_the_string_array(): void
+    {
+        // Finding 2: `(string) ['Original', 'Title']` silently produced the
+        // literal string "Array" (PHP's array-to-string coercion) — a
+        // schema-valid but corrupted label with no diagnostic.
+        $this->expectException(\DomainException::class);
+        $this->expectExceptionMessage("Field 'title' has a `title:` that is not a string (got array).");
+        $this->mapper->map(['type' => 'text', 'title' => ['Original', 'Title']], 'title');
+    }
+
+    public function test_description_that_is_a_map_throws(): void
+    {
+        $this->expectException(\DomainException::class);
+        $this->expectExceptionMessage("Field 'body' has a `description:` that is not a string (got array).");
+        $this->mapper->map(['type' => 'text', 'description' => ['en' => 'hello']], 'body');
+    }
+
+    public function test_placeholder_that_is_a_boolean_throws(): void
+    {
+        $this->expectException(\DomainException::class);
+        $this->expectExceptionMessage("Field 'email' has a `placeholder:` that is not a string (got bool).");
+        $this->mapper->map(['type' => 'text', 'placeholder' => true], 'email');
+    }
 }

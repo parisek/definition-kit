@@ -128,14 +128,17 @@ final class TwigFieldTypeMapper
 
         $out = $shape;
 
-        if ('' !== (string) ($twigField['title'] ?? '')) {
-            $out['label'] = (string) $twigField['title'];
+        $label = $this->stringProp($twigField, 'title', $fieldName);
+        if (null !== $label) {
+            $out['label'] = $label;
         }
-        if ('' !== (string) ($twigField['description'] ?? '')) {
-            $out['description'] = (string) $twigField['description'];
+        $description = $this->stringProp($twigField, 'description', $fieldName);
+        if (null !== $description) {
+            $out['description'] = $description;
         }
-        if ('' !== (string) ($twigField['placeholder'] ?? '')) {
-            $out['placeholder'] = (string) $twigField['placeholder'];
+        $placeholder = $this->stringProp($twigField, 'placeholder', $fieldName);
+        if (null !== $placeholder) {
+            $out['placeholder'] = $placeholder;
         }
         if (array_key_exists('required', $twigField)) {
             $required = $twigField['required'];
@@ -181,6 +184,38 @@ final class TwigFieldTypeMapper
      * @param array<string,mixed> $twigField
      * @return array<string,mixed>
      */
+    /**
+     * Reads a free-text prop (`title`/`description`/`placeholder`) as a
+     * string, or `null` when absent/empty. Codex review round 4, finding 2:
+     * the previous `(string) ($twigField[$prop] ?? '')` cast a YAML list or
+     * map straight to the literal string `"Array"` (PHP's array-to-string
+     * coercion, with a warning nobody sees in a CLI run) — schema-valid,
+     * silently corrupted data with no diagnostic. A non-string, non-null
+     * value is now a hard error instead.
+     *
+     * @param array<string,mixed> $twigField
+     */
+    private function stringProp(array $twigField, string $prop, string $fieldName): ?string
+    {
+        if (!array_key_exists($prop, $twigField) || null === $twigField[$prop]) {
+            return null;
+        }
+        $value = $twigField[$prop];
+        if (!is_string($value)) {
+            throw new \DomainException(sprintf(
+                "Field '%s' has a `%s:` that is not a string (got %s).",
+                $fieldName,
+                $prop,
+                get_debug_type($value),
+            ));
+        }
+        return '' !== $value ? $value : null;
+    }
+
+    /**
+     * @param array<string,mixed> $twigField
+     * @return array<string,mixed>
+     */
     private function select(array $twigField, string $fieldName): array
     {
         $out = ['type' => 'select'];
@@ -215,6 +250,22 @@ final class TwigFieldTypeMapper
             $out['options'] = $twigField['choices'];
         } elseif ($hasOptions) {
             $rawOptions = $twigField['options'];
+            if (is_array($rawOptions) && !array_is_list($rawOptions)) {
+                // Codex review round 4, finding 1: an associative
+                // `options:` map (`draft: Draft`) used to have its keys
+                // silently discarded — the loop below only ever reads
+                // values, so it re-keyed every label by itself
+                // (`Draft: Draft`), losing the authored `draft` key with no
+                // diagnostic. An author who wants key != label belongs on
+                // `choices:`, which already carries that shape verbatim.
+                throw new \DomainException(sprintf(
+                    "Field '%s' has an `options:` map with its own keys (%s) — "
+                    . 'a keyed option map is `choices:`, not `options:`. Rename it, or drop the keys for the '
+                    . 'comma-string/list shorthand.',
+                    $fieldName,
+                    implode(', ', array_map(static fn (int|string $k): string => "'{$k}'", array_keys($rawOptions))),
+                ));
+            }
             if (is_array($rawOptions)) {
                 // Codex review round 2, finding 1: a YAML sequence form
                 // (`options: [a, b, c]`) used to be cast straight to string

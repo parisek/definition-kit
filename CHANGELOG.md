@@ -44,7 +44,12 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   overridable by a stale twig annotation. A `select`'s `options:` list
   entry that is a boolean or number, or two entries (list or comma-string)
   that collide once trimmed, is refused instead of silently coercing or
-  overwriting. Closes #75.
+  overwriting. An associative `options:` map (its own keys, e.g.
+  `draft: Draft`) is refused rather than silently re-keyed by value — use
+  `choices:` for that shape. `title:`, `description:` and `placeholder:`
+  now require an actual string; a YAML list or map there used to be cast
+  straight to the literal string `"Array"` via PHP's array-to-string
+  coercion, producing schema-valid but corrupted output. Closes #75.
 
 ## [0.13.0] - 2026-09-15
 
