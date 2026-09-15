@@ -8,6 +8,80 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 <!-- New entries go directly under this line. It is the anchor that keeps a branch's
      changelog edit from merging into a version that shipped without it. -->
 
+### Fixed
+
+- **`fields-migrate` no longer discards a twig `fields:` annotation on a
+  component with no `acf.json`.** `element`/`part`/`section`/`utility`
+  components take their values from the calling template, not from ACF, so
+  the CLI synthesised an empty ACF document for them and previously wrote
+  `fields: {}` — losing the annotation entirely once ADR 0007 strips the
+  front-comment. Measured on one downstream project: 16 of 22 non-block
+  components carried such an annotation. `AcfJsonReader` now falls back to
+  the new `TwigMetadataReader::readFields()` / `TwigFieldTypeMapper` when
+  `acf.json` has no fields but the twig annotation does, translating the
+  twig type vocabulary (`text`/`textarea`/`url`/`link`/`select`/`image`/…)
+  into the abstract schema. When `acf.json` genuinely has fields, behaviour
+  is unchanged. A twig field
+  annotated `type: array` (with or without nested `fields:`) is refused with
+  a `\DomainException` naming the field, rather than guessed — see the
+  linked issue for the decision and its rejected alternatives. A twig
+  annotation prop with no mapping to the abstract schema (e.g. a typo, or a
+  genuinely unhandled key) is likewise refused by field path rather than
+  silently dropped, and `placeholder:` is now carried across. A `select`
+  with no (or empty) `options:`/`choices:`, or a non-string option label,
+  is refused locally instead of migrating to schema-invalid YAML. A
+  `select`'s `options:` written as a YAML list (`[a, b, c]`) is read like
+  the comma-string shorthand instead of collapsing to a single bogus
+  `Array: Array` option; `choices:` and `options:` given together, a
+  malformed `choices:`, and a non-canonical `required:` value (e.g.
+  `required: yes`) are refused by field path instead of one silently
+  winning over the other or the constraint silently vanishing. A `fields:`
+  annotation whose value is a scalar rather than a map is likewise refused,
+  distinct from the "explicitly no fields" bare/null `fields:` shape. The
+  twig fallback now only fires when `acf.json` is genuinely absent from
+  disk (`AcfJsonReader::read()`'s new `$acfJsonExists` parameter) — a real
+  acf.json with an intentionally empty field group is no longer
+  overridable by a stale twig annotation. A `select`'s `options:` list
+  entry that is a boolean or number, or two entries (list or comma-string)
+  that collide once trimmed, is refused instead of silently coercing or
+  overwriting. An associative `options:` map (its own keys, e.g.
+  `draft: Draft`) is refused rather than silently re-keyed by value — use
+  `choices:` for that shape. `title:`, `description:` and `placeholder:`
+  now require an actual string; a YAML list or map there used to be cast
+  straight to the literal string `"Array"` via PHP's array-to-string
+  coercion, producing schema-valid but corrupted output. **Provenance
+  (`role:`) is no longer inferred from missing `acf.json` alone** — absence
+  of `acf.json` proves only that a field is not editor-authored, not that
+  it is `parent` (it could be `query`, e.g. a PHP sidecar's own database
+  read, or `global`). A field's own twig `role:` annotation always wins
+  (validated against the full schema role enum; `role: derived` requires
+  `from:`); absent that, `fields-migrate` now requires an explicit
+  `--assume-role=parent|query|global` for the whole component and refuses
+  the component by field path when neither is given. The flag is restricted
+  to those three roles (`field`/`inherited`/`derived` make no sense as a
+  blanket assumption) and is ignored entirely for an `acf.json`-backed
+  component. `AcfJsonReader::readFields()`'s twig-annotation parse now also
+  only runs when `acf.json` is genuinely absent, so a stale/malformed twig
+  `fields:` block next to a valid `acf.json` no longer aborts migration for
+  fields that were never going to be used. An un-annotated child field now
+  inherits its container's own resolved `role:` (e.g. `role: query` on a
+  `repeater`) instead of falling straight back to `--assume-role`, matching
+  the schema's "a descendant inherits its ancestor's role" contract; this
+  also means an explicit container `role:` lets its un-annotated children
+  through even without `--assume-role` at all. A `select`'s `choices:`/
+  `options:` keyed with the sequential integers `0, 1, 2, …` from zero
+  (e.g. `choices: {0: None, 1: One}`) is refused by field name — PHP
+  cannot keep such a key as a string, so it is otherwise indistinguishable
+  from a plain list once written, and used to fail later at YAML-write
+  time with a message naming neither the field nor the cause. `role:
+  derived` is no longer inherited by an un-annotated child — it always
+  carries its own `from:` naming a specific sibling, which is meaningless
+  to copy onto a child with different siblings; inheriting it produced a
+  schema-invalid `role: derived` with no `from:` and rejected the whole
+  component for an annotation that looked completely valid. Such a child
+  now falls back to `--assume-role` (or ambiguous-provenance) instead,
+  same as if the container had no role at all. Closes #75.
+
 ## [0.13.0] - 2026-09-15
 
 ### Changed

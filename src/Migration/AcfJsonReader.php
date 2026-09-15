@@ -32,17 +32,41 @@ final class AcfJsonReader
         private readonly VisibleWhenMapper $visibleWhenMapper = new VisibleWhenMapper(),
         private readonly TypeDefaults $typeDefaults = new TypeDefaults(),
         private readonly TwigMetadataReader $twigMetadataReader = new TwigMetadataReader(),
+        private readonly TwigFieldTypeMapper $twigFieldTypeMapper = new TwigFieldTypeMapper(),
         private readonly WpmlTranslatableMapper $wpmlMapper = new WpmlTranslatableMapper(),
         private readonly AccordionResidualCapturer $accordionCapturer = new AccordionResidualCapturer(),
         private readonly KeyStyle $keyStyle = KeyStyle::Slug,
+        /**
+         * Fallback `role:` for a twig-derived field with no explicit `role:`
+         * annotation of its own — see TwigFieldTypeMapper's class doc header
+         * and Codex review round 5, finding 1. `null` (the default) means an
+         * un-annotated field's provenance is ambiguous and migration refuses
+         * it; `fields-migrate` sets this from its `--assume-role` flag.
+         */
+        private readonly ?string $assumeRole = null,
     ) {
     }
 
     /**
      * @param array<string,mixed> $acfJson
+     * @param bool $acfJsonExists Whether a real acf.json exists on disk for this
+     *                            component, as opposed to bin/fields-migrate's
+     *                            synthesised empty document for a component that
+     *                            has none. An `$acfJson['fields']` array that is
+     *                            empty is otherwise indistinguishable between the
+     *                            two cases — a genuine ACF field group with zero
+     *                            fields (rare, but real) must NOT fall back to the
+     *                            twig annotation, which would silently override
+     *                            an authoritative "this component has no
+     *                            ACF-backed fields" answer with a stale twig
+     *                            comment (Codex review round 3, finding 1).
+     *                            Defaults to `true` (today's behaviour, and every
+     *                            existing caller's) — only bin/fields-migrate
+     *                            passes `false`, and only when `acf.json` is
+     *                            genuinely absent from disk.
      * @return array<string,mixed>
      */
-    public function read(array $acfJson, string $componentSlug, ?string $twigSource = null): array
+    public function read(array $acfJson, string $componentSlug, ?string $twigSource = null, bool $acfJsonExists = true): array
     {
         $keyNameMap = [];
         $this->buildKeyNameMap((array) ($acfJson['fields'] ?? []), $keyNameMap);
@@ -106,6 +130,33 @@ final class AcfJsonReader
         $acfRootDescription = (string) ($acfJson['description'] ?? '');
         if ('' !== $acfRootDescription) {
             $root['wp']['description'] = $acfRootDescription;
+        }
+
+        // A component with no acf.json (`fields-migrate` synthesises an empty
+        // ACF document for it — see bin/fields-migrate) has nothing here to
+        // derive fields from, yet the twig front-comment may still carry a
+        // full `fields:` annotation (element/part/section/utility kinds: the
+        // component takes its values from whoever calls it, never from an
+        // ACF field group). Migrating such a component used to write
+        // `fields: {}` and, per ADR 0007, then strip that annotation from
+        // the twig once the YAML existed — silently discarding it with no
+        // other home. When acf.json genuinely has zero fields, defer to the
+        // twig annotation as the field source instead of emitting an empty map.
+        // Codex review round 5, finding 2: `readFields()` used to run
+        // unconditionally, before `$acfJsonExists` was even checked — a
+        // stale/malformed twig `fields:` block next to a perfectly valid,
+        // authoritative acf.json aborted migration with a YAML error for
+        // twig fields that were never going to be used. Only parse the twig
+        // annotation at all when acf.json is genuinely absent.
+        $twigFields = (!$acfJsonExists && null !== $twigSource) ? $this->twigMetadataReader->readFields($twigSource) : [];
+        if (!$acfJsonExists && [] === (array) ($acfJson['fields'] ?? []) && [] !== $twigFields) {
+            $mapper = null !== $this->assumeRole ? new TwigFieldTypeMapper($this->assumeRole) : $this->twigFieldTypeMapper;
+            $fields = [];
+            foreach ($twigFields as $fieldName => $twigField) {
+                $fields[(string) $fieldName] = $mapper->map((array) $twigField, (string) $fieldName);
+            }
+            $root['fields'] = $fields;
+            return $root;
         }
 
         $fields = [];

@@ -40,7 +40,7 @@ function fields_migrate_write_atomically(string $path, string $content): bool
 /**
  * @return array{ok: bool, component: string, out?: string, error?: string, skipped?: string}
  */
-function fields_migrate_one(string $componentDir, bool $dryRun, bool $force, KeyStyle $keyStyle): array
+function fields_migrate_one(string $componentDir, bool $dryRun, bool $force, KeyStyle $keyStyle, ?string $assumeRole): array
 {
     $componentDir = rtrim($componentDir, '/');
     $componentName = basename($componentDir);
@@ -153,7 +153,17 @@ function fields_migrate_one(string $componentDir, bool $dryRun, bool $force, Key
     $twigSource = is_file($twigPath) ? file_get_contents($twigPath) : null;
 
     try {
-        $tree = (new AcfJsonReader(keyStyle: $keyStyle))->read($decoded, $componentName, $twigSource);
+        // `acfJsonExists` distinguishes a synthesised empty document (no
+        // acf.json at all — the twig annotation, if any, is the sole field
+        // source) from a real acf.json that genuinely has zero fields (which
+        // must NOT be overridden by a stale twig comment). See AcfJsonReader::read().
+        //
+        // `$assumeRole` (from `--assume-role`) only matters on that same
+        // twig-only path — an acf.json-backed component ignores it entirely,
+        // since AcfJsonReader::read() never reaches the twig-fields fallback
+        // when acf.json genuinely has fields.
+        $tree = (new AcfJsonReader(keyStyle: $keyStyle, assumeRole: $assumeRole))
+            ->read($decoded, $componentName, $twigSource, is_file($acfPath));
     } catch (\Throwable $e) {
         // Broad on purpose: AbstractTypeMapper throws DomainException for an
         // unsupported ACF field type; a group/repeater with zero non-accordion
@@ -202,13 +212,20 @@ $root = null;
 $dryRun = false;
 $force = false;
 $single = null;
+$assumeRole = null;
 
-$usage = "usage: fields-migrate [--dry-run] [--force] <component-dir|page-dir|doc-dir>\n"
-    . "       fields-migrate [--dry-run] [--force] --root=<components-root>\n"
+$usage = "usage: fields-migrate [--dry-run] [--force] [--assume-role=parent|query|global] <component-dir|page-dir|doc-dir>\n"
+    . "       fields-migrate [--dry-run] [--force] [--assume-role=parent|query|global] --root=<components-root>\n"
     . "  --force re-derives over an existing definition, discarding whatever only it records.\n"
     . "  A directory under page/ or doc/ moves its twig front-comment into <id>.yaml\n"
     . "  (page.schema.json or doc.schema.json).\n"
-    . "  --root on a page or doc root also finds nested <group>/<id>/ directories.\n";
+    . "  --root on a page or doc root also finds nested <group>/<id>/ directories.\n"
+    . "  --assume-role sets the fallback `role:` for a twig-only component's field with no\n"
+    . "  explicit `role:` of its own (see AcfJsonReader::read()'s doc header). Without it, such\n"
+    . "  a field's provenance is ambiguous and migration refuses the component. Ignored for an\n"
+    . "  acf.json-backed component. A field's own twig `role:` annotation always wins over it.\n";
+
+$assumableRoles = ['parent', 'query', 'global'];
 
 foreach ($args as $arg) {
     if (str_starts_with($arg, '--root=')) {
@@ -221,6 +238,18 @@ foreach ($args as $arg) {
     }
     if ('--force' === $arg) {
         $force = true;
+        continue;
+    }
+    if (str_starts_with($arg, '--assume-role=')) {
+        $assumeRole = substr($arg, 14);
+        if (!in_array($assumeRole, $assumableRoles, true)) {
+            fwrite(STDERR, sprintf(
+                "invalid --assume-role '%s' — must be one of: %s.\n",
+                $assumeRole,
+                implode(', ', $assumableRoles),
+            ) . $usage);
+            exit(2);
+        }
         continue;
     }
     // An unrecognised option must never fall through to $single. Both guards
@@ -291,11 +320,11 @@ if (null !== $root) {
         // one at a time since 0.4.2.
         $name = basename($dir);
         if (is_file("{$dir}/acf.json") || is_file("{$dir}/block.json") || is_file("{$dir}/{$name}.twig")) {
-            $results[] = fields_migrate_one($dir, $dryRun, $force, $keyStyle);
+            $results[] = fields_migrate_one($dir, $dryRun, $force, $keyStyle, $assumeRole);
         }
     }
 } else {
-    $results[] = fields_migrate_one($single, $dryRun, $force, $keyStyle);
+    $results[] = fields_migrate_one($single, $dryRun, $force, $keyStyle, $assumeRole);
 }
 
 $failures = 0;
