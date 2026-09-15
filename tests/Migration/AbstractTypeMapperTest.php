@@ -67,6 +67,14 @@ final class AbstractTypeMapperTest extends TestCase
         self::assertSame(['options' => ['x' => 'X']], $result['extra']);
     }
 
+    public function test_radio_maps_to_single_select_with_marker(): void
+    {
+        $result = $this->mapper->map(['type' => 'radio', 'name' => 'f', 'choices' => ['x' => 'X']]);
+        self::assertSame('select', $result['type']);
+        self::assertSame(['options' => ['x' => 'X']], $result['extra']);
+        self::assertSame(['acf_type' => 'radio'], $result['wp'] ?? null);
+    }
+
     public function test_checkbox_maps_to_multiple_select_with_marker(): void
     {
         $result = $this->mapper->map(['type' => 'checkbox', 'name' => 'f', 'choices' => ['x' => 'X']]);
