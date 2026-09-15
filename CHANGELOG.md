@@ -8,6 +8,30 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 <!-- New entries go directly under this line. It is the anchor that keeps a branch's
      changelog edit from merging into a version that shipped without it. -->
 
+### Added
+
+- **`object` and `list` are the canonical structural types (#79).** `object`
+  is one nested object and `list` is a list of objects. `group` and
+  `repeater` stay valid aliases: the schema accepts the same keys, and the
+  generated `acf.json` and `block.json` are byte-identical for either name.
+  Aliases resolve once, when a definition is read
+  (`Support\StructuralType`), so the generator and linters branch only on
+  the canonical names. `list` means a list of objects only; there is no
+  scalar list. No deprecation warning for the old names yet.
+- **`fields-migrate --rename-structural-types`** rewrites `type: group` to
+  `object` and `type: repeater` to `list` in existing definitions. It prints
+  by default and writes only with `--write`. The rewrite is textual (comments,
+  quoting and order stay), idempotent, and checked against the parser: a
+  line inside a block scalar is skipped, and a flow-style mapping it cannot
+  rewrite line by line fails the definition instead of half-renaming it.
+
+### Changed
+
+- **`fields-migrate` writes `object`/`list`** instead of `group`/`repeater`,
+  for both `acf.json` and twig `fields:` sources. The twig annotation also
+  accepts `object`/`list`, and the `type: array` refusal now suggests them.
+- Lint messages that echo a field's type print the canonical name.
+
 ## [0.14.0] - 2026-09-15
 
 ### Added
