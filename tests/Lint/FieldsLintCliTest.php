@@ -317,6 +317,11 @@ final class FieldsLintCliTest extends TestCase
         self::assertSame(1, $exitCode, $text);
         self::assertStringContainsString('FAIL alert', $text);
         self::assertStringNotContainsString('SKIP alert', $text);
+        // No acf.json either, and fields-generate will not write one for a
+        // non-block kind (#72). The failure must name the stale block.json,
+        // not send the user to a generator run that changes nothing.
+        self::assertStringContainsString('block.json is present but the definition declares `kind: element`', $text);
+        self::assertStringNotContainsString('run fields-generate', $text);
     }
 
     public function test_an_invalid_non_block_definition_is_not_skipped(): void

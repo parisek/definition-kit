@@ -28,6 +28,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `fields-generate`.** That command does not rewrite the file, so the old fix
   line never cleared the drift. The fix line now says to delete the stale
   file or set `kind: block`.
+- **A non-block component with a stale `block.json` and no `acf.json`**
+  now fails with the stale-`block.json` message. It used to say `acf.json
+  missing — run fields-generate`, which no longer writes that file.
 
 ## [0.12.0] - 2026-09-15
 
