@@ -252,7 +252,18 @@ final class TwigFieldTypeMapper
                     $fieldName,
                 ));
             }
-            $role = $inheritedRole ?? $this->assumeRole;
+            // Codex review round 8: `derived` is NOT inheritable, unlike
+            // every other role. It always carries its own `from:` naming a
+            // SPECIFIC sibling field — that pairing is meaningless to copy
+            // onto a child, which has different siblings of its own (or
+            // none). Blanket-inheriting it produced a `role: derived` with
+            // no `from:`, which the schema then rejects, rejecting the
+            // whole component for an annotation that looked completely
+            // valid. A child under a `derived` container falls back past
+            // it, to `$assumeRole` (or ambiguous-provenance, same as if the
+            // container had no role at all).
+            $effectiveInherited = 'derived' !== $inheritedRole ? $inheritedRole : null;
+            $role = $effectiveInherited ?? $this->assumeRole;
             if (null === $role) {
                 throw new \DomainException(sprintf(
                     "Field '%s' has ambiguous provenance — no acf.json means it is not editor-authored, but that "

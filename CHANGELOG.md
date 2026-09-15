@@ -73,7 +73,14 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (e.g. `choices: {0: None, 1: One}`) is refused by field name — PHP
   cannot keep such a key as a string, so it is otherwise indistinguishable
   from a plain list once written, and used to fail later at YAML-write
-  time with a message naming neither the field nor the cause. Closes #75.
+  time with a message naming neither the field nor the cause. `role:
+  derived` is no longer inherited by an un-annotated child — it always
+  carries its own `from:` naming a specific sibling, which is meaningless
+  to copy onto a child with different siblings; inheriting it produced a
+  schema-invalid `role: derived` with no `from:` and rejected the whole
+  component for an annotation that looked completely valid. Such a child
+  now falls back to `--assume-role` (or ambiguous-provenance) instead,
+  same as if the container had no role at all. Closes #75.
 
 ## [0.13.0] - 2026-09-15
 

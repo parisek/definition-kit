@@ -551,6 +551,56 @@ final class TwigFieldTypeMapperTest extends TestCase
         self::assertSame('query', $out['fields']['link']['fields']['url']['role']);
     }
 
+    public function test_role_derived_is_not_inherited_by_un_annotated_children(): void
+    {
+        // Codex review round 8: `derived` always carries its own `from:`
+        // naming a SPECIFIC sibling — meaningless to copy onto a child,
+        // which has different siblings. Blanket inheritance used to
+        // produce `role: derived` with no `from:` on the child, which the
+        // schema then rejects, failing the whole component for an
+        // annotation that looked completely valid.
+        $mapper = new TwigFieldTypeMapper('parent');
+        $out = $mapper->map([
+            'type' => 'group',
+            'role' => 'derived',
+            'from' => 'source',
+            'fields' => ['url' => ['type' => 'url']],
+        ], 'card');
+        self::assertSame('derived', $out['role']);
+        self::assertSame('source', $out['from']);
+        // Falls back past 'derived' to --assume-role, not to the parent's role.
+        self::assertSame('parent', $out['fields']['url']['role']);
+        self::assertArrayNotHasKey('from', $out['fields']['url']);
+    }
+
+    public function test_role_derived_without_assume_role_leaves_children_ambiguous(): void
+    {
+        $mapper = new TwigFieldTypeMapper();
+        $this->expectException(\DomainException::class);
+        $this->expectExceptionMessage("Field 'card.url' has ambiguous provenance");
+        $mapper->map([
+            'type' => 'group',
+            'role' => 'derived',
+            'from' => 'source',
+            'fields' => ['url' => ['type' => 'url']],
+        ], 'card');
+    }
+
+    public function test_role_derived_grandchild_can_still_state_its_own_derived_role(): void
+    {
+        $mapper = new TwigFieldTypeMapper('parent');
+        $out = $mapper->map([
+            'type' => 'group',
+            'role' => 'derived',
+            'from' => 'source',
+            'fields' => [
+                'url' => ['type' => 'url', 'role' => 'derived', 'from' => 'video'],
+            ],
+        ], 'card');
+        self::assertSame('derived', $out['fields']['url']['role']);
+        self::assertSame('video', $out['fields']['url']['from']);
+    }
+
     public function test_explicit_twig_role_wins_over_assume_role(): void
     {
         $mapper = new TwigFieldTypeMapper('parent');
