@@ -825,7 +825,7 @@ final class AcfJsonReaderTest extends TestCase
             . "\t\toptions: _blank, _self\n"
             . "#}\n";
 
-        $tree = $this->reader->read(['key' => 'group_button', 'title' => '', 'fields' => []], 'button', $twig);
+        $tree = $this->reader->read(['key' => 'group_button', 'title' => '', 'fields' => []], 'button', $twig, acfJsonExists: false);
 
         self::assertSame('Button', $tree['name']);
         self::assertSame('element', $tree['kind']);
@@ -853,7 +853,7 @@ final class AcfJsonReaderTest extends TestCase
     {
         $twig = "{#\nname: Demo\nfields:\n\ta:\n\t\ttype: text\n\tb:\n\t\ttype: url\n\tc:\n\t\ttype: select\n\t\toptions: x, y\n\td:\n\t\ttype: image\n#}\n";
 
-        $tree = $this->reader->read(['key' => 'group_demo', 'title' => '', 'fields' => []], 'demo', $twig);
+        $tree = $this->reader->read(['key' => 'group_demo', 'title' => '', 'fields' => []], 'demo', $twig, acfJsonExists: false);
 
         self::assertSame(['a', 'b', 'c', 'd'], array_keys($tree['fields']));
     }
@@ -872,5 +872,24 @@ final class AcfJsonReaderTest extends TestCase
         ]), 'demo', $twig);
 
         self::assertSame(['title'], array_keys($tree['fields']));
+    }
+
+    /**
+     * Codex review round 3, finding 1: a genuinely empty `acf.json` field
+     * group (rare, but real — a field group that exists and intentionally
+     * has zero fields) is indistinguishable from bin/fields-migrate's
+     * synthesised empty document by looking at `$acfJson['fields']` alone.
+     * Without `acfJsonExists: true` (the default, matching every real
+     * acf.json on disk), the reader must NOT fall back to a stale twig
+     * annotation and override the authoritative "no ACF-backed fields"
+     * answer.
+     */
+    public function test_a_real_empty_acf_json_is_not_overridden_by_a_twig_annotation(): void
+    {
+        $twig = "{#\nname: Demo\nfields:\n\tstale_field:\n\t\ttype: text\n#}\n";
+
+        $tree = $this->reader->read(['key' => 'group_demo', 'title' => 'Demo', 'fields' => []], 'demo', $twig);
+
+        self::assertSame([], $tree['fields']);
     }
 }

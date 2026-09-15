@@ -153,7 +153,11 @@ function fields_migrate_one(string $componentDir, bool $dryRun, bool $force, Key
     $twigSource = is_file($twigPath) ? file_get_contents($twigPath) : null;
 
     try {
-        $tree = (new AcfJsonReader(keyStyle: $keyStyle))->read($decoded, $componentName, $twigSource);
+        // `acfJsonExists` distinguishes a synthesised empty document (no
+    // acf.json at all — the twig annotation, if any, is the sole field
+    // source) from a real acf.json that genuinely has zero fields (which
+    // must NOT be overridden by a stale twig comment). See AcfJsonReader::read().
+    $tree = (new AcfJsonReader(keyStyle: $keyStyle))->read($decoded, $componentName, $twigSource, is_file($acfPath));
     } catch (\Throwable $e) {
         // Broad on purpose: AbstractTypeMapper throws DomainException for an
         // unsupported ACF field type; a group/repeater with zero non-accordion

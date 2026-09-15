@@ -313,4 +313,34 @@ final class TwigFieldTypeMapperTest extends TestCase
         $out = $this->mapper->map(['type' => 'text', 'required' => false], 'title');
         self::assertArrayNotHasKey('required', $out);
     }
+
+    // --- Codex review round 3 -------------------------------------------
+
+    public function test_select_options_list_rejects_a_boolean_entry(): void
+    {
+        // Finding 2: `is_scalar()` let a YAML boolean through and cast it
+        // to a string (`true` -> `'1'`, `false` -> `''` -> silently
+        // dropped) instead of rejecting a type the annotation never means.
+        $this->expectException(\DomainException::class);
+        $this->mapper->map(['type' => 'select', 'options' => [true, 'expanded']], 'mode');
+    }
+
+    public function test_select_options_list_rejects_a_numeric_entry(): void
+    {
+        $this->expectException(\DomainException::class);
+        $this->mapper->map(['type' => 'select', 'options' => [2, 2.5]], 'mode');
+    }
+
+    public function test_select_options_list_rejects_duplicate_tokens(): void
+    {
+        $this->expectException(\DomainException::class);
+        $this->expectExceptionMessage("Field 'mode' has a duplicate select option 'a'");
+        $this->mapper->map(['type' => 'select', 'options' => ['a', 'a']], 'mode');
+    }
+
+    public function test_select_comma_options_rejects_duplicate_tokens(): void
+    {
+        $this->expectException(\DomainException::class);
+        $this->mapper->map(['type' => 'select', 'options' => 'a, a'], 'mode');
+    }
 }

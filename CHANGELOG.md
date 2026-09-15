@@ -37,8 +37,14 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `required: yes`) are refused by field path instead of one silently
   winning over the other or the constraint silently vanishing. A `fields:`
   annotation whose value is a scalar rather than a map is likewise refused,
-  distinct from the "explicitly no fields" bare/null `fields:` shape.
-  Closes #75.
+  distinct from the "explicitly no fields" bare/null `fields:` shape. The
+  twig fallback now only fires when `acf.json` is genuinely absent from
+  disk (`AcfJsonReader::read()`'s new `$acfJsonExists` parameter) — a real
+  acf.json with an intentionally empty field group is no longer
+  overridable by a stale twig annotation. A `select`'s `options:` list
+  entry that is a boolean or number, or two entries (list or comma-string)
+  that collide once trimmed, is refused instead of silently coercing or
+  overwriting. Closes #75.
 
 ## [0.13.0] - 2026-09-15
 

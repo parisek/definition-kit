@@ -41,9 +41,24 @@ final class AcfJsonReader
 
     /**
      * @param array<string,mixed> $acfJson
+     * @param bool $acfJsonExists Whether a real acf.json exists on disk for this
+     *                            component, as opposed to bin/fields-migrate's
+     *                            synthesised empty document for a component that
+     *                            has none. An `$acfJson['fields']` array that is
+     *                            empty is otherwise indistinguishable between the
+     *                            two cases — a genuine ACF field group with zero
+     *                            fields (rare, but real) must NOT fall back to the
+     *                            twig annotation, which would silently override
+     *                            an authoritative "this component has no
+     *                            ACF-backed fields" answer with a stale twig
+     *                            comment (Codex review round 3, finding 1).
+     *                            Defaults to `true` (today's behaviour, and every
+     *                            existing caller's) — only bin/fields-migrate
+     *                            passes `false`, and only when `acf.json` is
+     *                            genuinely absent from disk.
      * @return array<string,mixed>
      */
-    public function read(array $acfJson, string $componentSlug, ?string $twigSource = null): array
+    public function read(array $acfJson, string $componentSlug, ?string $twigSource = null, bool $acfJsonExists = true): array
     {
         $keyNameMap = [];
         $this->buildKeyNameMap((array) ($acfJson['fields'] ?? []), $keyNameMap);
@@ -120,7 +135,7 @@ final class AcfJsonReader
         // other home. When acf.json genuinely has zero fields, defer to the
         // twig annotation as the field source instead of emitting an empty map.
         $twigFields = null !== $twigSource ? $this->twigMetadataReader->readFields($twigSource) : [];
-        if ([] === (array) ($acfJson['fields'] ?? []) && [] !== $twigFields) {
+        if (!$acfJsonExists && [] === (array) ($acfJson['fields'] ?? []) && [] !== $twigFields) {
             $fields = [];
             foreach ($twigFields as $fieldName => $twigField) {
                 $fields[(string) $fieldName] = $this->twigFieldTypeMapper->map((array) $twigField, (string) $fieldName);

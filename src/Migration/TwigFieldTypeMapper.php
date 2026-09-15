@@ -225,20 +225,27 @@ final class TwigFieldTypeMapper
                 // becomes both the option's key and its label.
                 $tokens = [];
                 foreach ($rawOptions as $token) {
-                    if (!is_scalar($token)) {
+                    // Codex review round 3, finding 2: `is_scalar()` let a
+                    // YAML boolean/int/float through and cast it to string
+                    // (`true` -> `'1'`, `false` -> `''` -> dropped, `2` and
+                    // `2.5` -> `'2'`/`'2.5'`) — silent data loss the caller
+                    // could not tell apart from a real string option. Only
+                    // an actual string is accepted; anything else is a type
+                    // mismatch in the annotation, not a value to coerce.
+                    if (!is_string($token)) {
                         throw new \DomainException(sprintf(
-                            "Field '%s' has an `options:` list entry that is not a scalar (got %s) — "
+                            "Field '%s' has an `options:` list entry that is not a string (got %s) — "
                             . 'every entry must be a plain string value.',
                             $fieldName,
                             get_debug_type($token),
                         ));
                     }
-                    $token = trim((string) $token);
+                    $token = trim($token);
                     if ('' !== $token) {
                         $tokens[] = $token;
                     }
                 }
-                $out['options'] = array_combine($tokens, $tokens);
+                $out['options'] = $this->tokensToOptions($tokens, $fieldName);
             } elseif (is_string($rawOptions)) {
                 // The shorthand comma-string form (`options: a, b, c`) carries
                 // no human label, only the raw values a template compares
@@ -249,7 +256,7 @@ final class TwigFieldTypeMapper
                     array_map('trim', explode(',', $rawOptions)),
                     static fn (string $t): bool => '' !== $t,
                 ));
-                $out['options'] = array_combine($tokens, $tokens);
+                $out['options'] = $this->tokensToOptions($tokens, $fieldName);
             } else {
                 throw new \DomainException(sprintf(
                     "Field '%s' has an `options:` value that is neither a comma-separated string nor a list "
@@ -286,6 +293,33 @@ final class TwigFieldTypeMapper
         }
 
         return $out;
+    }
+
+    /**
+     * Turns a flat list of already-trimmed, non-empty string tokens into a
+     * key => label options map (key and label are the same token — see
+     * `select()`'s own comment on why). Throws when two tokens collide,
+     * rather than letting the second silently overwrite the first through
+     * `array_combine()` — a real risk once list entries can carry values
+     * that only look distinct before normalisation.
+     *
+     * @param list<string> $tokens
+     * @return array<string,string>
+     */
+    private function tokensToOptions(array $tokens, string $fieldName): array
+    {
+        $options = [];
+        foreach ($tokens as $token) {
+            if (array_key_exists($token, $options)) {
+                throw new \DomainException(sprintf(
+                    "Field '%s' has a duplicate select option '%s' after trimming.",
+                    $fieldName,
+                    $token,
+                ));
+            }
+            $options[$token] = $token;
+        }
+        return $options;
     }
 
     /**
