@@ -81,6 +81,13 @@ final class TwigOnlyMigrationEndToEndTest extends TestCase
 
     public function test_nested_repeater_of_groups_round_trips(): void
     {
+        // Codex review round 7: this test used to only migrate + validate +
+        // substring-search the YAML, without ever invoking fields-generate
+        // or structurally checking the nested shape — a regression at the
+        // migrate -> generate boundary for nested group/repeater would not
+        // have been caught. Now parses the YAML structurally and runs
+        // fields-generate too (a `utility` component, like `element`, has
+        // no CMS projection — see FieldsGenerator's kind-based skip).
         $dir = $this->makeDir('link-list');
         file_put_contents("{$dir}/link-list.twig", "{#\nname: Link List\nkind: utility\ncategory: Basic\nfields:\n\titems:\n\t\ttitle: Items\n\t\ttype: repeater\n\t\tfields:\n\t\t\tlink:\n\t\t\t\ttitle: Link\n\t\t\t\ttype: group\n\t\t\t\tfields:\n\t\t\t\t\turl:\n\t\t\t\t\t\ttitle: Url\n\t\t\t\t\t\ttype: url\n\t\t\t\t\ttitle:\n\t\t\t\t\t\ttitle: Title\n\t\t\t\t\t\ttype: text\n#}\n<div></div>\n");
 
@@ -90,11 +97,20 @@ final class TwigOnlyMigrationEndToEndTest extends TestCase
         $validateOut = $this->runCli($this->validateBin, "{$dir}/link-list.yaml");
         self::assertStringContainsString('OK', $validateOut);
 
-        $yaml = file_get_contents("{$dir}/link-list.yaml");
-        self::assertIsString($yaml);
-        self::assertStringContainsString('type: repeater', $yaml);
-        self::assertStringContainsString('type: group', $yaml);
-        self::assertStringContainsString('type: link', $yaml);
+        $parsed = \Symfony\Component\Yaml\Yaml::parseFile("{$dir}/link-list.yaml");
+        self::assertSame('repeater', $parsed['fields']['items']['type']);
+        self::assertSame('parent', $parsed['fields']['items']['role']);
+        self::assertSame('group', $parsed['fields']['items']['fields']['link']['type']);
+        self::assertSame('parent', $parsed['fields']['items']['fields']['link']['role']);
+        self::assertSame('link', $parsed['fields']['items']['fields']['link']['fields']['url']['type']);
+        self::assertSame('url', $parsed['fields']['items']['fields']['link']['fields']['url']['shape']);
+        self::assertSame('parent', $parsed['fields']['items']['fields']['link']['fields']['url']['role']);
+        self::assertSame('text', $parsed['fields']['items']['fields']['link']['fields']['title']['type']);
+
+        $generateOut = $this->runCli($this->generateBin, $dir);
+        self::assertStringContainsString('SKIP link-list', $generateOut);
+        self::assertFileDoesNotExist("{$dir}/acf.json");
+        self::assertFileDoesNotExist("{$dir}/block.json");
     }
 
     public function test_unmapped_annotation_prop_fails_the_migrate_cli_and_writes_nothing(): void

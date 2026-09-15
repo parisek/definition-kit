@@ -477,6 +477,30 @@ final class TwigFieldTypeMapper
                 $fieldName,
             ));
         }
+
+        // Codex review round 7: PHP always re-casts a numeric string array
+        // key back to an int (there is no way to force `'0'` to survive as
+        // a string key — `array_combine(['0'], [...])` still ends up
+        // int-keyed), so a `choices:`/`options:` map whose keys are the
+        // sequential integers 0, 1, 2, … from zero (e.g.
+        // `choices: {0: None, 1: One}`) is indistinguishable, at the PHP
+        // array level, from a genuine JSON *list* — exactly what
+        // `Support\ArrayJsonModel::toJsonModel()` (shared by every
+        // migration path, ACF included, not something this class can fix
+        // in isolation) uses to decide list vs. object. Left unchecked,
+        // this reaches FieldsSchemaValidator only at write time, failing
+        // with `/fields/<x>/options: must match type: object` — a message
+        // that names neither this field nor why. Caught here instead, by
+        // field name, while the cause is still obvious.
+        if (array_is_list($out['options'])) {
+            throw new \DomainException(sprintf(
+                "Field '%s' has select options keyed 0, 1, 2, … from zero (e.g. `choices: {0: ..., 1: ...}`) — "
+                . 'this is indistinguishable from a plain list once written, and the schema requires an object. '
+                . "Give at least one key a non-numeric form (e.g. prefix it: 'opt_0') to keep it a map.",
+                $fieldName,
+            ));
+        }
+
         foreach ($out['options'] as $key => $label) {
             if (!is_string($label)) {
                 throw new \DomainException(sprintf(

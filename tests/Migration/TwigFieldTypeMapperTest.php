@@ -92,6 +92,41 @@ final class TwigFieldTypeMapperTest extends TestCase
         self::assertSame(['facebook' => 'Facebook', 'instagram' => 'Instagram'], $out['options']);
     }
 
+    public function test_select_choices_keyed_sequentially_from_zero_are_refused(): void
+    {
+        // Codex review round 7: `choices: {0: None, 1: One}` parses as a
+        // PHP int-keyed array indistinguishable, once written, from a
+        // plain JSON list — the schema requires `options` to be an object.
+        // PHP cannot be made to keep '0' as a string array key (it always
+        // re-casts to int), so this is refused loudly by field name instead
+        // of failing later at YAML-write time with an unhelpful message
+        // naming neither the field nor the cause.
+        $this->expectException(\DomainException::class);
+        $this->expectExceptionMessage(
+            "Field 'mode' has select options keyed 0, 1, 2, … from zero",
+        );
+        $this->mapper->map(['type' => 'select', 'choices' => [0 => 'None', 1 => 'One']], 'mode');
+    }
+
+    public function test_select_choices_keyed_from_one_are_accepted(): void
+    {
+        // Not sequential-from-zero, so no list/object ambiguity — this key
+        // shape round-trips through Yaml::dump as a genuine map.
+        $out = $this->mapper->map(['type' => 'select', 'choices' => [1 => 'One', 2 => 'Two']], 'mode');
+        self::assertSame([1 => 'One', 2 => 'Two'], $out['options']);
+    }
+
+    public function test_select_choices_with_a_non_numeric_key_alongside_zero_and_one_are_accepted(): void
+    {
+        // A mixed key set is no longer "sequential integers from zero" as a
+        // whole, so PHP keeps it as a genuine associative (non-list) array.
+        $out = $this->mapper->map([
+            'type' => 'select',
+            'choices' => [0 => 'None', 1 => 'One', 'other' => 'Other'],
+        ], 'mode');
+        self::assertSame(['0' => 'None', 1 => 'One', 'other' => 'Other'], $out['options']);
+    }
+
     public function test_group_recurses_into_nested_fields(): void
     {
         $out = $this->mapper->map([

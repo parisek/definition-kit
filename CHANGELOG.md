@@ -68,7 +68,12 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `repeater`) instead of falling straight back to `--assume-role`, matching
   the schema's "a descendant inherits its ancestor's role" contract; this
   also means an explicit container `role:` lets its un-annotated children
-  through even without `--assume-role` at all. Closes #75.
+  through even without `--assume-role` at all. A `select`'s `choices:`/
+  `options:` keyed with the sequential integers `0, 1, 2, …` from zero
+  (e.g. `choices: {0: None, 1: One}`) is refused by field name — PHP
+  cannot keep such a key as a string, so it is otherwise indistinguishable
+  from a plain list once written, and used to fail later at YAML-write
+  time with a message naming neither the field nor the cause. Closes #75.
 
 ## [0.13.0] - 2026-09-15
 
