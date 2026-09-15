@@ -27,7 +27,7 @@ Four executables land in `vendor/bin/`:
 | Command | Does |
 | --- | --- |
 | `fields-migrate` | Bootstrap: `acf.json` (+ sibling `block.json`, + `<name>.twig` front-comment for metadata) → authored `<name>.yaml`. |
-| `fields-generate` | `<name>.yaml` → `acf.json` + `block.json` projection. |
+| `fields-generate` | `<name>.yaml` → `acf.json` + `block.json` projection, for `kind: block` and for a definition with no `kind`. |
 | `fields-validate` | Validate `<name>.yaml` against the bundled JSON Schema (`page.schema.json` for a page, `doc.schema.json` for a doc, see below). |
 | `fields-lint` | Drift-lint: fail when the committed projection differs from `generate(migrate(source))`. |
 
@@ -41,6 +41,10 @@ vendor/bin/fields-migrate path/to/component/service-feature
 vendor/bin/fields-generate --root=path/to/components
 vendor/bin/fields-lint --root=path/to/components
 ```
+
+`fields-generate` writes projections only for `kind: block`. A component with another `kind` (`section`, `element`, `part`, `utility`) registers no Gutenberg block, so it prints `SKIP <name>: kind <kind> has no CMS projection` and gets neither file. The generator never deletes or rewrites an `acf.json` or `block.json` that is already on disk. A definition with no `kind` still gets both files, because the `kind` backfill may not have reached it yet. `--dry-run` writes nothing and reports the same lines.
+
+The last line reads `N component(s), N failed`, and ends in `, N skipped` when a component was skipped. A page or doc is not in either count. The exit code is 1 when anything failed, and 0 when the rest only skipped.
 
 ## Pages — `page/<id>/<id>.yaml`
 
@@ -94,7 +98,7 @@ Output, one line per component:
 - `FAIL` — an error, such as an invalid definition or a missing `acf.json`.
 - `SKIP` — nothing to compare: no `<name>.yaml` yet, a page or doc, or a component whose `kind` is not `block` and which has no `acf.json` or `block.json`. Only `kind: block` needs a projection. A component with no `kind` is not skipped.
 
-A non-block component with a committed `acf.json` is still compared. A non-block component with a `block.json` still fails, because that file is stale.
+A non-block component with a committed `acf.json` is still compared. When it drifts, the fix line tells you to delete the file or change the `kind`, because `fields-generate` does not rewrite it. A non-block component with a `block.json` still fails, because that file is stale.
 
 The last line reads `N component(s), N failed`. When a component was skipped it ends in `, N skipped`. A page or doc is not in either count. The exit code is 1 when anything failed, and 0 when the rest only skipped.
 

@@ -20,7 +20,7 @@ foreach ([__DIR__ . '/../vendor/autoload.php', __DIR__ . '/../../../autoload.php
 }
 
 /**
- * @return array{ok: bool, component: string, out?: string, error?: string, skipped?: string}
+ * @return array{ok: bool, component: string, out?: string, error?: string, skipped?: string, entry?: true}
  */
 function fields_generate_one(string $componentDir, bool $dryRun, KeyStyle $keyStyle): array
 {
@@ -29,7 +29,7 @@ function fields_generate_one(string $componentDir, bool $dryRun, KeyStyle $keySt
     $yamlPath = "{$componentDir}/{$componentName}.yaml";
 
     if (null !== ($entryType = EntryDefinition::typeOfDirectory($componentDir))) {
-        return ['ok' => true, 'component' => $componentName, 'skipped' => EntryDefinition::skipReason($entryType)];
+        return ['ok' => true, 'component' => $componentName, 'entry' => true, 'skipped' => EntryDefinition::skipReason($entryType)];
     }
 
     if (!is_file($yamlPath)) {
@@ -48,6 +48,32 @@ function fields_generate_one(string $componentDir, bool $dryRun, KeyStyle $keySt
     $tree = Yaml::parseFile($yamlPath);
     if (!is_array($tree)) {
         return ['ok' => false, 'component' => $componentName, 'error' => 'malformed YAML'];
+    }
+
+    // Only `kind: block` has CMS projections (ADR 0012 / KindLinter). That
+    // holds for BOTH files. A `section`/`element`/`part`/`utility` component
+    // registers no block, yet RootFieldGroupBuilder always locates the field
+    // group at `block == acf/<slug>` — so its acf.json would be an orphan group
+    // attached to a block that does not exist, and its block.json the exact
+    // contradiction KindLinter reports as an error. Such a component is
+    // reported as SKIP with the same wording fields-lint uses (#69/#70), so
+    // generate and lint agree on whether it owns a projection (#72).
+    //
+    // STOP WRITING, never delete, never refresh: an already-committed acf.json
+    // or block.json stays byte-identical (Rule 4, issue #13) until a human
+    // removes it or changes the `kind`. fields-lint still compares a committed
+    // acf.json, so a leftover is never silently trusted.
+    //
+    // The gate deliberately triggers only on a PRESENT, non-block `kind`. A
+    // definition with no `kind` at all keeps the previous behaviour, because
+    // absence means "the backfill has not reached this file", not "not a
+    // block" — KindLinter warns rather than errors there for the same reason,
+    // and inferring from silence would strip the projections from every
+    // un-migrated component in a downstream repo. The `!is_string()` branch is
+    // unreachable under the closed schema enum and kept for that intent (#50).
+    $kind = $tree['kind'] ?? null;
+    if (is_string($kind) && 'block' !== $kind) {
+        return ['ok' => true, 'component' => $componentName, 'skipped' => "kind {$kind} has no CMS projection"];
     }
 
     // Preserve the existing acf.json's `modified` timestamp so regeneration is
@@ -78,29 +104,11 @@ function fields_generate_one(string $componentDir, bool $dryRun, KeyStyle $keySt
         ? json_decode(file_get_contents($existingBlockJsonPath), true)
         : null;
 
-    // Only `kind: block` has a block.json (ADR 0012 / KindLinter). Writing one
-    // for a `section`/`element`/`part`/`utility` component manufactures exactly
-    // the contradiction KindLinter reports as an error — "has a block.json but
-    // declares `kind: %s`" — so generation must not create it in the first
-    // place. Same shape as Rule 4 for acf.json below: STOP WRITING, never
-    // delete; an already-committed file stays until a human/CI removes it.
-    //
-    // The gate deliberately triggers only on a PRESENT, non-block `kind`. A
-    // definition with no `kind` at all keeps the previous behaviour, because
-    // absence means "the backfill has not reached this file", not "not a
-    // block" — KindLinter warns rather than errors there for the same reason,
-    // and inferring from silence would strip block.json from every
-    // un-migrated component in a downstream repo.
-    $kind = $tree['kind'] ?? null;
-    $blockWritten = !is_string($kind) || 'block' === $kind;
-
-    $block = $blockWritten
-        ? (new BlockJsonGenerator())->generate(
-            $tree,
-            $componentName,
-            is_array($existingBlockJson) ? $existingBlockJson : null,
-        )
-        : null;
+    $block = (new BlockJsonGenerator())->generate(
+        $tree,
+        $componentName,
+        is_array($existingBlockJson) ? $existingBlockJson : null,
+    );
 
     $acfOutPath = $dryRun ? tempnam(sys_get_temp_dir(), 'fields-generate-dry-run-acf-') : "{$componentDir}/acf.json";
     $blockOutPath = $dryRun ? tempnam(sys_get_temp_dir(), 'fields-generate-dry-run-block-') : $existingBlockJsonPath;
@@ -124,18 +132,16 @@ function fields_generate_one(string $componentDir, bool $dryRun, KeyStyle $keySt
         }
     }
 
-    if (null !== $block) {
-        try {
-            (new BlockJsonWriter())->write($block, $blockOutPath);
-        } catch (\Throwable $e) {
-            if ($dryRun) {
-                if ($acfWritten) {
-                    @unlink($acfOutPath);
-                }
-                @unlink($blockOutPath);
+    try {
+        (new BlockJsonWriter())->write($block, $blockOutPath);
+    } catch (\Throwable $e) {
+        if ($dryRun) {
+            if ($acfWritten) {
+                @unlink($acfOutPath);
             }
-            return ['ok' => false, 'component' => $componentName, 'error' => $e->getMessage()];
+            @unlink($blockOutPath);
         }
+        return ['ok' => false, 'component' => $componentName, 'error' => $e->getMessage()];
     }
 
     if ($dryRun) {
@@ -208,8 +214,17 @@ if (null !== $root) {
 }
 
 $failures = 0;
+$skipped = 0;
+$entries = 0;
 foreach ($results as $result) {
     if ($result['ok']) {
+        // A page or doc is not a component: it is left out of the
+        // "component(s)" total and the skip count, as in fields-lint.
+        if (isset($result['entry'])) {
+            $entries++;
+        } elseif (isset($result['skipped'])) {
+            $skipped++;
+        }
         echo isset($result['skipped'])
             ? "SKIP {$result['component']}: {$result['skipped']}\n"
             : "OK   {$result['component']}" . (isset($result['out']) ? " -> {$result['out']}" : '') . "\n";
@@ -218,6 +233,14 @@ foreach ($results as $result) {
     $failures++;
     echo "FAIL {$result['component']}: {$result['error']}\n";
 }
-echo sprintf("%d component(s), %d failed\n", count($results), $failures);
+// Same shape as fields-lint (#70): the skip count is appended, never
+// inserted, and omitted when zero, so a run with nothing skipped prints the
+// line it always printed.
+echo sprintf(
+    "%d component(s), %d failed%s\n",
+    count($results) - $entries,
+    $failures,
+    $skipped > 0 ? sprintf(', %d skipped', $skipped) : '',
+);
 
 exit($failures > 0 ? 1 : 0);
