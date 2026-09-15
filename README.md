@@ -87,6 +87,17 @@ Add a composer script and a CI step so a hand-edit to a generated `acf.json`/`bl
 }
 ```
 
+Output, one line per component:
+
+- `OK` — the projection matches the definition.
+- `DRIFT` — the projection differs; the lines under it show where.
+- `FAIL` — an error, such as an invalid definition or a missing `acf.json`.
+- `SKIP` — nothing to compare: no `<name>.yaml` yet, a page or doc, or a component whose `kind` is not `block` and which has no `acf.json` or `block.json`. Only `kind: block` needs a projection. A component with no `kind` is not skipped.
+
+A non-block component with a committed `acf.json` is still compared. A non-block component with a `block.json` still fails, because that file is stale.
+
+The last line reads `N component(s), N failed`. When a component was skipped it ends in `, N skipped`. A page or doc is not in either count. The exit code is 1 when anything failed, and 0 when the rest only skipped.
+
 ## The definition, briefly
 
 `<name>.yaml` is an **authored semantic layer**, not a verbatim ACF mirror:

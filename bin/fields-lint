@@ -7,8 +7,10 @@ use Parisek\DefinitionKit\Baseline\FrameworkProps;
 use Parisek\DefinitionKit\Contract\ContractLinter;
 use Parisek\DefinitionKit\Contract\ContractResult;
 use Parisek\DefinitionKit\Lint\DriftLinter;
+use Parisek\DefinitionKit\Schema\FieldsSchemaValidator;
 use Parisek\DefinitionKit\Support\KeyStyle;
 use Parisek\DefinitionKit\Support\EntryDefinition;
+use Symfony\Component\Yaml\Yaml;
 
 foreach ([__DIR__ . '/../vendor/autoload.php', __DIR__ . '/../../../autoload.php'] as $autoload) {
     if (is_file($autoload)) {
@@ -17,7 +19,7 @@ foreach ([__DIR__ . '/../vendor/autoload.php', __DIR__ . '/../../../autoload.php
     }
 }
 
-/** @return array{status: 'ok'|'drift'|'skip'|'fail', component: string, acfDrift?: list<string>, blockDrift?: list<string>, reason?: string} */
+/** @return array{status: 'ok'|'drift'|'skip'|'fail', component: string, entry?: true, acfDrift?: list<string>, blockDrift?: list<string>, reason?: string} */
 function fields_lint_one(string $componentDir, KeyStyle $keyStyle): array
 {
     $componentDir = rtrim($componentDir, '/');
@@ -25,11 +27,29 @@ function fields_lint_one(string $componentDir, KeyStyle $keyStyle): array
     $yamlPath = "{$componentDir}/{$componentName}.yaml";
 
     if (null !== ($entryType = EntryDefinition::typeOfDirectory($componentDir))) {
-        return ['status' => 'skip', 'component' => $componentName, 'reason' => EntryDefinition::skipReason($entryType)];
+        return ['status' => 'skip', 'component' => $componentName, 'entry' => true, 'reason' => EntryDefinition::skipReason($entryType)];
     }
 
     if (!is_file($yamlPath)) {
         return ['status' => 'skip', 'component' => $componentName, 'reason' => "no {$componentName}.yaml yet"];
+    }
+
+    // Only `kind: block` has CMS projections (ADR 0012). A present, non-block
+    // `kind` with nothing projected on disk is the correct end state, not a
+    // missing acf.json. Three cases still go to the drift linter:
+    //   - an invalid definition, so the schema error is not hidden by a SKIP;
+    //   - a committed acf.json, because fields-generate writes one for a
+    //     non-block kind (#50) and it can drift like any other;
+    //   - a committed block.json, which the drift linter reports as stale.
+    // A definition with no `kind` is not skipped: absence means the backfill
+    // has not reached the file, not "not a block".
+    if (!is_file("{$componentDir}/acf.json") && !is_file("{$componentDir}/block.json")
+        && (new FieldsSchemaValidator())->validateFile($yamlPath)->valid) {
+        $tree = Yaml::parseFile($yamlPath);
+        $kind = is_array($tree) ? ($tree['kind'] ?? null) : null;
+        if (is_string($kind) && 'block' !== $kind) {
+            return ['status' => 'skip', 'component' => $componentName, 'reason' => "kind {$kind} has no CMS projection"];
+        }
     }
 
     $result = (new DriftLinter(keyStyle: $keyStyle))->lint($componentDir);
@@ -124,12 +144,18 @@ foreach ($dirs as $dir) {
 }
 
 $failures = 0;
+$skipped = 0;
 foreach ($results as $result) {
     switch ($result['status']) {
         case 'ok':
             echo "OK   {$result['component']}\n";
             break;
         case 'skip':
+            // A page or doc is not in the "component(s)" total, so it is not
+            // in the skip count either — and --contract-only stays unchanged.
+            if (!isset($result['entry'])) {
+                $skipped++;
+            }
             echo "SKIP {$result['component']}: {$result['reason']}\n";
             break;
         case 'drift':
@@ -226,6 +252,14 @@ echo sprintf(
     $unanalysed,
 );
 
-echo sprintf("%d component(s), %d failed\n", count($contractResults), $failures);
+// The skip count is appended, never inserted: a consumer matching
+// "N component(s), N failed" keeps matching. It is omitted when zero, so a run
+// with nothing skipped prints exactly the line it always printed.
+echo sprintf(
+    "%d component(s), %d failed%s\n",
+    count($contractResults),
+    $failures,
+    $skipped > 0 ? sprintf(', %d skipped', $skipped) : '',
+);
 
 exit($failures > 0 ? 1 : 0);
