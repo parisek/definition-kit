@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Parisek\DefinitionKit\Contract;
 
-use Symfony\Component\Yaml\Yaml;
+use Parisek\DefinitionKit\Support\StructuralType;
 
 /**
  * Resolves `of: component:<slug>[#<field>]` — a prop whose shape is another
@@ -113,7 +113,7 @@ final class ComponentShapeResolver
         }
 
         /** @var array<string,mixed> $definition */
-        $definition = Yaml::parseFile($path) ?? [];
+        $definition = StructuralType::parseFile($path) ?? [];
         $fields = isset($definition['fields']) && is_array($definition['fields']) ? $definition['fields'] : [];
 
         if (null === $fieldPath) {

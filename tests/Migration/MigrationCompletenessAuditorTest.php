@@ -118,7 +118,7 @@ final class MigrationCompletenessAuditorTest extends TestCase
                 ['key' => 'field_demo_grp_title', 'name' => 'title', 'label' => 'Title', 'type' => 'text'],
             ],
         ]];
-        $def = ['grp' => ['type' => 'group', 'label' => 'Grp', 'fields' => [
+        $def = ['grp' => ['type' => 'object', 'label' => 'Grp', 'fields' => [
             'title' => ['type' => 'text', 'label' => 'Title'],
         ]]];
 
@@ -136,12 +136,12 @@ final class MigrationCompletenessAuditorTest extends TestCase
                 'toolbar' => 'full',
             ]],
         ]];
-        $defOk = ['grp' => ['type' => 'group', 'label' => 'Grp', 'fields' => [
+        $defOk = ['grp' => ['type' => 'object', 'label' => 'Grp', 'fields' => [
             'body' => ['type' => 'richtext', 'label' => 'Body', 'wp' => ['toolbar' => 'full']],
         ]]];
         self::assertSame([], $this->auditor->audit($acf, $defOk));
 
-        $defLossy = ['grp' => ['type' => 'group', 'label' => 'Grp', 'fields' => [
+        $defLossy = ['grp' => ['type' => 'object', 'label' => 'Grp', 'fields' => [
             'body' => ['type' => 'richtext', 'label' => 'Body'],
         ]]];
         self::assertNotEmpty($this->auditor->audit($acf, $defLossy));

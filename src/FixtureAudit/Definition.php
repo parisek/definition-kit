@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Parisek\DefinitionKit\FixtureAudit;
 
-use Symfony\Component\Yaml\Yaml;
+use Parisek\DefinitionKit\Support\StructuralType;
 
 /**
  * Flattens a component's `<name>.yaml` `fields:` block into a dot-path => role
@@ -57,7 +57,7 @@ final class Definition
         }
 
         /** @var array<string, mixed> $parsed */
-        $parsed = Yaml::parseFile($yamlPath) ?? [];
+        $parsed = StructuralType::parseFile($yamlPath) ?? [];
         $fields = isset($parsed['fields']) && is_array($parsed['fields']) ? $parsed['fields'] : [];
 
         $out = [];

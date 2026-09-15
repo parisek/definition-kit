@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Parisek\DefinitionKit\Contract;
 
 use Parisek\DefinitionKit\Baseline\FrameworkProps;
-use Symfony\Component\Yaml\Yaml;
+use Parisek\DefinitionKit\Support\StructuralType;
 
 /**
  * Compares what a component's twig reads against what its definition declares
@@ -104,7 +104,7 @@ final class ContractLinter
         }
 
         /** @var array<string,mixed> $definition */
-        $definition = Yaml::parseFile($yamlPath) ?? [];
+        $definition = StructuralType::parseFile($yamlPath) ?? [];
         $fields = isset($definition['fields']) && is_array($definition['fields']) ? $definition['fields'] : [];
 
         // Every `of:` target is resolved here, before anything is read.
@@ -243,7 +243,7 @@ final class ContractLinter
     private function fieldsOf(string $yamlPath): array
     {
         /** @var array<string,mixed> $definition */
-        $definition = Yaml::parseFile($yamlPath) ?? [];
+        $definition = StructuralType::parseFile($yamlPath) ?? [];
 
         return isset($definition['fields']) && is_array($definition['fields']) ? $definition['fields'] : [];
     }

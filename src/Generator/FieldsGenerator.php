@@ -6,6 +6,7 @@ namespace Parisek\DefinitionKit\Generator;
 
 use Parisek\DefinitionKit\Baseline\TypeDefaults;
 use Parisek\DefinitionKit\Support\KeyStyle;
+use Parisek\DefinitionKit\Support\StructuralType;
 
 /**
  * The generator orchestrator: baseline ⊕ constraint sentinels ⊕
@@ -208,6 +209,10 @@ final class FieldsGenerator
      */
     public function generate(array $definitionTree, string $componentSlug, int $modifiedAt): ?array
     {
+        // Resolve `group`/`repeater` aliases to `object`/`list` for a tree
+        // built in memory; a tree read through StructuralType::parseFile()
+        // is already canonical and passes through unchanged (#79).
+        $definitionTree = StructuralType::normalize($definitionTree);
         $fields = (array) ($definitionTree['fields'] ?? []);
 
         // `role:`/`acf:` two-axis model (issue #13) — strip every

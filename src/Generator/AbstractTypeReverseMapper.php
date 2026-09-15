@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Parisek\DefinitionKit\Generator;
 
+use Parisek\DefinitionKit\Support\StructuralType;
+
 /**
  * Inverse of Migration\AbstractTypeMapper::map() — picks the concrete ACF
  * field type from a semantic field's abstract `type` + modifier keys
@@ -34,8 +36,8 @@ final class AbstractTypeReverseMapper
             'link' => $this->link($semanticField),
             'reference' => $this->reference($semanticField, $wpAcfType),
             'date' => ['acfType' => 'date_picker', 'extra' => []],
-            'group' => ['acfType' => 'group', 'extra' => []],
-            'repeater' => $this->repeater($semanticField),
+            StructuralType::OBJECT => ['acfType' => 'group', 'extra' => []],
+            StructuralType::LIST => $this->repeater($semanticField),
             'flexible_content' => $this->flexibleContent($semanticField),
             default => throw new \DomainException(sprintf(
                 "Unsupported abstract type '%s' — add a case to AbstractTypeReverseMapper::reverse().",

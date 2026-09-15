@@ -751,4 +751,49 @@ final class FieldsSchemaValidatorTest extends TestCase
             self::assertTrue($result->valid, "{$name}: " . print_r($result->errors, true));
         }
     }
+
+    /** @return array<string, array{string, string}> */
+    public static function structuralTypePairs(): array
+    {
+        return ['canonical' => ['object', 'list'], 'aliases' => ['group', 'repeater']];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('structuralTypePairs')]
+    public function test_object_list_and_their_aliases_accept_identical_keys(string $object, string $list): void
+    {
+        $tree = Yaml::parse(<<<YAML
+        name: X
+        category: Content
+        fields:
+          heading:
+            type: {$object}
+            label: Heading
+            fields:
+              title: { type: text, label: Title }
+          rows:
+            type: {$list}
+            label: Rows
+            min: 1
+            max: 3
+            add_label: Add
+            fields:
+              t: { type: text, label: T }
+          attrs:
+            type: {$object}
+            role: parent
+            open: true
+        YAML, Yaml::PARSE_OBJECT_FOR_MAP);
+
+        $result = (new FieldsSchemaValidator())->validateData($tree);
+        self::assertTrue($result->valid, print_r($result->errors, true));
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('structuralTypePairs')]
+    public function test_object_or_list_without_fields_is_rejected(string $object, string $list): void
+    {
+        foreach ([$object, $list] as $type) {
+            $tree = Yaml::parse("name: X\ncategory: Content\nfields:\n  items:\n    type: {$type}\n    label: Items\n", Yaml::PARSE_OBJECT_FOR_MAP);
+            self::assertFalse((new FieldsSchemaValidator())->validateData($tree)->valid, "{$type} without fields must be invalid");
+        }
+    }
 }

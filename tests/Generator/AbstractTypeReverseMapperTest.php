@@ -203,19 +203,19 @@ final class AbstractTypeReverseMapperTest extends TestCase
 
     public function test_group_reverses_to_group(): void
     {
-        self::assertSame('group', $this->mapper->reverse(['type' => 'group', 'label' => 'T'])['acfType']);
+        self::assertSame('group', $this->mapper->reverse(['type' => 'object', 'label' => 'T'])['acfType']);
     }
 
     public function test_repeater_rebuilds_button_label_from_add_label(): void
     {
-        $result = $this->mapper->reverse(['type' => 'repeater', 'label' => 'T', 'add_label' => 'Přidat řádek']);
+        $result = $this->mapper->reverse(['type' => 'list', 'label' => 'T', 'add_label' => 'Přidat řádek']);
         self::assertSame('repeater', $result['acfType']);
         self::assertSame('Přidat řádek', $result['extra']['button_label']);
     }
 
     public function test_repeater_omits_button_label_extra_when_add_label_absent(): void
     {
-        $result = $this->mapper->reverse(['type' => 'repeater', 'label' => 'T']);
+        $result = $this->mapper->reverse(['type' => 'list', 'label' => 'T']);
         self::assertArrayNotHasKey('button_label', $result['extra']);
     }
 
