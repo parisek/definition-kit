@@ -7,11 +7,12 @@ namespace Parisek\DefinitionKit\Migration;
 /**
  * Translates ONE field from the twig `fields:` annotation (tailwind-base's
  * `update-fields` skill vocabulary — `title`/`type`/`required`/
- * `description`/`options`/`choices`/`fields`) into the abstract shape
- * `component.fields.schema.json` expects. Used only for a component with no
- * acf.json: there, the twig annotation is the sole field-level source, so
- * losing it during migration (ADR 0007 retires the front-comment once a
- * component has a YAML) discards documentation with no other home.
+ * `description`/`placeholder`/`options`/`choices`/`fields`) into the
+ * abstract shape `component.fields.schema.json` expects. Used only for a
+ * component with no acf.json: there, the twig annotation is the sole
+ * field-level source, so losing it during migration (ADR 0007 retires the
+ * front-comment once a component has a YAML) discards documentation with no
+ * other home.
  *
  * Every field this reader can attribute to the calling template rather than
  * to the CMS gets `role: parent` (issue #14's "source: parent" axis) — a
@@ -21,6 +22,14 @@ namespace Parisek\DefinitionKit\Migration;
  * `type`/`label` for, but they are emitted anyway wherever the twig
  * annotation states them — dropping accurate type information just because
  * the schema does not demand it would defeat the point of this migration.
+ *
+ * Every raw prop on a twig field is tracked as consumed or not (mirroring
+ * AbstractTypeMapper's own `consumed` contract for ACF fields, per a
+ * `codex-cli` review of PR #76): a prop with no semantic home in the
+ * abstract schema (e.g. a typo, or a genuinely unmapped annotation key) is
+ * never silently dropped — `map()` throws, naming the field's full dotted
+ * path and the leftover prop names, so the author fixes the annotation (or
+ * migrates the field by hand) instead of losing it with no diagnostic.
  *
  * Twig type -> abstract type table (see the accompanying pull request for the
  * full rationale of each row):
@@ -40,8 +49,9 @@ namespace Parisek\DefinitionKit\Migration;
  *   boolean     -> boolean
  *   true_false  -> boolean (wp.acf_type: true_false — ACF's own type name;
  *                  `boolean` is the majority spelling in the observed corpus)
- *   select      -> select (options: comma-string -> {token: token} map,
- *                  or an already-keyed `choices:` map used verbatim)
+ *   select      -> select (options: comma-string -> {token: token} map, or an
+ *                  already-keyed `choices:` map used verbatim; missing/empty
+ *                  options, or a non-string label, throws — see `select()`)
  *   image       -> media (kind: image)
  *   file        -> media (kind: file)
  *   gallery     -> media (kind: gallery, multiple: true)
@@ -71,6 +81,9 @@ namespace Parisek\DefinitionKit\Migration;
  */
 final class TwigFieldTypeMapper
 {
+    /** Props every twig field annotation may carry, regardless of type. */
+    private const BASE_PROPS = ['type', 'title', 'description', 'placeholder', 'required'];
+
     /**
      * @param array<string,mixed> $twigField
      * @return array<string,mixed>
@@ -79,27 +92,27 @@ final class TwigFieldTypeMapper
     {
         $twigType = (string) ($twigField['type'] ?? '');
 
-        $shape = match ($twigType) {
-            'text' => ['type' => 'text'],
-            'textarea' => ['type' => 'text', 'multiline' => true],
-            'wysiwyg' => ['type' => 'richtext'],
-            'html' => ['type' => 'richtext', 'wp' => ['twig_type' => 'html']],
-            'url' => ['type' => 'link', 'shape' => 'url'],
-            'link' => ['type' => 'link', 'shape' => 'link'],
-            'email' => ['type' => 'text', 'wp' => ['acf_type' => 'email']],
-            'phone' => ['type' => 'text', 'wp' => ['acf_type' => 'phone']],
-            'number' => ['type' => 'number'],
-            'boolean' => ['type' => 'boolean'],
-            'true_false' => ['type' => 'boolean', 'wp' => ['acf_type' => 'true_false']],
-            'select' => $this->select($twigField),
-            'image' => ['type' => 'media', 'kind' => 'image'],
-            'file' => ['type' => 'media', 'kind' => 'file'],
-            'gallery' => ['type' => 'media', 'kind' => 'gallery', 'multiple' => true],
-            'video' => ['type' => 'media', 'kind' => 'file', 'wp' => ['twig_type' => 'video']],
-            'date' => ['type' => 'date'],
-            'post_object' => ['type' => 'reference'],
-            'group' => $this->container('group', $twigField, $fieldName),
-            'repeater' => $this->container('repeater', $twigField, $fieldName),
+        [$shape, $typeConsumed] = match ($twigType) {
+            'text' => [['type' => 'text'], []],
+            'textarea' => [['type' => 'text', 'multiline' => true], []],
+            'wysiwyg' => [['type' => 'richtext'], []],
+            'html' => [['type' => 'richtext', 'wp' => ['twig_type' => 'html']], []],
+            'url' => [['type' => 'link', 'shape' => 'url'], []],
+            'link' => [['type' => 'link', 'shape' => 'link'], []],
+            'email' => [['type' => 'text', 'wp' => ['acf_type' => 'email']], []],
+            'phone' => [['type' => 'text', 'wp' => ['acf_type' => 'phone']], []],
+            'number' => [['type' => 'number'], []],
+            'boolean' => [['type' => 'boolean'], []],
+            'true_false' => [['type' => 'boolean', 'wp' => ['acf_type' => 'true_false']], []],
+            'select' => [$this->select($twigField, $fieldName), ['options', 'choices']],
+            'image' => [['type' => 'media', 'kind' => 'image'], []],
+            'file' => [['type' => 'media', 'kind' => 'file'], []],
+            'gallery' => [['type' => 'media', 'kind' => 'gallery', 'multiple' => true], []],
+            'video' => [['type' => 'media', 'kind' => 'file', 'wp' => ['twig_type' => 'video']], []],
+            'date' => [['type' => 'date'], []],
+            'post_object' => [['type' => 'reference'], []],
+            'group' => [$this->container('group', $twigField, $fieldName), ['fields']],
+            'repeater' => [$this->container('repeater', $twigField, $fieldName), ['fields']],
             'array' => throw new \DomainException(sprintf(
                 "Field '%s' has twig type 'array', which is ambiguous between a single nested object and a list — "
                 . "re-annotate it as 'group' (one nested object) or 'repeater' (a list) before migrating.",
@@ -121,6 +134,9 @@ final class TwigFieldTypeMapper
         if ('' !== (string) ($twigField['description'] ?? '')) {
             $out['description'] = (string) $twigField['description'];
         }
+        if ('' !== (string) ($twigField['placeholder'] ?? '')) {
+            $out['placeholder'] = (string) $twigField['placeholder'];
+        }
         $required = $twigField['required'] ?? null;
         if (true === $required || 1 === $required || '1' === $required) {
             $out['required'] = true;
@@ -130,6 +146,22 @@ final class TwigFieldTypeMapper
         // the calling template — see the class doc header.
         $out['role'] = 'parent';
 
+        // A raw twig annotation prop with no semantic home above is never
+        // silently dropped — see the class doc header. `required` is
+        // consumed regardless of its value (an unrecognised value, e.g.
+        // `required: yes`, still occupied the slot; it simply doesn't
+        // become `true`).
+        $consumed = [...self::BASE_PROPS, ...$typeConsumed];
+        $leftover = array_diff(array_keys($twigField), $consumed);
+        if ([] !== $leftover) {
+            throw new \DomainException(sprintf(
+                "Field '%s' has twig annotation prop(s) with no mapping to the abstract schema: %s. "
+                . 'Add a mapping to TwigFieldTypeMapper::map(), or remove the prop from the annotation.',
+                $fieldName,
+                implode(', ', array_map(static fn (int|string $p): string => "'{$p}'", $leftover)),
+            ));
+        }
+
         return $out;
     }
 
@@ -137,7 +169,7 @@ final class TwigFieldTypeMapper
      * @param array<string,mixed> $twigField
      * @return array<string,mixed>
      */
-    private function select(array $twigField): array
+    private function select(array $twigField, string $fieldName): array
     {
         $out = ['type' => 'select'];
 
@@ -155,6 +187,31 @@ final class TwigFieldTypeMapper
                 static fn (string $t): bool => '' !== $t,
             ));
             $out['options'] = array_combine($tokens, $tokens);
+        }
+
+        // The schema requires a non-empty `options` map with string labels
+        // for every `select` — an annotation missing `options`/`choices`
+        // entirely, or carrying an empty one, would otherwise migrate to
+        // schema-invalid YAML with no diagnostic until `fields-validate`
+        // runs (or later, `fields-generate`). Fail here, where the field's
+        // own name is still in scope.
+        if (empty($out['options'])) {
+            throw new \DomainException(sprintf(
+                "Field '%s' is a twig 'select' with no (or empty) `options:`/`choices:` — "
+                . 'the schema requires at least one option.',
+                $fieldName,
+            ));
+        }
+        foreach ($out['options'] as $key => $label) {
+            if (!is_string($label)) {
+                throw new \DomainException(sprintf(
+                    "Field '%s' has a non-string option label for choice '%s' (%s) — "
+                    . 'the schema requires every option value to be a string.',
+                    $fieldName,
+                    (string) $key,
+                    get_debug_type($label),
+                ));
+            }
         }
 
         return $out;

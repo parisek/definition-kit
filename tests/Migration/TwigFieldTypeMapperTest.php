@@ -153,4 +153,87 @@ final class TwigFieldTypeMapperTest extends TestCase
         $this->expectExceptionMessageMatches('/wpforms/');
         $this->mapper->map(['type' => 'wpforms'], 'form');
     }
+
+    // --- Codex review round 1, finding 1: unrecognised props must never be
+    // silently dropped -------------------------------------------------
+
+    public function test_placeholder_is_kept(): void
+    {
+        $out = $this->mapper->map(['type' => 'text', 'placeholder' => 'you@example.com'], 'email');
+        self::assertSame('you@example.com', $out['placeholder']);
+    }
+
+    public function test_unrecognised_prop_throws_naming_the_field_and_the_prop(): void
+    {
+        $this->expectException(\DomainException::class);
+        $this->expectExceptionMessage(
+            "Field 'search' has twig annotation prop(s) with no mapping to the abstract schema: 'cms_type'. "
+            . 'Add a mapping to TwigFieldTypeMapper::map(), or remove the prop from the annotation.',
+        );
+        $this->mapper->map(['type' => 'text', 'title' => 'Search', 'cms_type' => 'string'], 'search');
+    }
+
+    public function test_multiple_unrecognised_props_are_all_named(): void
+    {
+        $this->expectException(\DomainException::class);
+        $this->expectExceptionMessage(
+            "Field 'search' has twig annotation prop(s) with no mapping to the abstract schema: 'foo', 'bar'.",
+        );
+        $this->mapper->map(['type' => 'text', 'foo' => '1', 'bar' => '2'], 'search');
+    }
+
+    public function test_unrecognised_prop_on_a_nested_field_names_the_full_path(): void
+    {
+        $this->expectException(\DomainException::class);
+        $this->expectExceptionMessage("Field 'heading.title' has twig annotation prop(s)");
+        $this->mapper->map([
+            'type' => 'group',
+            'fields' => ['title' => ['type' => 'text', 'unmapped' => 'x']],
+        ], 'heading');
+    }
+
+    // --- Codex review round 1, finding 2: `select` must validate options
+    // locally rather than emit schema-invalid YAML ----------------------
+
+    public function test_select_with_no_options_or_choices_throws(): void
+    {
+        $this->expectException(\DomainException::class);
+        $this->expectExceptionMessage(
+            "Field 'mode' is a twig 'select' with no (or empty) `options:`/`choices:` — "
+            . 'the schema requires at least one option.',
+        );
+        $this->mapper->map(['type' => 'select'], 'mode');
+    }
+
+    public function test_select_with_empty_options_string_throws(): void
+    {
+        $this->expectException(\DomainException::class);
+        $this->mapper->map(['type' => 'select', 'options' => ''], 'mode');
+    }
+
+    public function test_select_with_empty_choices_map_throws(): void
+    {
+        $this->expectException(\DomainException::class);
+        $this->mapper->map(['type' => 'select', 'choices' => []], 'mode');
+    }
+
+    public function test_select_with_non_string_choice_label_throws(): void
+    {
+        $this->expectException(\DomainException::class);
+        $this->expectExceptionMessage(
+            "Field 'mode' has a non-string option label for choice '1' (int) — "
+            . 'the schema requires every option value to be a string.',
+        );
+        $this->mapper->map(['type' => 'select', 'choices' => [1 => 1]], 'mode');
+    }
+
+    public function test_select_on_a_nested_field_names_the_full_path_on_failure(): void
+    {
+        $this->expectException(\DomainException::class);
+        $this->expectExceptionMessage("Field 'items.mode' is a twig 'select'");
+        $this->mapper->map([
+            'type' => 'repeater',
+            'fields' => ['mode' => ['type' => 'select']],
+        ], 'items');
+    }
 }

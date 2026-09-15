@@ -24,7 +24,12 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `acf.json` genuinely has fields, behaviour is unchanged. A twig field
   annotated `type: array` (with or without nested `fields:`) is refused with
   a `\DomainException` naming the field, rather than guessed — see the
-  linked issue for the decision and its rejected alternatives. Closes #75.
+  linked issue for the decision and its rejected alternatives. A twig
+  annotation prop with no mapping to the abstract schema (e.g. a typo, or a
+  genuinely unhandled key) is likewise refused by field path rather than
+  silently dropped, and `placeholder:` is now carried across. A `select`
+  with no (or empty) `options:`/`choices:`, or a non-string option label,
+  is refused locally instead of migrating to schema-invalid YAML. Closes #75.
 
 ## [0.13.0] - 2026-09-15
 
