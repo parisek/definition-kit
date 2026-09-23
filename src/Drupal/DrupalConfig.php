@@ -99,11 +99,7 @@ final class DrupalConfig
             $storage = $storages[$name] ?? [];
             $type = (string) ($data['field_type'] ?? $storage['type'] ?? '');
 
-            $cardinality = (int) ($storage['cardinality'] ?? 1);
-            $override = $data['third_party_settings']['field_config_cardinality']['cardinality_config'] ?? null;
-            if (is_scalar($override) && '' !== (string) $override && is_numeric((string) $override)) {
-                $cardinality = (int) $override;
-            }
+            $cardinality = self::effectiveCardinality($storage, $data);
 
             $settings = array_replace(
                 is_array($storage['settings'] ?? null) ? $storage['settings'] : [],
@@ -138,6 +134,37 @@ final class DrupalConfig
         }
 
         return new self($directory, $bundles, $fields, $groups);
+    }
+
+    /**
+     * The cardinality an instance really has: the storage value, unless the
+     * `field_config_cardinality` contrib module narrows it on the instance.
+     *
+     * @param array<mixed> $storage field.storage.* config
+     * @param array<mixed> $instance field.field.* config
+     */
+    public static function effectiveCardinality(array $storage, array $instance): int
+    {
+        $cardinality = (int) ($storage['cardinality'] ?? 1);
+        $override = self::cardinalityOverride($instance);
+
+        return $override ?? $cardinality;
+    }
+
+    /**
+     * The `field_config_cardinality` override on an instance, or null when
+     * it has none.
+     *
+     * @param array<mixed> $instance
+     */
+    public static function cardinalityOverride(array $instance): ?int
+    {
+        $override = $instance['third_party_settings']['field_config_cardinality']['cardinality_config'] ?? null;
+        if (is_scalar($override) && '' !== (string) $override && is_numeric((string) $override)) {
+            return (int) $override;
+        }
+
+        return null;
     }
 
     public function directory(): string
