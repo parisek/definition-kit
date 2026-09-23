@@ -1,0 +1,37 @@
+uuid: 00000000-0000-4000-8000-000000000002
+langcode: cs
+status: true
+dependencies:
+  config:
+    - field.field.paragraph.quote_image.field_author_name
+    - field.field.paragraph.quote_image.field_author_position
+    - field.field.paragraph.quote_image.field_image_side
+    - field.field.paragraph.quote_image.field_link
+    - field.field.paragraph.quote_image.field_media
+    - field.field.paragraph.quote_image.field_quote
+    - field.field.paragraph.quote_image.field_signature
+    - field.field.paragraph.quote_image.field_spacing
+    - field.field.paragraph.quote_image.field_wrapper_classes
+    - field.field.paragraph.quote_image.field_wrapper_id
+    - paragraphs.paragraphs_type.quote_image
+id: paragraph.quote_image.default
+targetEntityType: paragraph
+bundle: quote_image
+mode: default
+content:
+  extra_field_default_paragraph_display:
+    settings: {  }
+    third_party_settings: {  }
+    weight: 0
+    region: content
+hidden:
+  field_author_name: true
+  field_author_position: true
+  field_image_side: true
+  field_link: true
+  field_media: true
+  field_quote: true
+  field_signature: true
+  field_spacing: true
+  field_wrapper_classes: true
+  field_wrapper_id: true

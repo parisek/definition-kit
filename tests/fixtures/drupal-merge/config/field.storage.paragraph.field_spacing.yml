@@ -1,0 +1,33 @@
+uuid: 00000000-0000-4000-8000-000000000020
+langcode: cs
+status: true
+dependencies:
+  module:
+    - options
+    - paragraphs
+id: paragraph.field_spacing
+field_name: field_spacing
+entity_type: paragraph
+type: list_string
+settings:
+  allowed_values:
+    -
+      value: default
+      label: Default
+    -
+      value: no-bottom
+      label: 'No Bottom'
+    -
+      value: no-top
+      label: 'No Top'
+    -
+      value: 'no'
+      label: 'No'
+  allowed_values_function: ''
+module: options
+locked: false
+cardinality: 1
+translatable: true
+indexes: {  }
+persist_with_no_fields: false
+custom_storage: false

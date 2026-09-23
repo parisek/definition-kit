@@ -8,6 +8,31 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 <!-- New entries go directly under this line. It is the anchor that keeps a branch's
      changelog edit from merging into a version that shipped without it. -->
 
+### Added
+
+- **Drupal paragraphs: `fields-generate --target=drupal --drupal-config=<dir>`
+  (#81).** Generates paragraph types, field storage, field instances, form
+  and view displays and, for a new type, `language.content_settings` from the
+  definitions, and merges them into a `drush config:export` directory. It
+  prints one line per config entity: `REUSE`, `CREATE`, `UPDATE` (an owned
+  key changed; only that key is rewritten) or `REFUSE` (a storage type,
+  target type or cardinality change, or a dropped select option, needs a
+  data migration). A `REFUSE` or a failed component writes nothing and exits
+  1. It never deletes a file, a field or a display entry. New files have no
+  `uuid`; existing files keep theirs, and `_core`, widget and formatter
+  settings, weights, groups and contrib third-party settings. An instance
+  narrows a shared unlimited storage through `field_config_cardinality`.
+  `--dry-run` prints the plan only; `--names-out=<file>` lists the created
+  and changed config names. See ADR 0002.
+- **`drupal:` generator settings** in `definition-kit.yaml`: `langcode`,
+  `text_format`, `media_bundles`, `host_fields`, `translation`,
+  `view_display` (`content` | `hidden`), `field_config_cardinality` and
+  `baseline` (a project file deep-merged over the shipped
+  `schemas/drupal-defaults-baseline.yaml`).
+- **`schemas/drupal-type-map.yaml`**: the kit type to Drupal storage table
+  moves out of PHP, with what the generator needs per storage type (module,
+  settings, default widget and formatter). The accepted types are unchanged.
+
 ## [0.16.0] - 2026-09-23
 
 ### Added

@@ -1,0 +1,31 @@
+uuid: 00000000-0000-4000-8000-000000000010
+langcode: cs
+status: true
+dependencies:
+  config:
+    - field.storage.paragraph.field_spacing
+    - paragraphs.paragraphs_type.quote_image
+  module:
+    - field_config_cardinality
+    - options
+third_party_settings:
+  field_config_cardinality:
+    cardinality_config: '1'
+    cardinality_label_config: false
+    unlimited_not_required: ''
+    limited_not_required: ''
+    limited_required: ''
+id: paragraph.quote_image.field_spacing
+field_name: field_spacing
+entity_type: paragraph
+bundle: quote_image
+label: Spacing
+description: ''
+required: false
+translatable: false
+default_value:
+  -
+    value: default
+default_value_callback: ''
+settings: {  }
+field_type: list_string

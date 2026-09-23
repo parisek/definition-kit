@@ -1,0 +1,30 @@
+langcode: cs
+status: true
+dependencies:
+  config:
+    - field.storage.paragraph.field_theme
+    - paragraphs.paragraphs_type.numbers_item
+  module:
+    - field_config_cardinality
+    - options
+third_party_settings:
+  field_config_cardinality:
+    cardinality_config: '1'
+    cardinality_label_config: false
+    unlimited_not_required: ''
+    limited_not_required: ''
+    limited_required: ''
+id: paragraph.numbers_item.field_theme
+field_name: field_theme
+entity_type: paragraph
+bundle: numbers_item
+label: 'Colour theme'
+description: ''
+required: false
+translatable: true
+default_value:
+  -
+    value: white
+default_value_callback: ''
+settings: {  }
+field_type: list_string

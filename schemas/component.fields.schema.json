@@ -141,12 +141,12 @@
                 "widget": {
                     "type": "string",
                     "minLength": 1,
-                    "description": "The form widget plugin id. Recorded for a future config generator; the lint does not compare it."
+                    "description": "The form widget plugin id. `fields-generate --target=drupal` uses it when it adds the field to a form display; an existing display entry keeps its own widget. The lint does not compare it."
                 },
                 "formatter": {
                     "type": "string",
                     "minLength": 1,
-                    "description": "The view formatter plugin id. Recorded for a future config generator; the lint does not compare it."
+                    "description": "The view formatter plugin id. `fields-generate --target=drupal` uses it when it adds the field to the content region of a view display; an existing display entry keeps its own formatter. The lint does not compare it."
                 },
                 "target_type": {
                     "type": "string",

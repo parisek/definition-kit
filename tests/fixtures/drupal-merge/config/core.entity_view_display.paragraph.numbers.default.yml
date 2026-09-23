@@ -1,0 +1,20 @@
+langcode: cs
+status: true
+dependencies:
+  config:
+    - field.field.paragraph.numbers.field_paragraphs
+    - field.field.paragraph.numbers.field_title
+    - paragraphs.paragraphs_type.numbers
+id: paragraph.numbers.default
+targetEntityType: paragraph
+bundle: numbers
+mode: default
+content:
+  extra_field_default_paragraph_display:
+    settings: {  }
+    third_party_settings: {  }
+    weight: 0
+    region: content
+hidden:
+  field_paragraphs: true
+  field_title: true

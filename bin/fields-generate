@@ -11,6 +11,11 @@ use Parisek\DefinitionKit\Generator\FieldsGenerator;
 use Parisek\DefinitionKit\Support\KeyStyle;
 use Parisek\DefinitionKit\Support\EntryDefinition;
 use Parisek\DefinitionKit\Schema\FieldsSchemaValidator;
+use Parisek\DefinitionKit\Drupal\ConfigStore;
+use Parisek\DefinitionKit\Drupal\DrupalSettings;
+use Parisek\DefinitionKit\Generator\Drupal\DrupalConfigWriter;
+use Parisek\DefinitionKit\Generator\Drupal\DrupalGenerator;
+use Parisek\DefinitionKit\Generator\Drupal\PlanEntry;
 
 foreach ([__DIR__ . '/../vendor/autoload.php', __DIR__ . '/../../../autoload.php'] as $autoload) {
     if (is_file($autoload)) {
@@ -155,12 +160,95 @@ function fields_generate_one(string $componentDir, bool $dryRun, KeyStyle $keySt
     return ['ok' => true, 'component' => $componentName] + ($acfWritten ? ['out' => $acfOutPath] : []);
 }
 
+/**
+ * `--target=drupal` (ADR 0002): plan the paragraph config of every component
+ * against one export, print the plan, and write it only when nothing is
+ * refused and no component failed.
+ *
+ * @param list<string> $dirs
+ */
+function fields_generate_drupal(array $dirs, string $settingsRoot, string $configDir, bool $dryRun, ?string $namesOut): int
+{
+    try {
+        $store = new ConfigStore($configDir);
+        $settings = DrupalSettings::discoverFor($settingsRoot);
+        $generator = new DrupalGenerator($store, $settings);
+    } catch (\RuntimeException $e) {
+        fwrite(STDERR, $e->getMessage() . "\n");
+
+        return 2;
+    }
+
+    echo "drupal config: {$store->directory()} (" . count($store->names('paragraphs.paragraphs_type.')) . " paragraph types)\n";
+    if (null !== $settings->path) {
+        echo "settings: {$settings->path}\n";
+    }
+
+    $result = $generator->run($dirs);
+    $failed = 0;
+    $skipped = 0;
+    foreach ($result['components'] as $component) {
+        match ($component['status']) {
+            'OK' => print("OK   {$component['component']} ({$component['detail']})\n"),
+            'SKIP' => print("SKIP {$component['component']}: {$component['detail']}\n"),
+            default => print("FAIL {$component['component']}: {$component['detail']}\n"),
+        };
+        $failed += 'FAIL' === $component['status'] ? 1 : 0;
+        $skipped += 'SKIP' === $component['status'] ? 1 : 0;
+    }
+    echo sprintf(
+        "%d component(s), %d failed%s\n",
+        count($result['components']),
+        $failed,
+        $skipped > 0 ? sprintf(', %d skipped', $skipped) : '',
+    );
+
+    $plan = $result['plan'];
+    echo "\nplan:\n";
+    foreach ($plan->entries as $entry) {
+        echo $entry->line() . "\n";
+    }
+    echo $plan->summary() . "\n";
+
+    $blocked = $failed > 0 || $plan->refused();
+    if (null !== $namesOut) {
+        // A blocked run writes no config, so it names none: an empty file,
+        // never a list of files that do not exist.
+        $blocked
+            ? file_put_contents($namesOut, '')
+            : (new DrupalConfigWriter())->writeNames($plan, $namesOut);
+    }
+
+    if ($blocked) {
+        echo "nothing written: " . ($plan->refused() ? 'the plan refuses ' . count($plan->withAction(PlanEntry::REFUSE)) . ' config entit(y/ies)' : "{$failed} component(s) failed") . "\n";
+
+        return 1;
+    }
+    if ($dryRun) {
+        echo "dry run: nothing written\n";
+
+        return 0;
+    }
+    $written = (new DrupalConfigWriter())->write($plan, $store);
+    echo 'wrote ' . count($written) . " file(s)\n";
+
+    return 0;
+}
+
 $args = array_slice($argv, 1);
 $root = null;
 $dryRun = false;
 $single = null;
+$target = 'wp';
+$drupalConfig = null;
+$namesOut = null;
 
-$usage = "usage: fields-generate <component-dir> | fields-generate --root=<components-root> [--dry-run]\n";
+$usage = "usage: fields-generate <component-dir> | fields-generate --root=<components-root> [--dry-run]\n"
+    . "       fields-generate --target=drupal --drupal-config=<config-dir> (<component-dir> | --root=<components-root>)\n"
+    . "                       [--dry-run] [--names-out=<file>]\n"
+    . "  --target=drupal plans paragraph config against a drush config:export directory and\n"
+    . "  merges it in: REUSE, CREATE, UPDATE, REFUSE per config entity (ADR 0002). A REFUSE or a\n"
+    . "  failed component writes nothing. --names-out lists created and changed config names.\n";
 
 foreach ($args as $arg) {
     if (str_starts_with($arg, '--root=')) {
@@ -169,6 +257,22 @@ foreach ($args as $arg) {
     }
     if ('--dry-run' === $arg) {
         $dryRun = true;
+        continue;
+    }
+    if (str_starts_with($arg, '--target=')) {
+        $target = substr($arg, 9);
+        if (!in_array($target, ['wp', 'drupal'], true)) {
+            fwrite(STDERR, "unknown target: {$target} (expected wp|drupal)\n" . $usage);
+            exit(2);
+        }
+        continue;
+    }
+    if (str_starts_with($arg, '--drupal-config=')) {
+        $drupalConfig = substr($arg, 16);
+        continue;
+    }
+    if (str_starts_with($arg, '--names-out=')) {
+        $namesOut = substr($arg, 12);
         continue;
     }
     // An unrecognised option must never fall through to $single. This command
@@ -190,6 +294,27 @@ if (null === $root && null === $single) {
 
 if (null !== $root && !is_dir($root)) {
     fwrite(STDERR, "not a directory: {$root}\n");
+    exit(2);
+}
+
+if ('drupal' === $target) {
+    if (null === $drupalConfig || '' === $drupalConfig || (null !== $root && null !== $single)) {
+        fwrite(STDERR, $usage);
+        exit(2);
+    }
+    if (null !== $single && !is_dir($single)) {
+        fwrite(STDERR, "not a directory: {$single}\n");
+        exit(2);
+    }
+    $dirs = null !== $root ? (glob(rtrim($root, '/') . '/*', GLOB_ONLYDIR) ?: []) : [rtrim((string) $single, '/')];
+    sort($dirs);
+    if (null !== $root) {
+        $dirs = array_values(array_filter($dirs, static fn (string $d): bool => is_file("{$d}/" . basename($d) . '.yaml')));
+    }
+    exit(fields_generate_drupal($dirs, $root ?? dirname(rtrim((string) $single, '/')), $drupalConfig, $dryRun, $namesOut));
+}
+if (null !== $drupalConfig || null !== $namesOut) {
+    fwrite(STDERR, "--drupal-config and --names-out need --target=drupal\n" . $usage);
     exit(2);
 }
 

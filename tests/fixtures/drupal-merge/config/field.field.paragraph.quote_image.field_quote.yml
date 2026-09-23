@@ -1,0 +1,32 @@
+uuid: 00000000-0000-4000-8000-000000000008
+langcode: cs
+status: true
+dependencies:
+  config:
+    - field.storage.paragraph.field_quote
+    - filter.format.basic
+    - paragraphs.paragraphs_type.quote_image
+  module:
+    - field_config_cardinality
+    - text
+third_party_settings:
+  field_config_cardinality:
+    cardinality_config: '1'
+    cardinality_label_config: false
+    unlimited_not_required: ''
+    limited_not_required: ''
+    limited_required: ''
+id: paragraph.quote_image.field_quote
+field_name: field_quote
+entity_type: paragraph
+bundle: quote_image
+label: Quote
+description: ''
+required: true
+translatable: true
+default_value: {  }
+default_value_callback: ''
+settings:
+  allowed_formats:
+    - basic
+field_type: text_long

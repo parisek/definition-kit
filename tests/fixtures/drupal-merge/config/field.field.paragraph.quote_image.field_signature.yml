@@ -1,0 +1,40 @@
+uuid: 00000000-0000-4000-8000-000000000009
+langcode: cs
+status: true
+dependencies:
+  config:
+    - field.storage.paragraph.field_signature
+    - media.type.image
+    - media.type.vector_image
+    - paragraphs.paragraphs_type.quote_image
+  module:
+    - field_config_cardinality
+third_party_settings:
+  field_config_cardinality:
+    cardinality_config: '1'
+    cardinality_label_config: false
+    unlimited_not_required: ''
+    limited_not_required: ''
+    limited_required: ''
+id: paragraph.quote_image.field_signature
+field_name: field_signature
+entity_type: paragraph
+bundle: quote_image
+label: Signature
+description: ''
+required: false
+translatable: false
+default_value: {  }
+default_value_callback: ''
+settings:
+  handler: 'default:media'
+  handler_settings:
+    target_bundles:
+      image: image
+      vector_image: vector_image
+    sort:
+      field: _none
+      direction: ASC
+    auto_create: false
+    auto_create_bundle: image
+field_type: entity_reference

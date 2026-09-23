@@ -1,0 +1,18 @@
+langcode: cs
+status: true
+dependencies:
+  module:
+    - paragraphs_ee
+    - paragraphs_library
+third_party_settings:
+  paragraphs_library:
+    allow_library_conversion: false
+  paragraphs_ee:
+    paragraphs_categories:
+      basic: basic
+id: numbers_item
+label: Item
+icon_uuid: null
+icon_default: null
+description: 'Used in Numbers Statistics'
+behavior_plugins: {  }

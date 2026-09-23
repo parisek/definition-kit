@@ -1,0 +1,28 @@
+langcode: cs
+status: true
+dependencies:
+  config:
+    - field.field.paragraph.numbers_item.field_label
+    - field.field.paragraph.numbers_item.field_media
+    - field.field.paragraph.numbers_item.field_theme
+    - field.field.paragraph.numbers_item.field_value
+    - field.field.paragraph.numbers_item.field_value_number
+    - field.field.paragraph.numbers_item.field_value_suffix
+    - paragraphs.paragraphs_type.numbers_item
+id: paragraph.numbers_item.default
+targetEntityType: paragraph
+bundle: numbers_item
+mode: default
+content:
+  extra_field_default_paragraph_display:
+    settings: {  }
+    third_party_settings: {  }
+    weight: 0
+    region: content
+hidden:
+  field_label: true
+  field_media: true
+  field_theme: true
+  field_value: true
+  field_value_number: true
+  field_value_suffix: true

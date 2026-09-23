@@ -1,0 +1,18 @@
+uuid: 00000000-0000-4000-8000-000000000023
+langcode: cs
+status: true
+dependencies:
+  config:
+    - paragraphs.paragraphs_type.numbers_item
+  module:
+    - content_translation
+third_party_settings:
+  content_translation:
+    enabled: true
+    bundle_settings:
+      untranslatable_fields_hide: '0'
+id: paragraph.numbers_item
+target_entity_type_id: paragraph
+target_bundle: numbers_item
+default_langcode: site_default
+language_alterable: true

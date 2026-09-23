@@ -1,0 +1,23 @@
+uuid: 00000000-0000-4000-8000-000000000005
+langcode: cs
+status: true
+dependencies:
+  config:
+    - field.storage.paragraph.field_image_side
+    - paragraphs.paragraphs_type.quote_image
+  module:
+    - options
+id: paragraph.quote_image.field_image_side
+field_name: field_image_side
+entity_type: paragraph
+bundle: quote_image
+label: 'Image side'
+description: ''
+required: false
+translatable: true
+default_value:
+  -
+    value: left
+default_value_callback: ''
+settings: {  }
+field_type: list_string

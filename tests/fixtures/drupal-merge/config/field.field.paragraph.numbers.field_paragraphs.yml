@@ -1,0 +1,66 @@
+uuid: null
+langcode: cs
+status: true
+dependencies:
+  config:
+    - field.storage.paragraph.field_paragraphs
+    - paragraphs.paragraphs_type.numbers
+    - paragraphs.paragraphs_type.numbers_item
+  module:
+    - entity_reference_revisions
+    - field_config_cardinality
+third_party_settings:
+  field_config_cardinality:
+    cardinality_config: '5'
+    cardinality_label_config: false
+    unlimited_not_required: ''
+    limited_not_required: ''
+    limited_required: ''
+id: paragraph.numbers.field_paragraphs
+field_name: field_paragraphs
+entity_type: paragraph
+bundle: numbers
+label: Items
+description: 'Six fixed boxes'
+required: false
+translatable: true
+default_value: {  }
+default_value_callback: ''
+settings:
+  handler: 'default:paragraph'
+  handler_settings:
+    target_bundles:
+      numbers_item: numbers_item
+    negate: 0
+    target_bundles_drag_drop:
+      article_featured:
+        weight: 11
+        enabled: false
+      article_list:
+        weight: 12
+        enabled: false
+      content:
+        weight: 13
+        enabled: false
+      from_library:
+        weight: 14
+        enabled: false
+      html:
+        weight: 15
+        enabled: false
+      image_full:
+        weight: 16
+        enabled: false
+      numbers:
+        weight: 17
+        enabled: false
+      numbers_item:
+        weight: 2
+        enabled: true
+      page_header_default:
+        weight: 19
+        enabled: false
+      webform:
+        weight: 20
+        enabled: false
+field_type: entity_reference_revisions
