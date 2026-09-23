@@ -70,3 +70,4 @@ reads as a decision nobody recorded.
 - [0002. Generate Drupal paragraph config by merge, never by overwrite](0002-generate-drupal-paragraph-config-by-merge.md)
 - [0003. `kind: block` requires block.json only on WordPress](0003-kind-block-block-json-requirement-is-wordpress-only.md)
 - [0004. A field can be scoped to some of a component's aliased Drupal bundles](0004-per-field-bundle-scoping-for-aliased-drupal-bundles.md)
+- [0009. `of: entity:<target_type>[:<bundle>,…]` names a Drupal entity reference outside the post/taxonomy/media vocabulary](0009-generic-drupal-entity-reference-target-vocabulary.md)

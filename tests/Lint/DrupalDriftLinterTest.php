@@ -323,7 +323,8 @@ final class DrupalDriftLinterTest extends TestCase
         }
 
         // card_list_item, stats_item and promo_body were reached by nesting;
-        // html by alias; from_library is allowlisted.
-        self::assertSame(['image_full', 'mixed_section', 'teaser'], $linter->unclaimedBundles());
+        // html by alias; from_library is allowlisted. `contact` (ADR 0009's
+        // fixture) has no component in this test's small golden set either.
+        self::assertSame(['contact', 'image_full', 'mixed_section', 'teaser'], $linter->unclaimedBundles());
     }
 }

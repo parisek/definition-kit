@@ -147,6 +147,31 @@ final class AbstractTypeReverseMapperTest extends TestCase
         self::assertSame(1, $result['extra']['multiple']);
     }
 
+    /**
+     * `entity:<target_type>[:<bundle>,…]` (ADR 0009) names a Drupal entity
+     * type ACF has no concept of. This reverse mapper still runs
+     * unconditionally on Drupal-only projects (fields-validate builds the WP
+     * reconstruction tree as a key-resolution check regardless of target), so
+     * it must not throw — it falls back to an unrestricted post_object.
+     */
+    public function test_reference_of_entity_reverses_to_unrestricted_post_object(): void
+    {
+        $result = $this->mapper->reverse(['type' => 'reference', 'of' => 'entity:webform', 'label' => 'T']);
+        self::assertSame('post_object', $result['acfType']);
+        self::assertSame([], $result['extra']['post_type']);
+        self::assertArrayNotHasKey('multiple', $result['extra']);
+    }
+
+    public function test_reference_of_entity_with_bundles_reverses_to_unrestricted_post_object_too(): void
+    {
+        $result = $this->mapper->reverse([
+            'type' => 'reference', 'of' => 'entity:node:article,page', 'multiple' => true, 'label' => 'T',
+        ]);
+        self::assertSame('post_object', $result['acfType']);
+        self::assertSame([], $result['extra']['post_type']);
+        self::assertSame(1, $result['extra']['multiple']);
+    }
+
     public function test_reference_with_unsupported_of_target_throws(): void
     {
         $this->expectException(\DomainException::class);

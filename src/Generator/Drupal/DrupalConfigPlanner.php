@@ -423,7 +423,10 @@ final class DrupalConfigPlanner
                 $bundles = $this->mediaBundles($field->mediaKind ?? 'image');
             }
             $handler = self::map($settings['handler_settings'] ?? []);
-            $handler['target_bundles'] = null === $bundles ? null : self::bundleMap($bundles);
+            // An explicit "any bundle" ([]) writes the same null sentinel as
+            // "not specified" — Drupal itself has no other way to say
+            // "unrestricted" (see DrupalField::targetBundles()'s docblock).
+            $handler['target_bundles'] = null === $bundles || [] === $bundles ? null : self::bundleMap($bundles);
             if ('entity_reference_revisions' === $type) {
                 $handler['negate'] = 0;
                 $handler['target_bundles_drag_drop'] = [];
@@ -531,7 +534,9 @@ final class DrupalConfigPlanner
             return;
         }
 
-        $handler['target_bundles'] = self::bundleMap($wanted);
+        // Same "any bundle" sentinel as createInstance() above: an empty
+        // wanted list writes null, never an empty map.
+        $handler['target_bundles'] = [] === $wanted ? null : self::bundleMap($wanted);
         if ($negated) {
             $handler['negate'] = 0;
         }

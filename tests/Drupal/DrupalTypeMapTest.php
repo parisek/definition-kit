@@ -100,6 +100,42 @@ final class DrupalTypeMapTest extends TestCase
         self::assertNull($map->bundleConfigPrefix('paragraphs_library_item'));
     }
 
+    /**
+     * `of: entity:<target_type>[:<bundle>,…]` (ADR 0009): a Drupal entity
+     * reference outside the post/taxonomy/media vocabulary, e.g. arkero's
+     * `field_webform` (target type `webform`, no bundle restriction).
+     */
+    #[Test]
+    public function of_entity_names_the_target_type_with_no_bundle_restriction(): void
+    {
+        $map = new DrupalTypeMap();
+        $field = ['type' => 'reference', 'of' => 'entity:webform'];
+
+        self::assertSame('webform', $map->expectedTargetType($field, 'entity_reference'));
+        // [] and not null: the definition DOES say — "any bundle" — so the
+        // lint compares it against the real export instead of skipping it.
+        self::assertSame([], $map->expectedTargetBundles($field));
+    }
+
+    #[Test]
+    public function of_entity_with_bundles_restricts_them(): void
+    {
+        $map = new DrupalTypeMap();
+        $field = ['type' => 'reference', 'of' => 'entity:node:article,page'];
+
+        self::assertSame('node', $map->expectedTargetType($field, 'entity_reference'));
+        self::assertSame(['article', 'page'], $map->expectedTargetBundles($field));
+    }
+
+    #[Test]
+    public function drupal_target_type_still_overrides_of(): void
+    {
+        $map = new DrupalTypeMap();
+        $field = ['type' => 'reference', 'of' => 'entity:webform', 'drupal' => ['target_type' => 'block_content']];
+
+        self::assertSame('block_content', $map->expectedTargetType($field, 'entity_reference'));
+    }
+
     #[Test]
     public function an_unknown_storage_type_is_refused_by_name(): void
     {
