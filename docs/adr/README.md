@@ -66,7 +66,4 @@ reads as a decision nobody recorded.
 
 ## Index
 
-*No decisions recorded yet.* This package's architecture has so far followed
-from `parisek/acf-json-schema` and the tailwind-base ADRs it consumes; the
-practice is set up here so the first genuine trade-off has somewhere to land —
-not so the directory can be filled.
+- [0001. Lint Drupal paragraphs against a config export, by convention](0001-lint-drupal-paragraphs-against-a-config-export.md)

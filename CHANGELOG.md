@@ -8,6 +8,40 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 <!-- New entries go directly under this line. It is the anchor that keeps a branch's
      changelog edit from merging into a version that shipped without it. -->
 
+### Added
+
+- **Drupal paragraphs: `fields-lint-drupal --drupal-config=<dir>`.** A new
+  binary compares each definition with the paragraph type it describes, as a
+  `drush config:export` directory records it. The directory is always an
+  argument, so a fresh export can replace a lagging `config/sync`. It compares
+  the field set in both directions, storage type, cardinality, the required
+  flag, reference targets and nested paragraph bundles, and lists paragraph
+  types that no component claims. Bundle: the root `drupal:` admin link, else
+  the component name in snake_case, plus `drupal.bundle_aliases`. Field:
+  `drupal.field`, else `field_<leaf>`; an `object` without a pin is a
+  field_group on the same bundle. See ADR 0001.
+- **`fields-migrate --drupal-config=<dir>`** takes a component's fields from
+  its paragraph type and sets `kind: block`. The twig front-comment still
+  gives the metadata. `--drupal-display=<php-file>` tokenizes (never runs) the
+  PHP class that fills the template's `content` array, names each field after
+  its template prop and pins `drupal.field` where they differ.
+  `--default-category=<name>` fills a missing `category:`.
+- **Per-field `drupal:` block** in `component.fields.schema.json`: `field`,
+  `storage`, `widget`, `formatter`, `target_type`, `target_bundles`. It is
+  closed. The root `drupal:` key stays the admin-link string that
+  `parisek/styleguide` reads. The WordPress projection ignores the block.
+- **`drupal:` section in `definition-kit.yaml`:** `field_naming`
+  (`generic` | `prefixed`), `bundle_aliases`, `bundles_without_component`,
+  `ignore_fields`. An unknown key throws and names the file.
+
+### Changed
+
+- Without `--drupal-config`, a twig `fields:` annotation on a component whose
+  `drupal:` link names a paragraph type migrates as editor-authored
+  (`role: field`, written as no `role:` key) and the component gets
+  `kind: block`. It used to need `--assume-role`, which cannot say `field`.
+
+
 ## [0.15.0] - 2026-09-15
 
 ### Added
