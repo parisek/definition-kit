@@ -1,0 +1,23 @@
+langcode: en
+status: true
+dependencies: {}
+id: paragraph.html.default
+targetEntityType: paragraph
+bundle: html
+mode: default
+content:
+  field_title:
+    type: string_textfield
+    weight: 0
+    region: content
+    settings: {}
+    third_party_settings: {}
+  field_content:
+    type: text_textarea
+    weight: 1
+    region: content
+    settings: {}
+    third_party_settings: {}
+hidden:
+  created: true
+  status: true

@@ -1,0 +1,10 @@
+name: Content
+category: Content
+kind: block
+drupal: /admin/structure/paragraphs_type/content/fields
+fields:
+  html:
+    type: richtext
+    label: Text
+    drupal:
+      field: field_content

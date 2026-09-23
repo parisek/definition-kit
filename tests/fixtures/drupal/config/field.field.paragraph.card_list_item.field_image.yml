@@ -1,0 +1,23 @@
+langcode: en
+status: true
+dependencies:
+  config:
+  - field.storage.paragraph.field_image
+  - paragraphs.paragraphs_type.card_list_item
+id: paragraph.card_list_item.field_image
+field_name: field_image
+entity_type: paragraph
+bundle: card_list_item
+label: Photo
+description: ''
+required: false
+translatable: true
+default_value: {}
+default_value_callback: ''
+settings:
+  handler: default:media
+  handler_settings:
+    target_bundles:
+      image: image
+    auto_create: false
+field_type: entity_reference

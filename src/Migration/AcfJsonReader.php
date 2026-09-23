@@ -45,6 +45,12 @@ final class AcfJsonReader
          * it; `fields-migrate` sets this from its `--assume-role` flag.
          */
         private readonly ?string $assumeRole = null,
+        /**
+         * The component is a Drupal paragraph type (`fields-migrate` resolved
+         * a bundle for it): a twig-derived field defaults to `role: field`.
+         * See TwigFieldTypeMapper's constructor.
+         */
+        private readonly bool $paragraphBacked = false,
     ) {
     }
 
@@ -151,7 +157,9 @@ final class AcfJsonReader
         // annotation at all when acf.json is genuinely absent.
         $twigFields = (!$acfJsonExists && null !== $twigSource) ? $this->twigMetadataReader->readFields($twigSource) : [];
         if (!$acfJsonExists && [] === (array) ($acfJson['fields'] ?? []) && [] !== $twigFields) {
-            $mapper = null !== $this->assumeRole ? new TwigFieldTypeMapper($this->assumeRole) : $this->twigFieldTypeMapper;
+            $mapper = null !== $this->assumeRole || $this->paragraphBacked
+                ? new TwigFieldTypeMapper($this->assumeRole, $this->paragraphBacked)
+                : $this->twigFieldTypeMapper;
             $fields = [];
             foreach ($twigFields as $fieldName => $twigField) {
                 $fields[(string) $fieldName] = $mapper->map((array) $twigField, (string) $fieldName);

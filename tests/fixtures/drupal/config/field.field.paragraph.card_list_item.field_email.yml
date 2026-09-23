@@ -1,0 +1,18 @@
+langcode: en
+status: true
+dependencies:
+  config:
+  - field.storage.paragraph.field_email
+  - paragraphs.paragraphs_type.card_list_item
+id: paragraph.card_list_item.field_email
+field_name: field_email
+entity_type: paragraph
+bundle: card_list_item
+label: E-mail
+description: ''
+required: false
+translatable: true
+default_value: {}
+default_value_callback: ''
+settings: {}
+field_type: email

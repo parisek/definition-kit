@@ -1,0 +1,41 @@
+langcode: en
+status: true
+dependencies: {}
+id: paragraph.card_list_item.default
+targetEntityType: paragraph
+bundle: card_list_item
+mode: default
+content:
+  field_title:
+    type: string_textfield
+    weight: 0
+    region: content
+    settings: {}
+    third_party_settings: {}
+  field_image:
+    type: media_library_widget
+    weight: 1
+    region: content
+    settings: {}
+    third_party_settings: {}
+  field_perex:
+    type: text_textarea
+    weight: 2
+    region: content
+    settings: {}
+    third_party_settings: {}
+  field_phone:
+    type: telephone_default
+    weight: 3
+    region: content
+    settings: {}
+    third_party_settings: {}
+  field_email:
+    type: email_default
+    weight: 4
+    region: content
+    settings: {}
+    third_party_settings: {}
+hidden:
+  created: true
+  status: true

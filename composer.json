@@ -1,6 +1,6 @@
 {
     "name": "parisek/definition-kit",
-    "description": "Authored per-component definition (YAML) → CMS projection generator + drift-lint. Migrates ACF field groups to a semantic definition, regenerates acf.json/block.json, and fails CI when they drift.",
+    "description": "Authored per-component definition (YAML) → CMS projection generator + drift-lint. Migrates ACF field groups and Drupal paragraph types to a semantic definition, regenerates acf.json/block.json, and fails CI when a projection or a Drupal config export drifts.",
     "license": "GPL-3.0-or-later",
     "type": "library",
     "keywords": [
@@ -10,7 +10,9 @@
         "gutenberg",
         "yaml",
         "code-generation",
-        "drift-lint"
+        "drift-lint",
+        "drupal",
+        "paragraphs"
     ],
     "authors": [
         {
@@ -46,6 +48,7 @@
         "bin/fields-fixtures",
         "bin/fields-generate",
         "bin/fields-lint",
+        "bin/fields-lint-drupal",
         "bin/fields-migrate",
         "bin/fields-roles",
         "bin/fields-validate"

@@ -1,0 +1,18 @@
+langcode: en
+status: true
+dependencies:
+  config:
+  - field.storage.paragraph.field_parallax
+  - paragraphs.paragraphs_type.image_full
+id: paragraph.image_full.field_parallax
+field_name: field_parallax
+entity_type: paragraph
+bundle: image_full
+label: Parallax
+description: ''
+required: false
+translatable: true
+default_value: {}
+default_value_callback: ''
+settings: {}
+field_type: boolean

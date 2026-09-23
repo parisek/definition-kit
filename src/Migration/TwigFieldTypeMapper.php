@@ -114,8 +114,16 @@ final class TwigFieldTypeMapper
      *                                case an un-annotated field's role is
      *                                ambiguous and `map()` throws).
      */
-    public function __construct(private readonly ?string $assumeRole = null)
-    {
+    public function __construct(
+        private readonly ?string $assumeRole = null,
+        /**
+         * The component is backed by a Drupal paragraph type, so its fields
+         * are what an editor enters: a field with no role of its own (and no
+         * inherited or assumed one) is `role: field`, the schema default, and
+         * no `role:` key is written for it.
+         */
+        private readonly bool $paragraphBacked = false,
+    ) {
         if (null !== $this->assumeRole && !in_array($this->assumeRole, self::ASSUMABLE_ROLES, true)) {
             throw new \DomainException(sprintf(
                 "Invalid --assume-role '%s' — must be one of: %s.",
@@ -265,7 +273,7 @@ final class TwigFieldTypeMapper
             // it, to `$assumeRole` (or ambiguous-provenance, same as if the
             // container had no role at all).
             $effectiveInherited = 'derived' !== $inheritedRole ? $inheritedRole : null;
-            $role = $effectiveInherited ?? $this->assumeRole;
+            $role = $effectiveInherited ?? $this->assumeRole ?? ($this->paragraphBacked ? 'field' : null);
             if (null === $role) {
                 throw new \DomainException(sprintf(
                     "Field '%s' has ambiguous provenance — no acf.json means it is not editor-authored, but that "
@@ -340,7 +348,9 @@ final class TwigFieldTypeMapper
             }
         }
 
-        $out['role'] = $role;
+        if (!$this->paragraphBacked || 'field' !== $role || array_key_exists('role', $twigField)) {
+            $out['role'] = $role;
+        }
 
         return $out;
     }

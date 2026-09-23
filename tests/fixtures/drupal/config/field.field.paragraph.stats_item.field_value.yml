@@ -1,0 +1,18 @@
+langcode: en
+status: true
+dependencies:
+  config:
+  - field.storage.paragraph.field_value
+  - paragraphs.paragraphs_type.stats_item
+id: paragraph.stats_item.field_value
+field_name: field_value
+entity_type: paragraph
+bundle: stats_item
+label: Value
+description: ''
+required: false
+translatable: true
+default_value: {}
+default_value_callback: ''
+settings: {}
+field_type: string

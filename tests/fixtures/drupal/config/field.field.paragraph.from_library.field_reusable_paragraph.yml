@@ -1,0 +1,25 @@
+langcode: en
+status: true
+dependencies:
+  config:
+  - field.storage.paragraph.field_reusable_paragraph
+  - paragraphs.paragraphs_type.from_library
+third_party_settings:
+  field_config_cardinality:
+    cardinality_config: '1'
+    cardinality_label_config: false
+id: paragraph.from_library.field_reusable_paragraph
+field_name: field_reusable_paragraph
+entity_type: paragraph
+bundle: from_library
+label: Reusable paragraph
+description: ''
+required: true
+translatable: true
+default_value: {}
+default_value_callback: ''
+settings:
+  handler: default:paragraphs_library_item
+  handler_settings:
+    target_bundles: null
+field_type: entity_reference

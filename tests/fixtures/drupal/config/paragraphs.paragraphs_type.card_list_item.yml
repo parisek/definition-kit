@@ -1,0 +1,12 @@
+langcode: en
+status: true
+dependencies: {}
+third_party_settings:
+  paragraphs_library:
+    allow_library_conversion: false
+id: card_list_item
+label: Card list item
+icon_uuid: null
+icon_default: null
+description: ''
+behavior_plugins: {}

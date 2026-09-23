@@ -1,0 +1,27 @@
+langcode: en
+status: true
+dependencies:
+  config:
+  - field.storage.paragraph.field_media
+  - paragraphs.paragraphs_type.quote_image
+third_party_settings:
+  field_config_cardinality:
+    cardinality_config: '-1'
+    cardinality_label_config: false
+id: paragraph.quote_image.field_media
+field_name: field_media
+entity_type: paragraph
+bundle: quote_image
+label: Image
+description: ''
+required: false
+translatable: true
+default_value: {}
+default_value_callback: ''
+settings:
+  handler: default:media
+  handler_settings:
+    target_bundles:
+      image: image
+    auto_create: false
+field_type: entity_reference

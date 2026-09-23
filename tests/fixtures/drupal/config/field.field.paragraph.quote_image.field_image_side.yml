@@ -1,0 +1,18 @@
+langcode: en
+status: true
+dependencies:
+  config:
+  - field.storage.paragraph.field_image_side
+  - paragraphs.paragraphs_type.quote_image
+id: paragraph.quote_image.field_image_side
+field_name: field_image_side
+entity_type: paragraph
+bundle: quote_image
+label: Image side
+description: ''
+required: false
+translatable: true
+default_value: {}
+default_value_callback: ''
+settings: {}
+field_type: list_string

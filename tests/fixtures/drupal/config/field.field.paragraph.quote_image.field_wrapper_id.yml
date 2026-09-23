@@ -1,0 +1,18 @@
+langcode: en
+status: true
+dependencies:
+  config:
+  - field.storage.paragraph.field_wrapper_id
+  - paragraphs.paragraphs_type.quote_image
+id: paragraph.quote_image.field_wrapper_id
+field_name: field_wrapper_id
+entity_type: paragraph
+bundle: quote_image
+label: ID
+description: ''
+required: false
+translatable: true
+default_value: {}
+default_value_callback: ''
+settings: {}
+field_type: string

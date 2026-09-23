@@ -1,0 +1,23 @@
+name: Promo
+category: Block
+kind: block
+drupal: /admin/structure/paragraphs_type/promo/fields
+fields:
+  body:
+    type: object
+    label: Body
+    fields:
+      content:
+        type: richtext
+        label: Text
+    drupal:
+      field: field_body
+      target_bundles:
+        - promo_body
+  heading:
+    type: object
+    label: Heading
+    fields:
+      title:
+        type: text
+        label: Title

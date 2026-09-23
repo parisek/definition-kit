@@ -1,0 +1,53 @@
+langcode: en
+status: true
+dependencies: {}
+id: paragraph.quote_image.default
+targetEntityType: paragraph
+bundle: quote_image
+mode: default
+content:
+  field_image_side:
+    type: options_select
+    weight: 0
+    region: content
+    settings: {}
+    third_party_settings: {}
+  field_quote:
+    type: text_textarea
+    weight: 1
+    region: content
+    settings: {}
+    third_party_settings: {}
+  field_author_name:
+    type: string_textfield
+    weight: 2
+    region: content
+    settings: {}
+    third_party_settings: {}
+  field_signature:
+    type: media_library_widget
+    weight: 3
+    region: content
+    settings: {}
+    third_party_settings: {}
+  field_media:
+    type: media_library_widget
+    weight: 4
+    region: content
+    settings: {}
+    third_party_settings: {}
+  field_link:
+    type: link_default
+    weight: 5
+    region: content
+    settings: {}
+    third_party_settings: {}
+  field_wrapper_id:
+    type: string_textfield
+    weight: 6
+    region: content
+    settings: {}
+    third_party_settings: {}
+hidden:
+  created: true
+  status: true
