@@ -456,4 +456,26 @@ final class DrupalConfigPlannerTest extends TestCase
 
         self::assertNull($plan->entry('field.field.node.page.field_paragraphs'));
     }
+
+    #[Test]
+    public function a_bundle_that_is_both_a_component_and_a_layout_is_top_level_in_either_order(): void
+    {
+        $layout = ['label' => 'Hero', 'fields' => ['title' => ['type' => 'text', 'label' => 'Title']]];
+        $sections = ['name' => 'Sections', 'category' => 'Block', 'drupal' => '/admin/structure/paragraphs_type/sections/fields', 'fields' => [
+            'items' => ['type' => 'flexible_content', 'label' => 'Items', 'layouts' => ['hero' => $layout]],
+        ]];
+        $hero = ['name' => 'Hero banner', 'category' => 'Block', 'drupal' => '/admin/structure/paragraphs_type/hero/fields', 'fields' => $layout['fields']];
+        $config = self::emptyDir();
+        file_put_contents("{$config}/field.field.node.page.field_paragraphs.yml", "id: node.page.field_paragraphs\nsettings:\n  handler_settings:\n    target_bundles: {  }\n");
+
+        foreach ([['sections' => $sections, 'hero' => $hero], ['hero' => $hero, 'sections' => $sections]] as $definitions) {
+            $plan = $this->plan($definitions, ['host_fields' => ['field.field.node.page.field_paragraphs']], $config);
+            self::assertFalse($plan->refused());
+            self::assertSame('Hero banner', self::data($plan, 'paragraphs.paragraphs_type.hero')['label']);
+            self::assertSame(
+                ['sections' => 'sections', 'hero' => 'hero'],
+                array_intersect_key(['sections' => 'sections', 'hero' => 'hero'], self::data($plan, 'field.field.node.page.field_paragraphs')['settings']['handler_settings']['target_bundles']),
+            );
+        }
+    }
 }

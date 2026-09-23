@@ -104,12 +104,11 @@ final class DrupalConfigPlanner
      */
     private function dedupe(array $specs): array
     {
+        /** @var array<string,BundleSpec> $seen */
         $seen = [];
-        $out = [];
         foreach ($specs as $spec) {
             if (!isset($seen[$spec->bundle])) {
                 $seen[$spec->bundle] = $spec;
-                $out[] = $spec;
                 continue;
             }
             $first = $seen[$spec->bundle];
@@ -118,10 +117,25 @@ final class DrupalConfigPlanner
                     "paragraphs.paragraphs_type.{$spec->bundle}",
                     "{$first->component} and {$spec->component} describe this paragraph type with different fields",
                 );
+                continue;
             }
+            // One bundle, reached twice (a component of its own and a layout
+            // of another): it is top-level and owns its text if either says so,
+            // and a top-level description names it.
+            $primary = $spec->topLevel && !$first->topLevel ? $spec : $first;
+            $seen[$spec->bundle] = new BundleSpec(
+                $first->bundle,
+                $primary->component,
+                $primary->label,
+                $primary->description,
+                $first->ownsText || $spec->ownsText,
+                $first->topLevel || $spec->topLevel,
+                $first->fields,
+                $first->groups,
+            );
         }
 
-        return $out;
+        return array_values($seen);
     }
 
     /** @return array<string,array<string,mixed>> */
