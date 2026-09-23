@@ -1,0 +1,23 @@
+paragraphs_type:
+  third_party_settings:
+    paragraphs_library:
+      allow_library_conversion: true
+    paragraphs_ee:
+      paragraphs_categories:
+        basic: basic
+widget_third_party_settings:
+  media_library_widget:
+    media_library_edit:
+      show_edit: '1'
+      edit_form_mode: default
+  text_textarea:
+    allowed_formats:
+      hide_help: '1'
+      hide_guidelines: '1'
+view_display:
+  content:
+    extra_field_default_paragraph_display:
+      settings: {}
+      third_party_settings: {}
+      weight: 0
+      region: content

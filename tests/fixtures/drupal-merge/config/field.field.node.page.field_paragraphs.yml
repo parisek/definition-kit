@@ -1,0 +1,47 @@
+uuid: 00000000-0000-4000-8000-000000000900
+langcode: cs
+status: true
+dependencies:
+  config:
+    - field.storage.node.field_paragraphs
+    - node.type.page
+    - paragraphs.paragraphs_type.numbers
+    - paragraphs.paragraphs_type.quote_image
+  module:
+    - entity_reference_revisions
+    - field_config_cardinality
+third_party_settings:
+  field_config_cardinality:
+    cardinality_config: '-1'
+    cardinality_label_config: false
+    unlimited_not_required: ''
+    limited_not_required: ''
+    limited_required: ''
+id: node.page.field_paragraphs
+field_name: field_paragraphs
+entity_type: node
+bundle: page
+label: Blocks
+description: ''
+required: false
+translatable: true
+default_value: {  }
+default_value_callback: ''
+settings:
+  handler: 'default:paragraph'
+  handler_settings:
+    target_bundles:
+      numbers: numbers
+      quote_image: quote_image
+    negate: 0
+    target_bundles_drag_drop:
+      numbers:
+        weight: -58
+        enabled: true
+      numbers_item:
+        weight: -39
+        enabled: false
+      quote_image:
+        weight: -55
+        enabled: true
+field_type: entity_reference_revisions

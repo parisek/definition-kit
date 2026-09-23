@@ -134,4 +134,32 @@ final class FieldsGenerateDrupalCliTest extends TestCase
         self::assertSame(2, $code);
         self::assertStringContainsString('Drupal config directory not found', $output);
     }
+
+    #[Test]
+    public function a_run_writes_the_plan_lists_the_names_and_a_second_run_writes_nothing(): void
+    {
+        $project = $this->project(withConfig: false);
+        $names = dirname($project['config']) . '/names.txt';
+
+        [$output, $code] = $this->runBin('--target=drupal', "--drupal-config={$project['config']}", "--root={$project['root']}", "--names-out={$names}");
+
+        self::assertSame(0, $code, $output);
+        self::assertStringContainsString('CREATE paragraphs.paragraphs_type.quote_image', $output);
+        self::assertStringContainsString('SKIP stats: no paragraph type', $output);
+        $listed = array_values(array_filter(explode("\n", (string) file_get_contents($names))));
+        $written = array_map(static fn (string $f): string => basename($f, '.yml'), glob("{$project['config']}/*.yml") ?: []);
+        sort($listed);
+        sort($written);
+        self::assertSame($written, $listed);
+        self::assertStringContainsString('wrote ' . count($written) . ' file(s)', $output);
+
+        [$output, $code] = $this->runBin('--target=drupal', "--drupal-config={$project['config']}", "--root={$project['root']}", "--names-out={$names}");
+        self::assertSame(0, $code, $output);
+        self::assertStringContainsString('0 create, 0 update, ' . count($written) . ' reuse, 0 refuse', $output);
+        self::assertSame('', (string) file_get_contents($names));
+
+        // The generator's output is lint-clean against the definitions that made it.
+        exec('php ' . escapeshellarg(__DIR__ . '/../../bin/fields-lint-drupal') . ' ' . escapeshellarg("--drupal-config={$project['config']}") . ' ' . escapeshellarg("{$project['root']}/quote-image") . ' 2>&1', $lint, $lintCode);
+        self::assertSame(0, $lintCode, implode("\n", $lint));
+    }
 }

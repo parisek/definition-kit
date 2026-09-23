@@ -1,0 +1,21 @@
+uuid: 00000000-0000-4000-8000-000000000018
+langcode: cs
+status: true
+dependencies:
+  module:
+    - paragraphs
+    - text
+_core:
+  default_config_hash: 5tDy6y5c8Pf0Q3u0xY8i2Q1cXlY9m3o0cGx0z1Vb6aA
+id: paragraph.field_quote
+field_name: field_quote
+entity_type: paragraph
+type: text_long
+settings: {  }
+module: text
+locked: false
+cardinality: 1
+translatable: true
+indexes: {  }
+persist_with_no_fields: false
+custom_storage: false

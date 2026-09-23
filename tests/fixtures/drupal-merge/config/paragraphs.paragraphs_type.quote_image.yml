@@ -1,0 +1,19 @@
+uuid: 00000000-0000-4000-8000-000000000025
+langcode: cs
+status: true
+dependencies:
+  module:
+    - paragraphs_ee
+    - paragraphs_library
+third_party_settings:
+  paragraphs_library:
+    allow_library_conversion: true
+  paragraphs_ee:
+    paragraphs_categories:
+      basic: basic
+id: quote_image
+label: 'Quote with Image'
+icon_uuid: null
+icon_default: null
+description: ''
+behavior_plugins: {  }

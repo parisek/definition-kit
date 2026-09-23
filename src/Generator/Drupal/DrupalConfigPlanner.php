@@ -1016,17 +1016,22 @@ final class DrupalConfigPlanner
         return $map;
     }
 
-    /** @param array<mixed> $entries */
+    /**
+     * The highest weight among display or drag-drop entries, or -1 when none
+     * has one, so that the next entry gets weight 0. Weights can be negative.
+     *
+     * @param array<mixed> $entries
+     */
     private static function maxWeight(array $entries): int
     {
-        $max = -1;
+        $max = null;
         foreach ($entries as $entry) {
             if (is_array($entry) && is_numeric($entry['weight'] ?? null)) {
-                $max = max($max, (int) $entry['weight']);
+                $max = null === $max ? (int) $entry['weight'] : max($max, (int) $entry['weight']);
             }
         }
 
-        return $max;
+        return $max ?? -1;
     }
 
     /**

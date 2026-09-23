@@ -1,0 +1,16 @@
+# A project shaped like the first Drupal consumer: Czech site, content
+# translation, field_config_cardinality, paragraphs rendered through one
+# extra field, contrib third-party settings in a project baseline.
+drupal:
+  ignore_fields:
+    - field_wrapper_id
+    - field_wrapper_classes
+    - field_spacing
+  langcode: cs
+  text_format: basic
+  translation: true
+  view_display: hidden
+  field_config_cardinality: true
+  host_fields:
+    - field.field.node.page.field_paragraphs
+  baseline: drupal-baseline.yaml

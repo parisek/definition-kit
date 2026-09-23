@@ -1,0 +1,18 @@
+langcode: cs
+status: true
+dependencies:
+  module:
+    - paragraphs_ee
+    - paragraphs_library
+third_party_settings:
+  paragraphs_library:
+    allow_library_conversion: true
+  paragraphs_ee:
+    paragraphs_categories:
+      basic: basic
+id: numbers
+label: 'Numbers Statistics'
+icon_uuid: null
+icon_default: null
+description: ''
+behavior_plugins: {  }
