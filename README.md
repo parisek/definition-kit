@@ -167,6 +167,8 @@ A field the aliased bundles do not all share names the ones that do have it in a
 
 `drupal.storage` pins one exact type. The migration writes it wherever the export uses a type other than the default.
 
+A `reference` targeting an entity type outside `term:`/`post:`/media (a config entity such as `webform`, or a content entity Drupal-side only) uses `of: entity:<target_type>[:<bundle>,…]` — omitting the bundle list means no restriction, Drupal's own `target_bundles: null`. See [ADR 0009](docs/adr/0009-generic-drupal-entity-reference-target-vocabulary.md).
+
 **What the lint compares.** The field set in both directions, the storage type, cardinality (one value or several, and a fixed limit against `max:`), the required flag, reference targets and nested paragraph bundles. Not labels, descriptions, translatability, widgets, formatters, weights or field_group layout. After a `--root` run it lists every paragraph type that no component claimed.
 
 **`fields-generate --target=drupal`.** It plans the whole export in one pass, because components share field storage, and prints one line per config entity:

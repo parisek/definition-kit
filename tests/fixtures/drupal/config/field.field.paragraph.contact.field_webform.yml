@@ -1,0 +1,23 @@
+langcode: en
+status: true
+dependencies:
+  config:
+  - field.storage.paragraph.field_webform
+  - paragraphs.paragraphs_type.contact
+  module:
+  - webform
+id: paragraph.contact.field_webform
+field_name: field_webform
+entity_type: paragraph
+bundle: contact
+label: Webform
+description: ''
+required: true
+translatable: true
+default_value: {}
+default_value_callback: ''
+settings:
+  handler: default:webform
+  handler_settings:
+    target_bundles: null
+field_type: entity_reference

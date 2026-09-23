@@ -115,6 +115,9 @@ final class DrupalTypeMap
         if (str_starts_with($of, 'post:')) {
             return 'node';
         }
+        if (str_starts_with($of, 'entity:')) {
+            return self::entityOfTargetType($of);
+        }
 
         return null;
     }
@@ -145,8 +148,46 @@ final class DrupalTypeMap
 
             return $bundles;
         }
+        if (str_starts_with($of, 'entity:')) {
+            $bundles = self::entityOfTargetBundles($of);
+            sort($bundles);
+
+            return $bundles;
+        }
 
         return null;
+    }
+
+    /**
+     * Splits an `entity:<target_type>[:<bundle>[,<bundle>…]]` `of:` value.
+     * The target type is the segment right after `entity:`; a second `:`
+     * starts an optional comma list of bundles.
+     */
+    private static function entityOfTargetType(string $of): string
+    {
+        $rest = substr($of, strlen('entity:'));
+        $colon = strpos($rest, ':');
+
+        return false === $colon ? $rest : substr($rest, 0, $colon);
+    }
+
+    /**
+     * The bundle list of an `entity:` `of:` value. An empty list means no
+     * restriction — Drupal's own `target_bundles: null` sentinel, the same
+     * "any bundle" DrupalField::targetBundles() reads back from the export.
+     *
+     * @return list<string>
+     */
+    private static function entityOfTargetBundles(string $of): array
+    {
+        $rest = substr($of, strlen('entity:'));
+        $colon = strpos($rest, ':');
+        if (false === $colon) {
+            return [];
+        }
+        $bundles = substr($rest, $colon + 1);
+
+        return '' === $bundles ? [] : explode(',', $bundles);
     }
 
     /**

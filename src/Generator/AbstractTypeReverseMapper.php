@@ -164,8 +164,25 @@ final class AbstractTypeReverseMapper
             }
             return ['acfType' => 'post_object', 'extra' => $extra];
         }
+        if (str_starts_with($of, 'entity:')) {
+            // `entity:<target_type>[:<bundle>,…]` (ADR 0009) names a Drupal
+            // entity type ACF has no concept of — a config entity such as
+            // `webform`, or a content entity outside WordPress's post
+            // vocabulary. This reverse mapper still runs unconditionally on
+            // Drupal-only projects (fields-validate/fields-generate build the
+            // WP reconstruction tree as a key-resolution check regardless of
+            // target — see bin/fields-validate), so it falls back to an
+            // unrestricted post_object rather than fail: no ACF field of this
+            // kind is ever generated for a Drupal-only project.
+            $extra = ['post_type' => []];
+            if (true === ($field['multiple'] ?? false)) {
+                $extra['multiple'] = 1;
+            }
+
+            return ['acfType' => 'post_object', 'extra' => $extra];
+        }
         throw new \DomainException(sprintf(
-            "reference field has unsupported 'of' target '%s' — expected 'geo', 'term:<taxonomy>', or a 'post:<type>[,post:<type>...]' list.",
+            "reference field has unsupported 'of' target '%s' — expected 'geo', 'term:<taxonomy>', 'post:<type>[,post:<type>...]', or 'entity:<target_type>[:<bundle>...]'.",
             $of,
         ));
     }

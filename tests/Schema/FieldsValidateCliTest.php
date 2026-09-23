@@ -77,6 +77,41 @@ final class FieldsValidateCliTest extends TestCase
         self::assertStringContainsString('OK   ', $output);
     }
 
+    /**
+     * ADR 0009: a `reference` field naming a Drupal-only entity type
+     * (`of: entity:webform`, arkero's `field_webform`) must validate cleanly.
+     * `fields-validate` runs the WP reverse mapper unconditionally, even on a
+     * Drupal-only project, as a key-resolution check.
+     */
+    public function test_entity_of_target_validates_ok(): void
+    {
+        $path = $this->writeYaml('demo', "name: Demo\ncategory: Content\nkind: element\nfields:\n  webform:\n    type: reference\n    label: Webform\n    of: 'entity:webform'\n");
+
+        [$output, $exitCode] = $this->runCli($path);
+
+        self::assertSame(0, $exitCode, $output);
+        self::assertStringContainsString('OK   ', $output);
+    }
+
+    /**
+     * Before ADR 0009, a `reference` field with a missing/unsupported `of:`
+     * crashed fields-validate with an uncaught DomainException from
+     * AbstractTypeReverseMapper::reference() instead of reporting a clean
+     * FAIL — the exact crash `--drupal-config` migration of arkero's
+     * `field_webform` triggered (an empty `of:`).
+     */
+    public function test_reference_with_unsupported_of_fails_cleanly_instead_of_crashing(): void
+    {
+        $path = $this->writeYaml('demo', "name: Demo\ncategory: Content\nkind: element\nfields:\n  broken:\n    type: reference\n    label: Broken\n");
+
+        [$output, $exitCode] = $this->runCli($path);
+
+        self::assertNotSame(0, $exitCode);
+        self::assertStringContainsString('FAIL ', $output);
+        self::assertStringNotContainsString('Fatal error', $output);
+        self::assertStringNotContainsString('Uncaught', $output);
+    }
+
     public function test_schema_invalid_definition_exits_nonzero(): void
     {
         $path = $this->writeYaml('demo', "name: Demo\ncategory: Content\nkind: element\nfields:\n  title:\n    type: not_a_real_type\n    label: Title\n");

@@ -58,8 +58,8 @@ final class FieldsLintDrupalCliTest extends TestCase
         self::assertStringContainsString("DRIFT content (content, html)\n    html: field_title (string): Drupal field has no definition field", $output);
         self::assertStringContainsString('DRIFT logo-list (logo_list)', $output);
         self::assertStringContainsString('SKIP header-note: no header-note.yaml yet', $output);
-        self::assertStringContainsString("UNCLAIMED paragraph types (no component describes them):\n    image_full\n    mixed_section\n    teaser", $output);
-        self::assertStringContainsString('7 component(s), 5 failed, 1 skipped', $output);
+        self::assertStringContainsString("UNCLAIMED paragraph types (no component describes them):\n    contact\n    image_full\n    mixed_section\n    teaser", $output);
+        self::assertStringContainsString('7 component(s), 6 failed, 1 skipped', $output);
     }
 
     #[Test]

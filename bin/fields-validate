@@ -145,6 +145,15 @@ foreach ($paths as $path) {
         echo "FAIL {$path}\n";
         echo "       {$e->getMessage()}\n";
         continue;
+    } catch (\DomainException $e) {
+        // This reconstruction pass runs on every project regardless of
+        // target (see the docblock above): a field shape the WP reverse
+        // mapper rejects is a validation failure of THIS definition, not an
+        // uncaught crash of the tool.
+        $failed = true;
+        echo "FAIL {$path}\n";
+        echo "       {$e->getMessage()}\n";
+        continue;
     }
 
     echo "OK   {$path}\n";

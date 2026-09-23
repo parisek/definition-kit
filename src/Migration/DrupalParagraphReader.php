@@ -334,12 +334,17 @@ final class DrupalParagraphReader
             return ['type' => 'reference', 'of' => implode(',', array_map(static fn (string $b): string => "post:{$b}", $bundles))];
         }
 
-        $drupal = ['target_type' => $targetType ?? 'node'];
+        // A generic Drupal entity reference — a config entity such as
+        // `webform`, or any content entity outside the post/taxonomy/media
+        // vocabulary above. `entity:<type>[:<bundle>,…]` carries the target
+        // type AND the bundle restriction (or its absence, meaning "any") in
+        // one neutral `of:`; see ADR 0009.
+        $of = 'entity:' . ($targetType ?? 'node');
         if ([] !== $bundles) {
-            $drupal['target_bundles'] = $bundles;
+            $of .= ':' . implode(',', $bundles);
         }
 
-        return ['type' => 'reference', 'drupal' => $drupal];
+        return ['type' => 'reference', 'of' => $of];
     }
 
     /**

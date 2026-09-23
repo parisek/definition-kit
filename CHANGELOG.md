@@ -8,6 +8,38 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 <!-- New entries go directly under this line. It is the anchor that keeps a branch's
      changelog edit from merging into a version that shipped without it. -->
 
+### Fixed
+
+- **A Drupal `entity_reference` to an entity type outside `post`/`term`/`media`
+  (a config entity such as `webform`, or a content entity Drupal-side only)
+  now has an `of:` vocabulary** — `entity:<target_type>[:<bundle>,…]` (ADR
+  0009). `fields-migrate --drupal-config` used to write such a field with no
+  `of:` at all, which every consumer read back as `''`, an unhandled value
+  `AbstractTypeReverseMapper::reference()` threw a `DomainException` for —
+  uncaught, since that reverse mapper runs unconditionally inside
+  `fields-validate`/`fields-generate` (both build the WP reconstruction tree
+  as a key-resolution check regardless of target). A Drupal-only project
+  therefore could not validate its own migrated output for such a field.
+  Fixed at the source (`DrupalParagraphReader::reference()` now writes a
+  valid `of:`) and defensively (`AbstractTypeReverseMapper::reference()`
+  falls back to an unrestricted `post_object` for `entity:` instead of
+  throwing; `bin/fields-validate` also now catches `\DomainException`
+  around its `FieldsGenerator::generate()` call and reports a clean `FAIL`
+  instead of crashing, for any other cause of the same shape).
+- **Omitting `entity:<target_type>`'s bundle list is a declared "any
+  bundle", and `fields-lint-drupal`/`fields-generate --target=drupal` now
+  treat it consistently with the real Drupal `target_bundles: null`
+  sentinel.** `DrupalTypeMap::expectedTargetBundles()` returns `[]` (compared
+  against the field's real, equally empty bundle list) rather than `null`
+  (which means "the definition does not say — skip the check"), and
+  `DrupalConfigPlanner` now writes real Drupal `null` back for an empty
+  wanted-bundles list wherever it builds `handler_settings.target_bundles` —
+  previously a literal `[]`, which is not the same sentinel and round-tripped
+  to DRIFT against itself. Together these give arkero's `field_webform` a
+  correct `of: entity:webform` with 0 DRIFT and 0 UPDATE, replacing the
+  semantically wrong `of: 'post:any'` workaround (a webform is not a post)
+  that still left both.
+
 ## [0.18.0] - 2026-09-23
 
 ### Fixed

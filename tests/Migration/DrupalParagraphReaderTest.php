@@ -117,14 +117,29 @@ final class DrupalParagraphReaderTest extends TestCase
     }
 
     #[Test]
-    public function a_reference_with_no_kit_target_pins_the_entity_type(): void
+    public function a_reference_with_no_kit_target_names_the_entity_type_in_of(): void
     {
         $fields = $this->reader()->read('from_library');
 
         self::assertSame(
-            ['type' => 'reference', 'role' => 'field', 'label' => 'Reusable paragraph', 'required' => true, 'drupal' => ['target_type' => 'paragraphs_library_item']],
+            ['type' => 'reference', 'role' => 'field', 'label' => 'Reusable paragraph', 'required' => true, 'of' => 'entity:paragraphs_library_item'],
             $fields['reusable_paragraph'],
         );
+    }
+
+    /**
+     * arkero's `contact` paragraph carries `field_webform`: an entity
+     * reference to the `webform` config entity with
+     * `handler_settings.target_bundles: null` — no restriction. Migrating it
+     * must write a valid `of:`, never an empty one (ADR 0009).
+     */
+    #[Test]
+    public function an_unrestricted_reference_to_a_config_entity_names_it_with_no_bundle_list(): void
+    {
+        $fields = $this->reader(evidence: false, settings: new DrupalSettings())->read('contact');
+
+        self::assertSame('entity:webform', $fields['webform']['of']);
+        self::assertArrayNotHasKey('drupal', $fields['webform']);
     }
 
     #[Test]

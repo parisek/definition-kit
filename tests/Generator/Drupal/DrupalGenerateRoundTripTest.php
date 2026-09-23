@@ -38,7 +38,11 @@ final class DrupalGenerateRoundTripTest extends TestCase
     /** @return iterable<string, array{string, string, list<string>, bool}> */
     public static function exports(): iterable
     {
-        $bundles = ['card_list', 'stats', 'quote_image', 'image_full', 'promo', 'mixed_section', 'teaser', 'content'];
+        // `contact` is ADR 0009's fixture: an unrestricted entity_reference
+        // to the `webform` config entity (`of: entity:webform`), the arkero
+        // shape the DomainException crash and the target_bundles null/[]
+        // mismatch both came from.
+        $bundles = ['card_list', 'stats', 'quote_image', 'image_full', 'promo', 'mixed_section', 'teaser', 'content', 'contact'];
         yield 'fixture export, by convention' => [self::DRUPAL, '/config', $bundles, false];
         yield 'fixture export, with display evidence' => [self::DRUPAL, '/config', $bundles, true];
         yield 'real-shaped export' => [self::MERGE, '/config', ['quote_image', 'numbers'], false];
