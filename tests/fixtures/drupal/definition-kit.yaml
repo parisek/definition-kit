@@ -1,0 +1,7 @@
+drupal:
+  bundle_aliases:
+    html: content
+  bundles_without_component:
+    - from_library
+  ignore_fields:
+    - field_wrapper_id

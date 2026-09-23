@@ -1,0 +1,46 @@
+name: 'Card List'
+category: Block
+kind: block
+drupal: /admin/structure/paragraphs_type/card_list/fields
+fields:
+  heading:
+    type: object
+    label: Heading
+    fields:
+      title:
+        type: text
+        label: Heading
+  items:
+    type: list
+    label: Items
+    fields:
+      name:
+        type: text
+        label: Name
+        required: true
+        drupal:
+          field: field_title
+      image:
+        type: media
+        label: Photo
+        kind: image
+        drupal:
+          target_bundles:
+            - image
+      company:
+        type: richtext
+        label: Company
+        drupal:
+          field: field_perex
+      phone:
+        type: text
+        label: Phone
+        drupal:
+          storage: telephone
+      email:
+        type: text
+        label: E-mail
+        drupal:
+          storage: email
+    drupal:
+      field: field_paragraphs

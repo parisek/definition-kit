@@ -1,0 +1,27 @@
+langcode: en
+status: true
+dependencies:
+  config:
+  - field.storage.paragraph.field_paragraphs
+  - paragraphs.paragraphs_type.card_list
+third_party_settings:
+  field_config_cardinality:
+    cardinality_config: '-1'
+    cardinality_label_config: false
+id: paragraph.card_list.field_paragraphs
+field_name: field_paragraphs
+entity_type: paragraph
+bundle: card_list
+label: Items
+description: ''
+required: false
+translatable: true
+default_value: {}
+default_value_callback: ''
+settings:
+  handler: default:paragraph
+  handler_settings:
+    target_bundles:
+      card_list_item: card_list_item
+    negate: 0
+field_type: entity_reference_revisions

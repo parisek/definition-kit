@@ -1,0 +1,12 @@
+langcode: en
+status: true
+dependencies: {}
+third_party_settings:
+  paragraphs_library:
+    allow_library_conversion: true
+id: stats
+label: Stats
+icon_uuid: null
+icon_default: null
+description: ''
+behavior_plugins: {}

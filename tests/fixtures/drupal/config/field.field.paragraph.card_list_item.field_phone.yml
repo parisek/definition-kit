@@ -1,0 +1,18 @@
+langcode: en
+status: true
+dependencies:
+  config:
+  - field.storage.paragraph.field_phone
+  - paragraphs.paragraphs_type.card_list_item
+id: paragraph.card_list_item.field_phone
+field_name: field_phone
+entity_type: paragraph
+bundle: card_list_item
+label: Phone
+description: ''
+required: false
+translatable: true
+default_value: {}
+default_value_callback: ''
+settings: {}
+field_type: telephone

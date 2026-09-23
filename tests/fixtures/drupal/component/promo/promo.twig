@@ -1,0 +1,17 @@
+{#
+name: "Promo"
+category: "Block"
+drupal: /admin/structure/paragraphs_type/promo/fields
+fields:
+	title:
+		title: Title
+		type: text
+	body:
+		title: Body
+		type: object
+		fields:
+			content:
+				title: Text
+				type: wysiwyg
+#}
+<p>{{ content.title }}</p>

@@ -18,7 +18,8 @@ Authored `<name>.yaml` definition → CMS projection (`acf.json` + `block.json`)
 
 - `src/Migration/` — `acf.json` (+ twig front-comment + sibling `block.json`) → definition tree. `AcfJsonReader` (orchestrator), `AbstractTypeMapper`, `WpmlTranslatableMapper`, `VisibleWhenMapper`, `BlockResidualCapturer`, `MigrationCompletenessAuditor`, `FieldsYamlWriter`.
 - `src/Generator/` — definition tree → `acf.json` + `block.json`. `FieldsGenerator`, `FieldReconstructor`, `RootFieldGroupBuilder`, `BlockJsonGenerator`, `AcfJsonWriter`, `AbstractTypeReverseMapper`, `ConstraintSentinels`. Migration and Generation are inverses; keep them so.
-- `src/Lint/` — `DriftLinter` + `DriftAllowlist` + `DriftResult`; `bin/fields-lint`.
+- `src/Lint/` — `DriftLinter` + `DriftAllowlist` + `DriftResult`; `bin/fields-lint`. `DrupalDriftLinter` + `DrupalDriftResult`; `bin/fields-lint-drupal` (ADR 0001).
+- `src/Drupal/` — the Drupal side: `DrupalConfig` (reads a `drush config:export` dir), `DrupalSettings` (`drupal:` in definition-kit.yaml), `BundleResolver`, `DrupalTypeMap` (kit type <-> storage), `DisplayEvidence` (token_get_all over the PHP display class). `Migration\DrupalParagraphReader` is config -> `fields:`.
 - `src/Contract/` — the input-contract half (#27). `TwigPropExtractor` (what a twig reads, via Twig's own parser), `ContractLinter` (reads vs declared roles; gated per component — typed / untyped / unanalysed, never "passing by default"), `RoleProposer` + `CallSiteIndex` + `PhpSidecarEvidence` (`bin/fields-roles` bootstrap; proposes from evidence, leaves the rest blank).
 - `src/Schema/` — opis/json-schema validation of `<name>.yaml` and the JSON outputs.
 - `src/Support/StructuralDiff.php` — order-insensitive structural diff shared by the linter and the migration self-diff.
@@ -40,6 +41,10 @@ Run inside DDEV where a project provides one (`ddev composer …`, `ddev exec ve
 - **The round-trip is the contract:** `generate(migrate(acf.json)) == acf.json` (modulo documented ACF-export-era residuals). Every migration change needs the inverse generation change + a round-trip test. `MigrationCompletenessAuditor` guards against silently-dropped props.
 - **Drop-defaults rule:** a value equal to the type-defaults baseline is omitted from the definition (migrate) and re-added (generate). Don't emit baseline values into `<name>.yaml`.
 - **Structural types: branch on `object`/`list` only.** `group`/`repeater` are schema aliases, resolved by `Support\StructuralType` when a definition is read (`parseFile()`) and at `FieldsGenerator::generate()` for in-memory trees. Read a definition through `StructuralType::parseFile()`, not `Yaml::parseFile()`. `group`/`repeater` literals left in `src/` name the ACF field type (acf.json side, baselines) — keep them.
+- **Drupal: `lint(migrate(export))` is clean by construction** — `DrupalParagraphReader` and `DrupalDriftLinter` are inverses; change both, and `DrupalDriftLinterTest::a_migrated_definition_is_clean_against_its_own_config` guards it. Golden output: `tests/fixtures/drupal/expected/` (anonymised, derived from a real site).
+- **Root `drupal:` is the admin-link string** (`parisek/styleguide` reads it); Drupal residue is the per-field `drupal:` block, closed. Never make the root key an object.
+- **Never `include`/`eval` a consumer's PHP.** `DisplayEvidence` only tokenizes it.
+- **The Drupal config dir is always a CLI argument** (`--drupal-config`), never a setting: `config/sync` can lag the database.
 - **`wp:` escape hatch is for genuinely non-derivable CMS residue only** (block `postTypes`/`supports`/`attributes`, accordion `wpml`, anomalous WPML modes). Anything with an abstract-vocabulary home belongs in a semantic key, not `wp:`.
 - **`schemas/` paths are resolved `__DIR__ . '/../../schemas/…'` from `src/*/`** — `src/` and `schemas/` are siblings at the repo root; keep them so.
 - **`bin/*` autoload discovery** tries `__DIR__/../vendor/autoload.php` (standalone) then `__DIR__/../../../autoload.php` (installed in a consumer's `vendor/`). Preserve both.

@@ -690,4 +690,22 @@ final class TwigFieldTypeMapperTest extends TestCase
         $this->expectExceptionMessage('has twig annotation prop(s) with no mapping');
         $mapper->map(['type' => 'text', 'cms_type' => 'string'], 'search');
     }
+
+    public function test_a_paragraph_backed_field_defaults_to_the_field_role_without_writing_it(): void
+    {
+        $mapper = new TwigFieldTypeMapper(paragraphBacked: true);
+
+        self::assertSame(
+            ['type' => 'object', 'fields' => ['title' => ['type' => 'text', 'label' => 'Title']], 'label' => 'Heading'],
+            $mapper->map(['type' => 'object', 'title' => 'Heading', 'fields' => ['title' => ['type' => 'text', 'title' => 'Title']]], 'heading'),
+        );
+    }
+
+    public function test_an_explicit_role_still_wins_on_a_paragraph_backed_field(): void
+    {
+        $mapper = new TwigFieldTypeMapper(paragraphBacked: true);
+
+        self::assertSame('query', $mapper->map(['type' => 'text', 'title' => 'T', 'role' => 'query'], 'total')['role']);
+        self::assertSame('field', $mapper->map(['type' => 'text', 'title' => 'T', 'role' => 'field'], 'title')['role']);
+    }
 }

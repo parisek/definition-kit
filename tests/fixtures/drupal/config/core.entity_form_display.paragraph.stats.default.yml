@@ -1,0 +1,40 @@
+langcode: en
+status: true
+dependencies: {}
+third_party_settings:
+  field_group:
+    group_heading:
+      children:
+      - field_title
+      label: Heading
+      region: content
+      parent_name: ''
+      weight: 0
+      format_type: details
+      format_settings: {}
+id: paragraph.stats.default
+targetEntityType: paragraph
+bundle: stats
+mode: default
+content:
+  field_title:
+    type: string_textfield
+    weight: 0
+    region: content
+    settings: {}
+    third_party_settings: {}
+  field_paragraphs:
+    type: paragraphs
+    weight: 1
+    region: content
+    settings: {}
+    third_party_settings: {}
+  field_wrapper_id:
+    type: string_textfield
+    weight: 2
+    region: content
+    settings: {}
+    third_party_settings: {}
+hidden:
+  created: true
+  status: true

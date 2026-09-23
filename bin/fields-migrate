@@ -3,7 +3,13 @@
 
 declare(strict_types=1);
 
+use Parisek\DefinitionKit\Drupal\BundleResolver;
+use Parisek\DefinitionKit\Drupal\DisplayEvidence;
+use Parisek\DefinitionKit\Drupal\DrupalConfig;
+use Parisek\DefinitionKit\Drupal\DrupalSettings;
 use Parisek\DefinitionKit\Migration\AcfJsonReader;
+use Parisek\DefinitionKit\Migration\DrupalParagraphReader;
+use Parisek\DefinitionKit\Migration\TwigMetadataReader;
 use Parisek\DefinitionKit\Support\KeyStyle;
 use Parisek\DefinitionKit\Migration\BlockResidualCapturer;
 use Parisek\DefinitionKit\Migration\FieldsYamlWriter;
@@ -39,9 +45,42 @@ function fields_migrate_write_atomically(string $path, string $content): bool
 }
 
 /**
- * @return array{ok: bool, component: string, out?: string, error?: string, skipped?: string}
+ * Insert $key => $value into $tree right after the last of $after present,
+ * so the dumped YAML keeps the front-comment's key order.
+ *
+ * @param array<string,mixed> $tree
+ * @param list<string> $after
+ * @return array<string,mixed>
  */
-function fields_migrate_one(string $componentDir, bool $dryRun, bool $force, KeyStyle $keyStyle, ?string $assumeRole): array
+function fields_migrate_insert_after(array $tree, array $after, string $key, mixed $value): array
+{
+    $out = [];
+    $inserted = false;
+    $anchor = null;
+    foreach ($after as $candidate) {
+        if (array_key_exists($candidate, $tree)) {
+            $anchor = $candidate;
+        }
+    }
+    if (null === $anchor) {
+        return [$key => $value] + $tree;
+    }
+    foreach ($tree as $k => $v) {
+        $out[$k] = $v;
+        if ($k === $anchor) {
+            $out[$key] = $value;
+            $inserted = true;
+        }
+    }
+
+    return $inserted ? $out : $tree + [$key => $value];
+}
+
+/**
+ * @param array{config: ?DrupalConfig, settings: DrupalSettings, evidence: ?DisplayEvidence} $drupal
+ * @return array{ok: bool, component: string, out?: string, error?: string, skipped?: string, note?: string}
+ */
+function fields_migrate_one(string $componentDir, bool $dryRun, bool $force, KeyStyle $keyStyle, ?string $assumeRole, array $drupal = ['config' => null, 'settings' => new DrupalSettings(), 'evidence' => null], ?string $defaultCategory = null): array
 {
     $componentDir = rtrim($componentDir, '/');
     $componentName = basename($componentDir);
@@ -153,6 +192,19 @@ function fields_migrate_one(string $componentDir, bool $dryRun, bool $force, Key
 
     $twigSource = is_file($twigPath) ? file_get_contents($twigPath) : null;
 
+    // A Drupal paragraph type behind the component (see BundleResolver for
+    // the order: the root `drupal:` admin link, the snake_case convention,
+    // bundle_aliases). With a config export in hand the bundle must exist in
+    // it, and the export -- the deployed schema -- becomes the field source.
+    // Without one, only the admin link can say so, and the twig `fields:`
+    // annotation stays the field source with editor-authored roles.
+    $twigMeta = is_string($twigSource) ? (new TwigMetadataReader())->read($twigSource) : [];
+    $bundles = (new BundleResolver($drupal['settings']))->resolve($componentName, $twigMeta['drupal'] ?? null, $drupal['config']);
+    $bundle = array_key_first($bundles);
+    $fromConfig = null !== $bundle && null !== $drupal['config'] && $drupal['config']->hasBundle($bundle) && !is_file($acfPath);
+    $paragraphBacked = null !== $bundle && (null === $drupal['config'] ? BundleResolver::SOURCE_LINK === $bundles[$bundle] : $drupal['config']->hasBundle($bundle));
+    $note = null;
+
     try {
         // `acfJsonExists` distinguishes a synthesised empty document (no
         // acf.json at all — the twig annotation, if any, is the sole field
@@ -163,8 +215,24 @@ function fields_migrate_one(string $componentDir, bool $dryRun, bool $force, Key
         // twig-only path — an acf.json-backed component ignores it entirely,
         // since AcfJsonReader::read() never reaches the twig-fields fallback
         // when acf.json genuinely has fields.
-        $tree = (new AcfJsonReader(keyStyle: $keyStyle, assumeRole: $assumeRole))
-            ->read($decoded, $componentName, $twigSource, is_file($acfPath));
+        // With the config as field source, the twig is read for metadata
+        // only: `acfJsonExists: true` over the synthesised empty document
+        // keeps AcfJsonReader off the twig `fields:` annotation.
+        $tree = (new AcfJsonReader(keyStyle: $keyStyle, assumeRole: $assumeRole, paragraphBacked: $paragraphBacked))
+            ->read($decoded, $componentName, $twigSource, is_file($acfPath) || $fromConfig);
+        if ($fromConfig && null !== $bundle && null !== $drupal['config']) {
+            $tree['fields'] = (new DrupalParagraphReader($drupal['config'], $drupal['settings'], $drupal['evidence']))->read($bundle);
+            $note = "fields from Drupal paragraph type {$bundle}";
+            if (is_string($twigSource) && [] !== (new TwigMetadataReader())->readFields($twigSource)) {
+                $note .= "; the twig fields: annotation was not used";
+            }
+        }
+        if ($paragraphBacked && !isset($tree['kind'])) {
+            $tree = fields_migrate_insert_after($tree, ['name', 'usage', 'category'], 'kind', 'block');
+        }
+        if (null !== $defaultCategory && !isset($tree['category'])) {
+            $tree = fields_migrate_insert_after($tree, ['name', 'usage'], 'category', $defaultCategory);
+        }
     } catch (\Throwable $e) {
         // Broad on purpose: AbstractTypeMapper throws DomainException for an
         // unsupported ACF field type; a group/repeater with zero non-accordion
@@ -202,10 +270,10 @@ function fields_migrate_one(string $componentDir, bool $dryRun, bool $force, Key
 
     if ($dryRun) {
         @unlink($outPath);
-        return ['ok' => true, 'component' => $componentName];
+        return ['ok' => true, 'component' => $componentName] + (null !== $note ? ['note' => $note] : []);
     }
 
-    return ['ok' => true, 'component' => $componentName, 'out' => $outPath];
+    return ['ok' => true, 'component' => $componentName, 'out' => $outPath] + (null !== $note ? ['note' => $note] : []);
 }
 
 $args = array_slice($argv, 1);
@@ -299,9 +367,18 @@ $dryRun = false;
 $force = false;
 $single = null;
 $assumeRole = null;
+$drupalConfigDir = null;
+$drupalDisplay = null;
+$defaultCategory = null;
 
 $usage = "usage: fields-migrate [--dry-run] [--force] [--assume-role=parent|query|global] <component-dir|page-dir|doc-dir>\n"
     . "       fields-migrate [--dry-run] [--force] [--assume-role=parent|query|global] --root=<components-root>\n"
+    . "  Drupal: [--drupal-config=<config-dir>] [--drupal-display=<php-file>] [--default-category=<name>]\n"
+    . "  --drupal-config reads a Drupal config export: a component whose paragraph type exists there\n"
+    . "  gets kind: block and its fields from that paragraph type (see README, Drupal).\n"
+    . "  --drupal-display names the PHP class that builds the template's content array; it is\n"
+    . "  tokenized (never run) for the template prop name of each Drupal field.\n"
+    . "  --default-category sets category: where the twig front-comment has none.\n"
     . "  --force re-derives over an existing definition, discarding whatever only it records.\n"
     . "  A directory under page/ or doc/ moves its twig front-comment into <id>.yaml\n"
     . "  (page.schema.json or doc.schema.json).\n"
@@ -326,6 +403,22 @@ foreach ($args as $arg) {
     }
     if ('--force' === $arg) {
         $force = true;
+        continue;
+    }
+    if (str_starts_with($arg, '--drupal-config=')) {
+        $drupalConfigDir = substr($arg, 16);
+        continue;
+    }
+    if (str_starts_with($arg, '--drupal-display=')) {
+        $drupalDisplay = substr($arg, 17);
+        continue;
+    }
+    if (str_starts_with($arg, '--default-category=')) {
+        $defaultCategory = substr($arg, 19);
+        if ('' === $defaultCategory) {
+            fwrite(STDERR, "--default-category needs a value\n" . $usage);
+            exit(2);
+        }
         continue;
     }
     if (str_starts_with($arg, '--assume-role=')) {
@@ -366,6 +459,21 @@ if (null !== $root && !is_dir($root)) {
 // project-wide convention: two components in one project spelling their keys
 // differently is the exact split this setting exists to end.
 $keyStyle = KeyStyle::discoverFor($root ?? dirname(rtrim((string) $single, '/')));
+
+if (null !== $drupalDisplay && null === $drupalConfigDir) {
+    fwrite(STDERR, "--drupal-display needs --drupal-config\n" . $usage);
+    exit(2);
+}
+try {
+    $drupal = [
+        'config' => null !== $drupalConfigDir ? DrupalConfig::fromDirectory($drupalConfigDir) : null,
+        'settings' => DrupalSettings::discoverFor($root ?? dirname(rtrim((string) $single, '/'))),
+        'evidence' => null !== $drupalDisplay ? DisplayEvidence::fromFile($drupalDisplay) : null,
+    ];
+} catch (\RuntimeException $e) {
+    fwrite(STDERR, $e->getMessage() . "\n");
+    exit(2);
+}
 
 $results = [];
 if (null !== $root) {
@@ -408,11 +516,11 @@ if (null !== $root) {
         // one at a time since 0.4.2.
         $name = basename($dir);
         if (is_file("{$dir}/acf.json") || is_file("{$dir}/block.json") || is_file("{$dir}/{$name}.twig")) {
-            $results[] = fields_migrate_one($dir, $dryRun, $force, $keyStyle, $assumeRole);
+            $results[] = fields_migrate_one($dir, $dryRun, $force, $keyStyle, $assumeRole, $drupal, $defaultCategory);
         }
     }
 } else {
-    $results[] = fields_migrate_one($single, $dryRun, $force, $keyStyle, $assumeRole);
+    $results[] = fields_migrate_one($single, $dryRun, $force, $keyStyle, $assumeRole, $drupal, $defaultCategory);
 }
 
 $failures = 0;
@@ -420,7 +528,8 @@ foreach ($results as $result) {
     if ($result['ok']) {
         echo isset($result['skipped'])
             ? "SKIP {$result['component']}: {$result['skipped']}\n"
-            : "OK   {$result['component']}" . (isset($result['out']) ? " -> {$result['out']}" : '') . "\n";
+            : "OK   {$result['component']}" . (isset($result['out']) ? " -> {$result['out']}" : '')
+                . (isset($result['note']) ? " ({$result['note']})" : '') . "\n";
         continue;
     }
     $failures++;

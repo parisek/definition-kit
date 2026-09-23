@@ -1,0 +1,35 @@
+langcode: en
+status: true
+dependencies: {}
+id: paragraph.stats_item.default
+targetEntityType: paragraph
+bundle: stats_item
+mode: default
+content:
+  field_label:
+    type: string_textfield
+    weight: 0
+    region: content
+    settings: {}
+    third_party_settings: {}
+  field_value:
+    type: string_textfield
+    weight: 1
+    region: content
+    settings: {}
+    third_party_settings: {}
+  field_theme:
+    type: options_select
+    weight: 2
+    region: content
+    settings: {}
+    third_party_settings: {}
+  field_media:
+    type: media_library_widget
+    weight: 3
+    region: content
+    settings: {}
+    third_party_settings: {}
+hidden:
+  created: true
+  status: true

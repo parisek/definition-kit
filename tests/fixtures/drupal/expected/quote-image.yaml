@@ -1,0 +1,49 @@
+name: 'Quote with Image'
+usage:
+  - homepage
+category: Block
+kind: block
+drupal: /admin/structure/paragraphs_type/quote_image/fields
+fields:
+  image_side:
+    type: select
+    label: 'Image side'
+    options:
+      left: Left
+      right: Right
+  quote:
+    type: richtext
+    label: Quote
+    required: true
+  author:
+    type: object
+    label: Author
+    fields:
+      name:
+        type: text
+        label: 'Author name'
+        drupal:
+          field: field_author_name
+  signature:
+    type: media
+    label: Signature
+    kind: image
+    drupal:
+      target_bundles:
+        - image
+        - vector_image
+  image:
+    type: media
+    label: Image
+    kind: gallery
+    multiple: true
+    drupal:
+      field: field_media
+      target_bundles:
+        - image
+  button:
+    type: link
+    label: Button
+    shape: link
+    drupal:
+      field: field_link

@@ -1,0 +1,38 @@
+name: Stats
+category: Block
+kind: block
+fields:
+  heading:
+    type: object
+    label: Heading
+    fields:
+      title:
+        type: text
+        label: Heading
+  items:
+    type: list
+    label: Items
+    max: 5
+    fields:
+      label:
+        type: text
+        label: Label
+      value:
+        type: text
+        label: Value
+      theme:
+        type: select
+        label: Theme
+        options:
+          light: Light
+          dark: Dark
+      image:
+        type: media
+        label: Background
+        kind: image
+        drupal:
+          field: field_media
+          target_bundles:
+            - image
+    drupal:
+      field: field_paragraphs

@@ -1,0 +1,12 @@
+langcode: en
+status: true
+dependencies: {}
+third_party_settings:
+  paragraphs_library:
+    allow_library_conversion: true
+id: quote_image
+label: Quote with image
+icon_uuid: null
+icon_default: null
+description: ''
+behavior_plugins: {}

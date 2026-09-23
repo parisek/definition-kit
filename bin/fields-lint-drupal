@@ -1,0 +1,141 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use Parisek\DefinitionKit\Drupal\DrupalConfig;
+use Parisek\DefinitionKit\Drupal\DrupalSettings;
+use Parisek\DefinitionKit\Lint\DrupalDriftLinter;
+use Parisek\DefinitionKit\Lint\DrupalDriftResult;
+use Parisek\DefinitionKit\Schema\FieldsSchemaValidator;
+use Parisek\DefinitionKit\Support\EntryDefinition;
+use Parisek\DefinitionKit\Support\StructuralType;
+
+foreach ([__DIR__ . '/../vendor/autoload.php', __DIR__ . '/../../../autoload.php'] as $autoload) {
+    if (is_file($autoload)) {
+        require $autoload;
+        break;
+    }
+}
+
+$usage = "usage: fields-lint-drupal --drupal-config=<config-dir> <component-dir>\n"
+    . "       fields-lint-drupal --drupal-config=<config-dir> --root=<components-root>\n"
+    . "  Compares each <name>.yaml with the Drupal paragraph type it describes, as exported\n"
+    . "  to <config-dir> (drush config:export). Settings: the drupal: section of definition-kit.yaml.\n";
+
+$root = null;
+$single = null;
+$configDir = null;
+foreach (array_slice($argv, 1) as $arg) {
+    if (str_starts_with($arg, '--root=')) {
+        $root = substr($arg, 7);
+        continue;
+    }
+    if (str_starts_with($arg, '--drupal-config=')) {
+        $configDir = substr($arg, 16);
+        continue;
+    }
+    if (str_starts_with($arg, '-')) {
+        fwrite(STDERR, "unknown option: {$arg}\n" . $usage);
+        exit(2);
+    }
+    $single = $arg;
+}
+
+if (null === $configDir || '' === $configDir || (null === $root) === (null === $single)) {
+    fwrite(STDERR, $usage);
+    exit(2);
+}
+$scan = (string) ($root ?? $single);
+if (!is_dir($scan)) {
+    fwrite(STDERR, "not a directory: {$scan}\n");
+    exit(2);
+}
+
+try {
+    $config = DrupalConfig::fromDirectory($configDir);
+    $settings = DrupalSettings::discoverFor($root ?? dirname(rtrim((string) $single, '/')));
+} catch (\RuntimeException $e) {
+    fwrite(STDERR, $e->getMessage() . "\n");
+    exit(2);
+}
+
+echo "drupal config: {$config->directory()} (" . count($config->bundles()) . " paragraph types)\n";
+if (null !== $settings->path) {
+    echo "settings: {$settings->path}\n";
+}
+
+$linter = new DrupalDriftLinter($config, $settings);
+$validator = new FieldsSchemaValidator();
+
+$dirs = null !== $root ? (glob(rtrim($root, '/') . '/*', GLOB_ONLYDIR) ?: []) : [rtrim((string) $single, '/')];
+sort($dirs);
+
+$failures = 0;
+$skipped = 0;
+$count = 0;
+foreach ($dirs as $dir) {
+    $name = basename($dir);
+    if (null !== ($entryType = EntryDefinition::typeOfDirectory($dir))) {
+        echo "SKIP {$name}: " . EntryDefinition::skipReason($entryType) . "\n";
+        continue;
+    }
+    $count++;
+    $yamlPath = "{$dir}/{$name}.yaml";
+    if (!is_file($yamlPath)) {
+        $skipped++;
+        echo "SKIP {$name}: no {$name}.yaml yet\n";
+        continue;
+    }
+    $validation = $validator->validateFile($yamlPath);
+    if (!$validation->valid) {
+        $failures++;
+        $first = $validation->errors[0] ?? ['pointer' => '/', 'message' => 'invalid'];
+        echo "FAIL {$name}: {$name}.yaml is not a valid definition ({$first['pointer']}: {$first['message']})\n";
+        continue;
+    }
+    $definition = StructuralType::parseFile($yamlPath);
+    $result = $linter->lint(is_array($definition) ? $definition : [], $name);
+
+    switch ($result->status) {
+        case DrupalDriftResult::OK:
+            echo "OK   {$name} (" . implode(', ', $result->bundles) . ")\n";
+            break;
+        case DrupalDriftResult::SKIP:
+            $skipped++;
+            echo "SKIP {$name}: {$result->reason}\n";
+            break;
+        case DrupalDriftResult::DRIFT:
+            $failures++;
+            echo "DRIFT {$name} (" . implode(', ', $result->bundles) . ")\n";
+            foreach ($result->findings as $finding) {
+                echo "    {$finding}\n";
+            }
+            break;
+        default:
+            $failures++;
+            echo "FAIL {$name}: {$result->reason}\n";
+    }
+}
+
+// A bundle no definition claimed is only meaningful after a whole-root run:
+// a single component says nothing about the other bundles.
+$unclaimed = null !== $root ? $linter->unclaimedBundles() : [];
+if ([] !== $unclaimed) {
+    echo "\nUNCLAIMED paragraph types (no component describes them):\n";
+    foreach ($unclaimed as $bundle) {
+        echo "    {$bundle}\n";
+    }
+    echo "    fix: add a component, map the bundle in drupal.bundle_aliases, or list it in "
+        . "drupal.bundles_without_component (definition-kit.yaml)\n";
+    $failures += count($unclaimed);
+}
+
+echo sprintf(
+    "%d component(s), %d failed%s\n",
+    $count,
+    $failures,
+    $skipped > 0 ? sprintf(', %d skipped', $skipped) : '',
+);
+
+exit($failures > 0 ? 1 : 0);

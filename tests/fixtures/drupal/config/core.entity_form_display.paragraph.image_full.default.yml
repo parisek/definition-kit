@@ -1,0 +1,29 @@
+langcode: en
+status: true
+dependencies: {}
+id: paragraph.image_full.default
+targetEntityType: paragraph
+bundle: image_full
+mode: default
+content:
+  field_media:
+    type: media_library_widget
+    weight: 0
+    region: content
+    settings: {}
+    third_party_settings: {}
+  field_parallax:
+    type: boolean_checkbox
+    weight: 1
+    region: content
+    settings: {}
+    third_party_settings: {}
+  field_wrapper_id:
+    type: string_textfield
+    weight: 2
+    region: content
+    settings: {}
+    third_party_settings: {}
+hidden:
+  created: true
+  status: true

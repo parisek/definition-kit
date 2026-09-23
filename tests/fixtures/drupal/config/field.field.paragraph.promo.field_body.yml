@@ -1,0 +1,27 @@
+langcode: en
+status: true
+dependencies:
+  config:
+  - field.storage.paragraph.field_body
+  - paragraphs.paragraphs_type.promo
+third_party_settings:
+  field_config_cardinality:
+    cardinality_config: '1'
+    cardinality_label_config: false
+id: paragraph.promo.field_body
+field_name: field_body
+entity_type: paragraph
+bundle: promo
+label: Body
+description: ''
+required: false
+translatable: true
+default_value: {}
+default_value_callback: ''
+settings:
+  handler: default:paragraph
+  handler_settings:
+    target_bundles:
+      promo_body: promo_body
+    negate: 0
+field_type: entity_reference_revisions

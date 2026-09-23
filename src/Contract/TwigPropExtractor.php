@@ -600,6 +600,17 @@ final class TwigPropExtractor
                 return ['index' => null, 'name' => $value];
             }
         }
+        // Twig 3.29 compiles a named argument's key as a ConstantExpression
+        // holding the parameter name; positional keys stay LocalVariable.
+        if ($keyNode instanceof ConstantExpression) {
+            $value = $keyNode->getAttribute('value');
+            if (is_string($value) && '' !== $value) {
+                return ['index' => null, 'name' => $value];
+            }
+            if (is_int($value)) {
+                return ['index' => $value, 'name' => null];
+            }
+        }
 
         return ['index' => null, 'name' => null];
     }

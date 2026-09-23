@@ -121,6 +121,50 @@
             },
             "description": "`wp:` is a fully open escape-hatch object merged with HIGHEST precedence over every derived/reconstructed prop. Two classes of prop are reserved: scalar identity (`key`/`name`/`type` — a field's WHOLE identity: ACF postmeta key, postmeta name, field-shape discriminator) and structural containers (`fields`/`sub_fields`/`layouts` — which carry the identity of NESTED nodes one level down, so letting `wp:` overwrite them is the exact same hazard one level removed) plus `parent_repeater` (ACF-computed structural metadata re-derived from nesting on every generation; it has no legitimate authoring path at all). Letting `wp:` override any of these gives identity two independent, silently-diverging paths (seven review rounds each found a new bug of this exact shape — round 7 found the ROOT-level `wp:` bag wasn't covered at all, plus the field/layout-level bypasses via the structural props). Use the sanctioned top-level prop instead: `key:` (pattern ^field_/^layout_/^group_) to pin a key, the YAML field-map key (or a layout's own `name:`) to control the name, the top-level `type:` enum to pick the field shape, and the field/layout's own `fields:`/`layouts:` map to author nested content — never `wp:`. `wp.conditional_logic` is deliberately NOT reserved here — see FieldsGenerator's own dangling-reference validation, which is the correctness gate for that prop instead."
         },
+        "drupalOverlay": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "description": "`drupal:` is the Drupal counterpart of `wp:`: residue the abstract vocabulary cannot derive for a Drupal paragraph field. It is closed, unlike `wp:`, because `fields-lint-drupal` reads every key. The root `drupal:` key is a different thing, the admin link parisek/styleguide shows, and stays a string. Without this block a field maps to `field_<leaf>` (or `field_<bundle>_<leaf>` under `drupal.field_naming: prefixed` in definition-kit.yaml), with the storage type the kit type implies.",
+            "properties": {
+                "field": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]*$",
+                    "maxLength": 32,
+                    "description": "The Drupal field machine name, when the convention does not reach it (`button` stored in `field_link`). On an `object`, a pin makes it a single nested paragraph (entity_reference_revisions); an `object` without one is a field_group whose children live on the same bundle."
+                },
+                "storage": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]*$",
+                    "description": "The exact Drupal field storage type, when it is not the canonical one for the kit type (`email` or `telephone` behind `type: text`). The lint then accepts only this type."
+                },
+                "widget": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "The form widget plugin id. Recorded for a future config generator; the lint does not compare it."
+                },
+                "formatter": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "The view formatter plugin id. Recorded for a future config generator; the lint does not compare it."
+                },
+                "target_type": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]*$",
+                    "description": "The entity type a reference points at, when neither the kit type (`media`) nor `of:` (`term:`, `post:`) implies it: `webform`, `paragraphs_library_item`."
+                },
+                "target_bundles": {
+                    "type": "array",
+                    "minItems": 1,
+                    "uniqueItems": true,
+                    "items": {
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9_]*$"
+                    },
+                    "description": "The bundles a reference may point at. On a `list` it names the nested paragraph type when it is not `<bundle>_item`; on an `object` pinned to entity_reference_revisions it names the one nested paragraph type; on `media` it names the media types."
+                }
+            }
+        },
         "fieldMap": {
             "type": "object",
             "minProperties": 1,
@@ -366,6 +410,9 @@
                 "demo": {},
                 "wp": {
                     "$ref": "#/$defs/wpOverlay"
+                },
+                "drupal": {
+                    "$ref": "#/$defs/drupalOverlay"
                 },
                 "fields": {
                     "$ref": "#/$defs/fieldMap"

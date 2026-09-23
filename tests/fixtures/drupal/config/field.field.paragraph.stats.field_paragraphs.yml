@@ -1,0 +1,27 @@
+langcode: en
+status: true
+dependencies:
+  config:
+  - field.storage.paragraph.field_paragraphs
+  - paragraphs.paragraphs_type.stats
+third_party_settings:
+  field_config_cardinality:
+    cardinality_config: '5'
+    cardinality_label_config: false
+id: paragraph.stats.field_paragraphs
+field_name: field_paragraphs
+entity_type: paragraph
+bundle: stats
+label: Items
+description: ''
+required: false
+translatable: true
+default_value: {}
+default_value_callback: ''
+settings:
+  handler: default:paragraph
+  handler_settings:
+    target_bundles:
+      stats_item: stats_item
+    negate: 0
+field_type: entity_reference_revisions

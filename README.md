@@ -8,7 +8,7 @@
 
 Authored per-component **definition** (`<name>.yaml`) → CMS **projection** generator + **drift-lint**.
 
-A component's editable surface is authored once, as a human-readable semantic YAML definition. From it, definition-kit generates the CMS-specific implementation (WordPress ACF `acf.json` + Gutenberg `block.json` today; Drupal SDC/paragraphs planned) and a drift-lint fails CI whenever the committed projection stops matching `generate(<name>.yaml)`. The definition is the single source of truth; `acf.json`/`block.json` become generated artifacts.
+A component's editable surface is authored once, as a human-readable semantic YAML definition. From it, definition-kit generates the CMS-specific implementation (WordPress ACF `acf.json` + Gutenberg `block.json`) and a drift-lint fails CI whenever the committed projection stops matching `generate(<name>.yaml)`. For Drupal it migrates definitions from the paragraph config and lints them against a config export; generation of Drupal config is planned (see [Drupal paragraphs](#drupal-paragraphs)). The definition is the single source of truth; `acf.json`/`block.json` become generated artifacts.
 
 Companion to [`parisek/acf-json-schema`](https://github.com/parisek/acf-json-schema) (which *validates* ACF JSON); definition-kit *authors and generates* it.
 
@@ -22,7 +22,7 @@ It's a build/lint tool — a dev dependency, not a runtime one. Requires PHP 8.3
 
 ## CLI
 
-Four executables land in `vendor/bin/`:
+Five executables land in `vendor/bin/`:
 
 | Command | Does |
 | --- | --- |
@@ -30,6 +30,7 @@ Four executables land in `vendor/bin/`:
 | `fields-generate` | `<name>.yaml` → `acf.json` + `block.json` projection, for `kind: block` and for a definition with no `kind`. |
 | `fields-validate` | Validate `<name>.yaml` against the bundled JSON Schema (`page.schema.json` for a page, `doc.schema.json` for a doc, see below). |
 | `fields-lint` | Drift-lint: fail when the committed projection differs from `generate(migrate(source))`. |
+| `fields-lint-drupal` | Drift-lint against a Drupal config export: fail when a definition and its paragraph type differ. See [Drupal paragraphs](#drupal-paragraphs). |
 
 Each accepts a single component directory or `--root=<components-root>` to sweep every `component/*/` under it (`--dry-run` on `fields-migrate` writes nothing).
 
@@ -119,8 +120,63 @@ The last line reads `N component(s), N failed`. When a component was skipped it 
 - Semantic annotations — `label`, `description` (editor instructions), `mcp` (AI-agent guidance), `translatable`, constraints (`maxlength`/`min`/`max`/`step`/`accept`), `visible_when`, `add_label`, `placeholder`, `options` — carry authored intent.
 - **Root metadata:** `name`, `category` and `fields` are required. `asana` is an absolute http(s) URL whose host is asana.com or a subdomain. `web` and `drupal` are a site-relative path (starts with `/`, not `//`) or an absolute http(s) URL with a host. Pages use the same formats for these keys.
 - A per-field / root **`wp:` escape hatch** captures genuinely CMS-specific residue verbatim (e.g. block `postTypes`/`supports`, accordion `wpml`) so the round-trip stays lossless without polluting the semantic surface.
+- A per-field **`drupal:` block** does the same for Drupal (`field`, `storage`, `widget`, `formatter`, `target_type`, `target_bundles`). It is closed: the Drupal lint reads every key. The root `drupal:` key is something else, the admin link, and stays a string.
 
 The round-trip contract: `generate(migrate(acf.json)) == acf.json`, modulo documented ACF-export-era residuals.
+
+## Drupal paragraphs
+
+A Drupal component is built from a paragraph type. The Drupal admin UI owns the fields, and `drush config:export` writes them to YAML. definition-kit reads that export. It does not write Drupal config yet. [ADR 0001](docs/adr/0001-lint-drupal-paragraphs-against-a-config-export.md) records why and how.
+
+```bash
+# bootstrap the definitions from the export (fields) and the twig front-comments (metadata)
+vendor/bin/fields-migrate --drupal-config=config/sync \
+  --drupal-display=web/modules/custom/<module>/src/Plugin/ExtraField/Display/<Class>.php \
+  --root=path/to/component
+
+# then lint them in CI; point --drupal-config at a fresh export when config/sync lags the database
+vendor/bin/fields-lint-drupal --drupal-config=config/sync --root=path/to/component
+```
+
+**Which paragraph type a component describes.** First the bundle in the root `drupal:` admin link (`/admin/structure/paragraphs_type/<bundle>/fields`). Otherwise the component name in snake_case, when the export has that bundle. Plus every bundle that `drupal.bundle_aliases` maps to the component. A component with none of these is not a paragraph: the lint prints `SKIP`.
+
+**Which Drupal field a definition field is.** Only `role: field` (the default) maps to a Drupal field. Its name is `drupal.field` when pinned, otherwise `field_<leaf>`. An `object` without a pin is a field_group: `heading.title` maps to `field_title` on the same bundle. An `object` pinned to an entity_reference_revisions field is one nested paragraph. A `list` is an entity_reference_revisions field and expects the child bundle `<bundle>_item`, unless `drupal.target_bundles` names another. A `flexible_content` has one layout per target bundle.
+
+**Types.**
+
+| Kit type | Drupal storage (first is the default) |
+| --- | --- |
+| `text` | `string`, `string_long`, `email`, `telephone` |
+| `text` + `multiline: true` | `string_long`, `text_long`, `text` |
+| `richtext` | `text_long`, `text`, `text_with_summary` |
+| `number` | `integer`, `decimal`, `float` |
+| `boolean` | `boolean` |
+| `select` | `list_string`, `list_integer`, `list_float` |
+| `media` | `entity_reference` to media, `image`, `file` |
+| `link` | `link` |
+| `reference` | `entity_reference` |
+| `date` | `datetime`, `daterange`, `timestamp` |
+| `list`, `flexible_content`, pinned `object` | `entity_reference_revisions` |
+
+`drupal.storage` pins one exact type. The migration writes it wherever the export uses a type other than the default.
+
+**What the lint compares.** The field set in both directions, the storage type, cardinality (one value or several, and a fixed limit against `max:`), the required flag, reference targets and nested paragraph bundles. Not labels, descriptions, translatability, widgets, formatters, weights or field_group layout. After a `--root` run it lists every paragraph type that no component claimed.
+
+**`fields-migrate` with `--drupal-config`.** A component whose paragraph type exists in the export gets `kind: block` and its fields from the export. Its metadata still comes from the twig front-comment. `--drupal-display` names the PHP class that copies field values into the template's `content` array. The migration tokenizes it (it never runs it) to name each field after the template prop and to pin `drupal.field` where the two differ. Without `--drupal-config`, a `drupal:` link to a paragraph type still sets `kind: block`, and the twig `fields:` annotation becomes editor-authored (`role: field`). `--default-category=<name>` fills `category:` where a front-comment has none.
+
+**Settings**, in the `drupal:` section of `definition-kit.yaml` (all optional):
+
+```yaml
+drupal:
+  field_naming: generic       # generic: field_<leaf> (default) | prefixed: field_<bundle>_<leaf>
+  bundle_aliases:             # bundle => component directory
+    html: content
+  bundles_without_component:  # bundles that render no component on purpose
+    - from_library
+  ignore_fields:              # framework fields on many bundles: not migrated, not reported as extra
+    - field_wrapper_id
+    - field_wrapper_classes
+```
 
 ## Project settings — `definition-kit.yaml`
 
@@ -128,6 +184,7 @@ Optional. Place it next to the components root or one directory up (the same two
 
 ```yaml
 key_style: snake   # slug (default) | snake
+drupal: {}         # see Drupal paragraphs
 ```
 
 **`key_style`** decides how a component slug is spelled inside a *derived* ACF key. A component directory named `article-list` produces:
