@@ -8,7 +8,7 @@
 
 Authored per-component **definition** (`<name>.yaml`) → CMS **projection** generator + **drift-lint**.
 
-A component's editable surface is authored once, as a human-readable semantic YAML definition. From it, definition-kit generates the CMS-specific implementation (WordPress ACF `acf.json` + Gutenberg `block.json`) and a drift-lint fails CI whenever the committed projection stops matching `generate(<name>.yaml)`. For Drupal it migrates definitions from the paragraph config and lints them against a config export; generation of Drupal config is planned (see [Drupal paragraphs](#drupal-paragraphs)). The definition is the single source of truth; `acf.json`/`block.json` become generated artifacts.
+A component's editable surface is authored once, as a human-readable semantic YAML definition. From it, definition-kit generates the CMS-specific implementation (WordPress ACF `acf.json` + Gutenberg `block.json`) and a drift-lint fails CI whenever the committed projection stops matching `generate(<name>.yaml)`. For Drupal it migrates definitions from the paragraph config, lints them against a config export, and generates paragraph config back into that export by merge (see [Drupal paragraphs](#drupal-paragraphs)). The definition is the single source of truth; `acf.json`/`block.json` become generated artifacts.
 
 Companion to [`parisek/acf-json-schema`](https://github.com/parisek/acf-json-schema) (which *validates* ACF JSON); definition-kit *authors and generates* it.
 
@@ -27,7 +27,7 @@ Five executables land in `vendor/bin/`:
 | Command | Does |
 | --- | --- |
 | `fields-migrate` | Bootstrap: `acf.json` (+ sibling `block.json`, + `<name>.twig` front-comment for metadata) → authored `<name>.yaml`. |
-| `fields-generate` | `<name>.yaml` → `acf.json` + `block.json` projection, for `kind: block` and for a definition with no `kind`. |
+| `fields-generate` | `<name>.yaml` → `acf.json` + `block.json` projection, for `kind: block` and for a definition with no `kind`. With `--target=drupal`, paragraph config merged into a Drupal config export instead. |
 | `fields-validate` | Validate `<name>.yaml` against the bundled JSON Schema (`page.schema.json` for a page, `doc.schema.json` for a doc, see below). |
 | `fields-lint` | Drift-lint: fail when the committed projection differs from `generate(migrate(source))`. |
 | `fields-lint-drupal` | Drift-lint against a Drupal config export: fail when a definition and its paragraph type differ. See [Drupal paragraphs](#drupal-paragraphs). |
@@ -126,7 +126,7 @@ The round-trip contract: `generate(migrate(acf.json)) == acf.json`, modulo docum
 
 ## Drupal paragraphs
 
-A Drupal component is built from a paragraph type. The Drupal admin UI owns the fields, and `drush config:export` writes them to YAML. definition-kit reads that export. It does not write Drupal config yet. [ADR 0001](docs/adr/0001-lint-drupal-paragraphs-against-a-config-export.md) records why and how.
+A Drupal component is built from a paragraph type. `drush config:export` writes the paragraph types and fields to YAML. definition-kit reads that export, lints definitions against it, and merges generated config back into it. [ADR 0001](docs/adr/0001-lint-drupal-paragraphs-against-a-config-export.md) records the lint and the migration; [ADR 0002](docs/adr/0002-generate-drupal-paragraph-config-by-merge.md) records the generator.
 
 ```bash
 # bootstrap the definitions from the export (fields) and the twig front-comments (metadata)
@@ -136,6 +136,11 @@ vendor/bin/fields-migrate --drupal-config=config/sync \
 
 # then lint them in CI; point --drupal-config at a fresh export when config/sync lags the database
 vendor/bin/fields-lint-drupal --drupal-config=config/sync --root=path/to/component
+
+# after a definition changes: see the plan, then merge it into the export
+vendor/bin/fields-generate --target=drupal --drupal-config=config/sync --root=path/to/component --dry-run
+vendor/bin/fields-generate --target=drupal --drupal-config=config/sync --root=path/to/component \
+  --names-out=config-names.txt
 ```
 
 **Which paragraph type a component describes.** First the bundle in the root `drupal:` admin link (`/admin/structure/paragraphs_type/<bundle>/fields`). Otherwise the component name in snake_case, when the export has that bundle. Plus every bundle that `drupal.bundle_aliases` maps to the component. A component with none of these is not a paragraph: the lint prints `SKIP`.
@@ -162,6 +167,17 @@ vendor/bin/fields-lint-drupal --drupal-config=config/sync --root=path/to/compone
 
 **What the lint compares.** The field set in both directions, the storage type, cardinality (one value or several, and a fixed limit against `max:`), the required flag, reference targets and nested paragraph bundles. Not labels, descriptions, translatability, widgets, formatters, weights or field_group layout. After a `--root` run it lists every paragraph type that no component claimed.
 
+**`fields-generate --target=drupal`.** It plans the whole export in one pass, because components share field storage, and prints one line per config entity:
+
+- `REUSE`: the entity exists and every key the definition owns already matches.
+- `CREATE`: the entity does not exist. The generator writes it whole, from the type map (`schemas/drupal-type-map.yaml`) and the defaults baseline (`schemas/drupal-defaults-baseline.yaml`). A new file has no `uuid`.
+- `UPDATE`: an owned key differs. Only that key changes; the rest of the file stays byte for byte.
+- `REFUSE`: the change needs a data migration, or two definitions contradict each other. Then nothing is written and the exit code is 1.
+
+The definition owns the field set, instance label, description and required flag, `translatable` when it sets it, effective cardinality, storage type and the storage settings the type implies (target type, select options), reference targets, the link title mode (`shape: url`), and where a new field goes on the displays. The site keeps everything else: `uuid`, `_core`, the paragraph type label and description, widget and formatter settings, weights, field_group groups, contrib third-party settings. The generator never deletes a file, a field or a display entry; `fields-lint-drupal` reports what a definition dropped.
+
+It refuses a storage type change, a target type change, a dropped select option, and a cardinality the existing storage cannot hold. An instance can narrow an unlimited (or larger) storage when `drupal.field_config_cardinality` is on. A new paragraph type needs a root `drupal:` link that names it; the snake_case convention only finds a type that exists. `--names-out=<file>` lists the created and changed config names, one per line, for a deploy step that imports only those. It is written on `--dry-run` too. `--dry-run` writes no config.
+
 **`fields-migrate` with `--drupal-config`.** A component whose paragraph type exists in the export gets `kind: block` and its fields from the export. Its metadata still comes from the twig front-comment. `--drupal-display` names the PHP class that copies field values into the template's `content` array. The migration tokenizes it (it never runs it) to name each field after the template prop and to pin `drupal.field` where the two differ. Without `--drupal-config`, a `drupal:` link to a paragraph type still sets `kind: block`, and the twig `fields:` annotation becomes editor-authored (`role: field`). `--default-category=<name>` fills `category:` where a front-comment has none.
 
 **Settings**, in the `drupal:` section of `definition-kit.yaml` (all optional):
@@ -176,6 +192,31 @@ drupal:
   ignore_fields:              # framework fields on many bundles: not migrated, not reported as extra
     - field_wrapper_id
     - field_wrapper_classes
+  # fields-generate --target=drupal only:
+  langcode: cs                # langcode of new config entities (default en)
+  text_format: basic          # the allowed format of a new richtext field
+  media_bundles:              # media kind => media types of a new media field without drupal.target_bundles
+    image: [image]
+  host_fields:                # fields that get each new top-level paragraph type as a target
+    - field.field.node.page.field_paragraphs
+  translation: true           # a new paragraph type gets language.content_settings and the translation form entry
+  view_display: hidden        # a new field on the view display: content (default) | hidden
+  field_config_cardinality: true  # an instance may narrow its storage's cardinality (contrib module)
+  baseline: drupal-baseline.yaml  # deep-merged over schemas/drupal-defaults-baseline.yaml, relative to this file
+```
+
+The project baseline carries what a new entity needs beyond the kit's defaults, typically contrib third-party settings. A module named as a `third_party_settings` key becomes a module dependency:
+
+```yaml
+paragraphs_type:
+  third_party_settings:
+    paragraphs_library: {allow_library_conversion: true}
+widget_third_party_settings:
+  media_library_widget:
+    media_library_edit: {show_edit: '1', edit_form_mode: default}
+view_display:
+  content:                    # always rendered, for example an extra field that renders the component
+    extra_field_default_paragraph_display: {settings: {}, third_party_settings: {}, weight: 0, region: content}
 ```
 
 ## Project settings — `definition-kit.yaml`
