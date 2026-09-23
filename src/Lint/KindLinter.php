@@ -26,7 +26,7 @@ namespace Parisek\DefinitionKit\Lint;
  * Drupal project (signalled by a `drupal:` section in `definition-kit.yaml`,
  * see {@see \Parisek\DefinitionKit\Drupal\DrupalSettings}) this linter skips
  * the block.json requirement entirely rather than duplicate that check
- * without the config it needs (ADR 0002).
+ * without the config it needs (ADR 0003).
  */
 final class KindLinter
 {

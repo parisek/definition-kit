@@ -221,8 +221,17 @@ function fields_migrate_one(string $componentDir, bool $dryRun, bool $force, Key
         $tree = (new AcfJsonReader(keyStyle: $keyStyle, assumeRole: $assumeRole, paragraphBacked: $paragraphBacked))
             ->read($decoded, $componentName, $twigSource, is_file($acfPath) || $fromConfig);
         if ($fromConfig && null !== $bundle && null !== $drupal['config']) {
-            $tree['fields'] = (new DrupalParagraphReader($drupal['config'], $drupal['settings'], $drupal['evidence']))->read($bundle);
-            $note = "fields from Drupal paragraph type {$bundle}";
+            // Every bundle this component's aliases resolve to (not just the
+            // primary one) that genuinely exists in the config export — a
+            // field present on only some of them comes back scoped with
+            // `drupal.bundles` (readMerged()) instead of forcing one bundle's
+            // shape onto every alias.
+            $aliasedBundles = array_values(array_filter(array_keys($bundles), fn (string $b): bool => $drupal['config']->hasBundle($b)));
+            $tree['fields'] = (new DrupalParagraphReader($drupal['config'], $drupal['settings'], $drupal['evidence']))
+                ->readMerged([] !== $aliasedBundles ? $aliasedBundles : [$bundle]);
+            $note = count($aliasedBundles) > 1
+                ? 'fields from Drupal paragraph types ' . implode(', ', $aliasedBundles)
+                : "fields from Drupal paragraph type {$bundle}";
             if (is_string($twigSource) && [] !== (new TwigMetadataReader())->readFields($twigSource)) {
                 $note .= "; the twig fields: annotation was not used";
             }

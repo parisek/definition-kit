@@ -125,6 +125,25 @@ final class BundleSpecBuilderTest extends TestCase
         self::assertSame('field_teaser_box_title', $specs[0]->fields[0]->machine);
     }
 
+    /**
+     * gap 3: a field's `drupal.bundles` scopes it to only some of the
+     * bundles an alias maps onto the component — the other aliased bundle
+     * gets neither the field's machine name reserved nor a spec for it.
+     */
+    #[Test]
+    public function a_field_scoped_to_one_bundle_is_absent_from_the_other_aliased_bundle(): void
+    {
+        $settings = new DrupalSettings(bundleAliases: ['teaser_alt' => 'teaser-box']);
+        [$primary, $aliased] = $this->build([
+            'body' => ['type' => 'richtext', 'label' => 'Body'],
+            'title' => ['type' => 'text', 'label' => 'Title', 'drupal' => ['bundles' => ['teaser_box']]],
+        ], $settings);
+
+        self::assertSame(['teaser_box', 'teaser_alt'], [$primary->bundle, $aliased->bundle]);
+        self::assertSame(['field_body', 'field_title'], array_map(static fn ($f) => $f->machine, $primary->fields));
+        self::assertSame(['field_body'], array_map(static fn ($f) => $f->machine, $aliased->fields));
+    }
+
     #[Test]
     public function no_link_and_no_existing_bundle_means_no_paragraph_type(): void
     {

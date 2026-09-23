@@ -1,4 +1,4 @@
-# 0002. `kind: block` requires block.json only on WordPress
+# 0003. `kind: block` requires block.json only on WordPress
 
 ## Context
 

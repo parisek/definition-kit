@@ -1,0 +1,23 @@
+name: Content
+category: Content
+kind: block
+drupal: /admin/structure/paragraphs_type/content/fields
+fields:
+  html:
+    type: richtext
+    role: field
+    label: Text
+    drupal:
+      field: field_content
+  heading:
+    type: object
+    role: field
+    label: Heading
+    fields:
+      title:
+        type: text
+        role: field
+        label: Title
+    drupal:
+      bundles:
+        - html

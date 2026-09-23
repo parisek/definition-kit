@@ -52,13 +52,21 @@ final class FieldsMigrateDrupalCliTest extends TestCase
         self::assertSame(0, $code, $output);
         self::assertStringContainsString('(fields from Drupal paragraph type card_list)', $output);
         self::assertStringContainsString('(fields from Drupal paragraph type promo; the twig fields: annotation was not used)', $output);
-        foreach (['card-list', 'quote-image', 'stats', 'promo', 'content'] as $name) {
+        foreach (['card-list', 'quote-image', 'stats', 'promo'] as $name) {
             self::assertSame(
                 Yaml::parseFile(self::FIXTURES . "/expected/{$name}.yaml"),
                 Yaml::parseFile("{$root}/{$name}/{$name}.yaml"),
                 "{$name}.yaml differs from the golden file",
             );
         }
+        // `content` aliases both `content` and `html` (drupal.bundle_aliases)
+        // — its migrated output merges both bundles (gap 3), unlike the
+        // single-bundle golden every other component here compares against.
+        self::assertSame(
+            Yaml::parseFile(self::FIXTURES . '/expected/content-merged.yaml'),
+            Yaml::parseFile("{$root}/content/content.yaml"),
+            'content.yaml differs from the merged-bundles golden file',
+        );
     }
 
     #[Test]

@@ -64,6 +64,58 @@ final class DrupalParagraphReader
     }
 
     /**
+     * Reads several aliased bundles (`drupal.bundle_aliases` mapping more
+     * than one paragraph type onto the same component) and merges them into
+     * one `fields:` map. A top-level field present on every bundle is
+     * written once, unscoped, same as {@see read()}. A top-level field
+     * present on only SOME of the bundles gets `drupal.bundles` naming
+     * exactly that subset, so a later `fields-lint-drupal` and
+     * `fields-generate --target=drupal --dry-run` know it never belonged on
+     * the others (#gap-3: previously unresolvable, reported as DRIFT on
+     * whichever bundle lacked it).
+     *
+     * When two bundles disagree on the SHAPE of a same-named field (a
+     * different type, say), the first bundle's shape wins and the
+     * disagreement is left for a human to resolve by hand — this reader
+     * only merges field PRESENCE, never reconciles conflicting shapes.
+     *
+     * @param non-empty-list<string> $bundles primary bundle first
+     * @return array<string,array<string,mixed>>
+     */
+    public function readMerged(array $bundles): array
+    {
+        if (1 === count($bundles)) {
+            return $this->read($bundles[0]);
+        }
+
+        /** @var array<string,array<string,mixed>> $byBundle */
+        $byBundle = [];
+        foreach ($bundles as $bundle) {
+            if (!$this->config->hasBundle($bundle)) {
+                throw new \DomainException("Paragraph type '{$bundle}' does not exist in {$this->config->directory()}.");
+            }
+            $byBundle[$bundle] = $this->readBundle($bundle, null !== $this->evidence ? $this->evidence->forBundle($bundle) : [], [$bundle]);
+        }
+
+        $merged = [];
+        foreach ($byBundle as $bundle => $fields) {
+            foreach ($fields as $name => $field) {
+                if (isset($merged[$name])) {
+                    continue;
+                }
+                $presentOn = array_keys(array_filter($byBundle, static fn (array $f): bool => array_key_exists($name, $f)));
+                if (count($presentOn) < count($bundles)) {
+                    $field['drupal'] = ['bundles' => $presentOn] + ($field['drupal'] ?? []);
+                    $field = $this->orderKeys($field);
+                }
+                $merged[$name] = $field;
+            }
+        }
+
+        return $merged;
+    }
+
+    /**
      * @param list<array{path: list<string>, field: string, children?: list<array{path: list<string>, field: string}>}> $evidence
      * @param list<string> $stack
      * @return array<string,array<string,mixed>>
@@ -360,7 +412,7 @@ final class DrupalParagraphReader
             }
         }
         if (isset($out['drupal']) && is_array($out['drupal'])) {
-            $drupalOrder = ['field', 'storage', 'target_type', 'target_bundles'];
+            $drupalOrder = ['field', 'storage', 'target_type', 'target_bundles', 'bundles'];
             $out['drupal'] = array_merge(array_intersect_key(array_flip($drupalOrder), $out['drupal']), $out['drupal']);
         }
 

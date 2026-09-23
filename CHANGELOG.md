@@ -15,13 +15,25 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   WordPress-only file; it now checks `definition-kit.yaml`'s `drupal:`
   section (the same signal every other Drupal-conditional behaviour uses) and
   skips the requirement there, leaving the paragraph-mapping check where it
-  already lived — `fields-lint-drupal` (see ADR 0002).
+  already lived — `fields-lint-drupal` (see ADR 0003).
 - **`fields-migrate` against a Drupal config export (`--drupal-config`) now
   writes `role: field` for every field it derives.** `DrupalParagraphReader`
   produced fields with no `role:` key at all, which `fields-lint`'s
   `ContractLinter` reports as UNTYPED regardless of any declared role — the
   same `role: field` `AcfJsonReader` already writes for a real ACF field
   (Rule 10), now written consistently on the Drupal side too.
+
+### Added
+
+- **A field can now be scoped to some of a component's aliased Drupal
+  bundles: `drupal: { bundles: [...] }`.** Without it, a field is expected on
+  every bundle `drupal.bundle_aliases` maps onto the component — which made a
+  field present on only one aliased bundle's paragraph type (not another's)
+  an unresolvable DRIFT. `fields-lint-drupal` and `fields-generate
+  --target=drupal` now skip the field entirely for a bundle not in its
+  `drupal.bundles`, and `fields-migrate --drupal-config` merges every
+  aliased bundle it finds in the export and writes `drupal.bundles`
+  automatically for a field it finds on only some of them.
 
 ## [0.17.0] - 2026-09-23
 
