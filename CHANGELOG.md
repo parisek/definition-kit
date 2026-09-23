@@ -34,6 +34,13 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (`generic` | `prefixed`), `bundle_aliases`, `bundles_without_component`,
   `ignore_fields`. An unknown key throws and names the file.
 
+### Fixed
+
+- **The input-contract check resolves named macro arguments on Twig 3.29.**
+  Twig 3.29 compiles a named argument's key as a constant, not a local
+  variable, so `m.card(data: content)` lost the reads of `data`. CI installs
+  the newest Twig, so the whole suite failed on it. Both key shapes work now.
+
 ### Changed
 
 - Without `--drupal-config`, a twig `fields:` annotation on a component whose
