@@ -91,6 +91,14 @@ final class FieldsGenerateDrupalCliTest extends TestCase
         self::assertSame(1, $code, $output);
         self::assertStringContainsString('REFUSE field.storage.paragraph.field_quote: storage type text_long;', $output);
         self::assertStringContainsString('nothing written: the plan refuses 1 config entit(y/ies)', $output);
+
+        $names = dirname($project['config']) . '/names.txt';
+        $definition2 = "{$project['root']}/promo/promo.yaml";
+        file_put_contents($definition2, str_replace("label: Title\n", "label: Headline\n", (string) file_get_contents($definition2)));
+        [$output, $code] = $this->runBin('--target=drupal', "--drupal-config={$project['config']}", "--root={$project['root']}", "--names-out={$names}");
+        self::assertSame(1, $code, $output);
+        self::assertStringContainsString('UPDATE field.field.paragraph.promo.field_title', $output);
+        self::assertSame('', (string) file_get_contents($names), 'a blocked run names no config');
         self::assertSame($before, self::snapshot($project['config']));
     }
 

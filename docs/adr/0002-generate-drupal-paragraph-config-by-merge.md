@@ -48,9 +48,10 @@ merge:
 
 - structure: which paragraph types and field instances exist, and which
   field storage each instance uses;
-- instance `label`, `description` and `required` on the bundles a component
-  describes first-hand (the bundle it names, and its nested bundles). An
-  alias bundle (`drupal.bundle_aliases`) gets the structure only;
+- instance `required`, and instance `label` and `description` on the
+  bundles a component describes first-hand (the bundle it names, and its
+  nested bundles). An alias bundle (`drupal.bundle_aliases`) gets the
+  structure and `required`, not the text;
 - `translatable`, only when the definition sets it on the field;
 - effective cardinality, per instance;
 - storage type and storage settings the type implies (`target_type`,

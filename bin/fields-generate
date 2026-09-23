@@ -210,11 +210,16 @@ function fields_generate_drupal(array $dirs, string $settingsRoot, string $confi
     }
     echo $plan->summary() . "\n";
 
+    $blocked = $failed > 0 || $plan->refused();
     if (null !== $namesOut) {
-        (new DrupalConfigWriter())->writeNames($plan, $namesOut);
+        // A blocked run writes no config, so it names none: an empty file,
+        // never a list of files that do not exist.
+        $blocked
+            ? file_put_contents($namesOut, '')
+            : (new DrupalConfigWriter())->writeNames($plan, $namesOut);
     }
 
-    if ($failed > 0 || $plan->refused()) {
+    if ($blocked) {
         echo "nothing written: " . ($plan->refused() ? 'the plan refuses ' . count($plan->withAction(PlanEntry::REFUSE)) . ' config entit(y/ies)' : "{$failed} component(s) failed") . "\n";
 
         return 1;
