@@ -94,13 +94,35 @@ final class DrupalParagraphReaderTest extends TestCase
         self::assertTrue($fields['sections']['layouts']['image_full']['fields']['media']['required']);
     }
 
+    /**
+     * gap 3: `content` aliases both `content` and `html` paragraph types
+     * (`drupal.bundle_aliases: {html: content}`); only `html` has a
+     * `field_title` instance. Merging both bundles must scope that field to
+     * `html` alone with `drupal.bundles`, not drop it, guess it belongs to
+     * `content` too, or throw.
+     */
+    #[Test]
+    public function merging_aliased_bundles_scopes_a_field_present_on_only_some_of_them(): void
+    {
+        $expected = Yaml::parseFile(self::FIXTURES . '/expected/content-merged.yaml');
+        self::assertIsArray($expected);
+
+        self::assertSame($expected['fields'], $this->reader()->readMerged(['content', 'html']));
+    }
+
+    #[Test]
+    public function merging_a_single_bundle_is_the_same_as_reading_it(): void
+    {
+        self::assertSame($this->reader()->read('card_list'), $this->reader()->readMerged(['card_list']));
+    }
+
     #[Test]
     public function a_reference_with_no_kit_target_pins_the_entity_type(): void
     {
         $fields = $this->reader()->read('from_library');
 
         self::assertSame(
-            ['type' => 'reference', 'label' => 'Reusable paragraph', 'required' => true, 'drupal' => ['target_type' => 'paragraphs_library_item']],
+            ['type' => 'reference', 'role' => 'field', 'label' => 'Reusable paragraph', 'required' => true, 'drupal' => ['target_type' => 'paragraphs_library_item']],
             $fields['reusable_paragraph'],
         );
     }

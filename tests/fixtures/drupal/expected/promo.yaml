@@ -5,10 +5,12 @@ drupal: /admin/structure/paragraphs_type/promo/fields
 fields:
   body:
     type: object
+    role: field
     label: Body
     fields:
       content:
         type: richtext
+        role: field
         label: Text
     drupal:
       field: field_body
@@ -16,8 +18,10 @@ fields:
         - promo_body
   heading:
     type: object
+    role: field
     label: Heading
     fields:
       title:
         type: text
+        role: field
         label: Title

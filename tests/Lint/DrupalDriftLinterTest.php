@@ -110,6 +110,20 @@ final class DrupalDriftLinterTest extends TestCase
         self::assertSame(['html: field_title (string): Drupal field has no definition field'], $result->findings);
     }
 
+    /**
+     * gap 3: the same drift as {@see every_aliased_bundle_is_compared()},
+     * resolved by scoping the field to the one aliased bundle that actually
+     * has it — `drupal.bundles: [html]` — instead of leaving it unresolvable.
+     */
+    #[Test]
+    public function a_field_scoped_to_one_aliased_bundle_is_not_drift_on_the_others(): void
+    {
+        $result = $this->linter()->lint($this->golden('content-merged'), 'content');
+
+        self::assertSame(DrupalDriftResult::OK, $result->status, implode("\n", $result->findings));
+        self::assertSame(['content', 'html'], $result->bundles);
+    }
+
     #[Test]
     public function a_definition_field_with_no_drupal_field_is_reported(): void
     {

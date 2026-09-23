@@ -4,30 +4,37 @@ kind: block
 fields:
   heading:
     type: object
+    role: field
     label: Heading
     fields:
       title:
         type: text
+        role: field
         label: Heading
   items:
     type: list
+    role: field
     label: Items
     max: 5
     fields:
       label:
         type: text
+        role: field
         label: Label
       value:
         type: text
+        role: field
         label: Value
       theme:
         type: select
+        role: field
         label: Theme
         options:
           light: Light
           dark: Dark
       image:
         type: media
+        role: field
         label: Background
         kind: image
         drupal:

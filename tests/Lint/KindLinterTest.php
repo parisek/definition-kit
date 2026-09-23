@@ -97,4 +97,19 @@ final class KindLinterTest extends TestCase
             $this->assertSame([], (new KindLinter())->lint("{$dir}/button.yaml", ['kind' => $kind]));
         }
     }
+
+    public function testWpTargetKindBlockWithoutBlockJsonIsStillAnError(): void
+    {
+        $dir = $this->fixtureDir();
+        $findings = (new KindLinter(isDrupalProject: false))->lint("{$dir}/button.yaml", ['kind' => 'block']);
+        $this->assertSame('error', $findings[0]['severity']);
+        $this->assertStringContainsString('block.json', $findings[0]['message']);
+    }
+
+    public function testDrupalTargetKindBlockWithoutBlockJsonIsNotAnError(): void
+    {
+        $dir = $this->fixtureDir(); // no block.json — a Drupal project never has one
+        $findings = (new KindLinter(isDrupalProject: true))->lint("{$dir}/button.yaml", ['kind' => 'block']);
+        $this->assertSame([], $findings, 'Drupal has no block.json; kind:block is checked by fields-lint-drupal instead');
+    }
 }

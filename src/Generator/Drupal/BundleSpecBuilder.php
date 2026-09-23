@@ -149,6 +149,13 @@ final class BundleSpecBuilder
             if ('field' !== $role) {
                 continue;
             }
+            $bundleScope = is_array($field['drupal']['bundles'] ?? null) ? $field['drupal']['bundles'] : null;
+            if (null !== $bundleScope && !in_array($bundle, $bundleScope, true)) {
+                // Scoped to other aliased bundle(s) only — never create or
+                // update it on this one. Mirrors DrupalDriftLinter's own
+                // handling of `drupal.bundles`, so the plan stays lint-clean.
+                continue;
+            }
             $type = StructuralType::canonical((string) ($field['type'] ?? ''));
             $pin = is_string($field['drupal']['field'] ?? null) ? $field['drupal']['field'] : null;
             $parentGroup = [] !== $groupPath ? $groupPath[count($groupPath) - 1] : '';

@@ -17,9 +17,23 @@ namespace Parisek\DefinitionKit\Lint;
  * Missing `kind` is a WARNING, not an error: the downstream backfill has not
  * run yet, and failing every un-migrated definition would make the tool
  * unusable during the migration it is meant to support.
+ *
+ * `block.json` is a WordPress/Gutenberg artifact only. A Drupal project has
+ * no editor-insertable-block JSON sidecar at all — `kind: block` there is
+ * checked against the paragraph-type mapping instead, by
+ * `DrupalDriftLinter` (`fields-lint-drupal`, ADR 0001), which already needs a
+ * `--drupal-config` export directory this linter is never handed. So on a
+ * Drupal project (signalled by a `drupal:` section in `definition-kit.yaml`,
+ * see {@see \Parisek\DefinitionKit\Drupal\DrupalSettings}) this linter skips
+ * the block.json requirement entirely rather than duplicate that check
+ * without the config it needs (ADR 0003).
  */
 final class KindLinter
 {
+    public function __construct(private readonly bool $isDrupalProject = false)
+    {
+    }
+
     /**
      * @param array<string,mixed> $definition
      * @return list<array{severity: string, message: string}>
@@ -36,6 +50,12 @@ final class KindLinter
                     basename($definitionPath)
                 ),
             ]];
+        }
+
+        if ($this->isDrupalProject) {
+            // block.json is WordPress-only; Drupal's kind:block check lives
+            // in fields-lint-drupal against the paragraph-type mapping.
+            return [];
         }
 
         // Resolve symlinks before deriving the component directory. A definition

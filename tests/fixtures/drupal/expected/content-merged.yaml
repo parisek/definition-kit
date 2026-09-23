@@ -9,3 +9,15 @@ fields:
     label: Text
     drupal:
       field: field_content
+  heading:
+    type: object
+    role: field
+    label: Heading
+    fields:
+      title:
+        type: text
+        role: field
+        label: Title
+    drupal:
+      bundles:
+        - html

@@ -161,6 +161,13 @@ final class DrupalDriftLinter
             if ('field' !== $role) {
                 continue;
             }
+            $bundleScope = is_array($field['drupal']['bundles'] ?? null) ? $field['drupal']['bundles'] : null;
+            if (null !== $bundleScope && !in_array($bundle, $bundleScope, true)) {
+                // Scoped to other aliased bundle(s) only — this bundle
+                // genuinely has no such field, by the definition's own
+                // account, so neither side reports it.
+                continue;
+            }
             $type = StructuralType::canonical((string) ($field['type'] ?? ''));
             $pin = is_string($field['drupal']['field'] ?? null) ? $field['drupal']['field'] : null;
 

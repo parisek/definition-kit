@@ -162,6 +162,16 @@
                         "pattern": "^[a-z][a-z0-9_]*$"
                     },
                     "description": "The bundles a reference may point at. On a `list` it names the nested paragraph type when it is not `<bundle>_item`; on an `object` pinned to entity_reference_revisions it names the one nested paragraph type; on `media` it names the media types."
+                },
+                "bundles": {
+                    "type": "array",
+                    "minItems": 1,
+                    "uniqueItems": true,
+                    "items": {
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9_]*$"
+                    },
+                    "description": "Restricts this field to only some of the paragraph bundles `drupal.bundle_aliases` maps onto this component. Without it, a field is expected on every aliased bundle. With it, `fields-lint-drupal` and `fields-generate --target=drupal` only look for/create the field on the listed bundles, and skip it entirely for every other aliased bundle — for a field an editor sees on one aliased bundle's paragraph type but not another's, so one component's definition can still describe them all."
                 }
             }
         },
