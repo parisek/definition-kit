@@ -100,7 +100,7 @@ final class DrupalParagraphReaderTest extends TestCase
         $fields = $this->reader()->read('from_library');
 
         self::assertSame(
-            ['type' => 'reference', 'label' => 'Reusable paragraph', 'required' => true, 'drupal' => ['target_type' => 'paragraphs_library_item']],
+            ['type' => 'reference', 'role' => 'field', 'label' => 'Reusable paragraph', 'required' => true, 'drupal' => ['target_type' => 'paragraphs_library_item']],
             $fields['reusable_paragraph'],
         );
     }

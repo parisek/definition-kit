@@ -5,23 +5,28 @@ drupal: /admin/structure/paragraphs_type/card_list/fields
 fields:
   heading:
     type: object
+    role: field
     label: Heading
     fields:
       title:
         type: text
+        role: field
         label: Heading
   items:
     type: list
+    role: field
     label: Items
     fields:
       name:
         type: text
+        role: field
         label: Name
         required: true
         drupal:
           field: field_title
       image:
         type: media
+        role: field
         label: Photo
         kind: image
         drupal:
@@ -29,16 +34,19 @@ fields:
             - image
       company:
         type: richtext
+        role: field
         label: Company
         drupal:
           field: field_perex
       phone:
         type: text
+        role: field
         label: Phone
         drupal:
           storage: telephone
       email:
         type: text
+        role: field
         label: E-mail
         drupal:
           storage: email

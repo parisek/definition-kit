@@ -101,6 +101,18 @@ final class DrupalParagraphReader
             }
 
             $field = $this->mapField($drupalField, $bundle, $entry['children'] ?? [], $stack);
+            // Every field read off a real Drupal bundle field is, by
+            // construction, editor-authored content — `role: field`, the
+            // same value DrupalDriftLinter already assumes for a field with
+            // no `role:` key (see the class doc header). Written explicitly
+            // regardless of `--assume-role` (that flag is for a genuinely
+            // ambiguous twig-only field with no acf.json AND no Drupal
+            // bundle field behind it — AcfJsonReader/TwigFieldTypeMapper's
+            // territory, never this reader's) so ContractLinter's `isset`
+            // gate (src/Contract/ContractLinter.php::fieldsWithoutARole())
+            // sees a component this reader produced as typed instead of
+            // reporting it UNTYPED for a role that was always implicit.
+            $field['role'] = 'field';
             $last = $path[count($path) - 1];
             $isErrObject = 'object' === $field['type'];
             if ($isErrObject || $this->settings->conventionalFieldName($last, $bundle) !== $machine) {
@@ -151,6 +163,7 @@ final class DrupalParagraphReader
         if (!isset($tree[$head])) {
             $tree[$head] = [
                 'type' => 'object',
+                'role' => 'field',
                 'label' => $labels[$head] ?? ucfirst(str_replace('_', ' ', $head)),
                 'fields' => [],
             ];
@@ -339,7 +352,7 @@ final class DrupalParagraphReader
      */
     private function orderKeys(array $field): array
     {
-        $order = ['type', 'label', 'description', 'required', 'multiline', 'kind', 'shape', 'of', 'multiple', 'max', 'options', 'open', 'fields', 'layouts', 'drupal'];
+        $order = ['type', 'role', 'label', 'description', 'required', 'multiline', 'kind', 'shape', 'of', 'multiple', 'max', 'options', 'open', 'fields', 'layouts', 'drupal'];
         $out = [];
         foreach ($order as $key) {
             if (array_key_exists($key, $field)) {

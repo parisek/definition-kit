@@ -83,7 +83,7 @@ final class FieldsGenerateDrupalCliTest extends TestCase
     {
         $project = $this->project();
         $definition = "{$project['root']}/quote-image/quote-image.yaml";
-        file_put_contents($definition, str_replace("type: richtext\n    label: Quote", "type: text\n    label: Quote", (string) file_get_contents($definition)));
+        file_put_contents($definition, str_replace("type: richtext\n    role: field\n    label: Quote", "type: text\n    role: field\n    label: Quote", (string) file_get_contents($definition)));
         $before = self::snapshot($project['config']);
 
         [$output, $code] = $this->runBin('--target=drupal', "--drupal-config={$project['config']}", "--root={$project['root']}");

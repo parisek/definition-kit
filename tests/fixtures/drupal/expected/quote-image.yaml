@@ -7,25 +7,30 @@ drupal: /admin/structure/paragraphs_type/quote_image/fields
 fields:
   image_side:
     type: select
+    role: field
     label: 'Image side'
     options:
       left: Left
       right: Right
   quote:
     type: richtext
+    role: field
     label: Quote
     required: true
   author:
     type: object
+    role: field
     label: Author
     fields:
       name:
         type: text
+        role: field
         label: 'Author name'
         drupal:
           field: field_author_name
   signature:
     type: media
+    role: field
     label: Signature
     kind: image
     drupal:
@@ -34,6 +39,7 @@ fields:
         - vector_image
   image:
     type: media
+    role: field
     label: Image
     kind: gallery
     multiple: true
@@ -43,6 +49,7 @@ fields:
         - image
   button:
     type: link
+    role: field
     label: Button
     shape: link
     drupal:

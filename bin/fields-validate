@@ -4,6 +4,7 @@
 declare(strict_types=1);
 
 use Parisek\DefinitionKit\Support\StructuralType;
+use Parisek\DefinitionKit\Drupal\DrupalSettings;
 use Parisek\DefinitionKit\Generator\FieldsGenerator;
 use Parisek\DefinitionKit\Generator\GenerationValidationException;
 use Parisek\DefinitionKit\Lint\DerivedFromLinter;
@@ -40,7 +41,6 @@ foreach ($paths as $path) {
 }
 
 $validator = new FieldsSchemaValidator();
-$kindLinter = new KindLinter();
 $translatableInertLinter = new TranslatableInertLinter();
 $derivedFromLinter = new DerivedFromLinter();
 $forwardedShapeLinter = new ForwardedShapeLinter();
@@ -85,6 +85,8 @@ foreach ($paths as $path) {
     // — an array-typed $definition needs a normal (non-object-for-map) parse.
     /** @var array<string,mixed> $definition */
     $definition = StructuralType::parseFile($path) ?? [];
+    $isDrupalProject = null !== DrupalSettings::discoverFor(\dirname($path, 2))->path;
+    $kindLinter = new KindLinter($isDrupalProject);
     $findings = [
         ...$kindLinter->lint($path, $definition),
         ...$translatableInertLinter->lint($path, $definition),
