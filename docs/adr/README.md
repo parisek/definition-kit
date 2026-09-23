@@ -67,3 +67,4 @@ reads as a decision nobody recorded.
 ## Index
 
 - [0001. Lint Drupal paragraphs against a config export, by convention](0001-lint-drupal-paragraphs-against-a-config-export.md)
+- [0002. Generate Drupal paragraph config by merge, never by overwrite](0002-generate-drupal-paragraph-config-by-merge.md)
