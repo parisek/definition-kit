@@ -5,14 +5,17 @@ declare(strict_types=1);
 namespace Parisek\DefinitionKit\Drupal;
 
 use Parisek\DefinitionKit\Support\StructuralType;
+use Symfony\Component\Yaml\Yaml;
 
 /**
- * The kit's CMS-neutral field types against Drupal field storage types.
+ * The kit's CMS-neutral field types against Drupal field storage types, read
+ * from `schemas/drupal-type-map.yaml`.
  *
  * `accepted()` is what the drift-lint tolerates for a definition field with
  * no `drupal.storage` pin. `canonical()` is the one type a migration leaves
- * implicit: a Drupal field of any other accepted type gets a `drupal.storage`
- * pin, so the definition still says exactly which storage it expects.
+ * implicit and the generator creates: a Drupal field of any other accepted
+ * type gets a `drupal.storage` pin, so the definition still says exactly
+ * which storage it expects.
  *
  *   kit type                 canonical                   also accepted
  *   text                     string                      string_long, email, telephone
@@ -28,24 +31,32 @@ use Parisek\DefinitionKit\Support\StructuralType;
  *   object                   (a field_group, no storage) entity_reference_revisions when pinned by drupal.field
  *   list                     entity_reference_revisions
  *   flexible_content         entity_reference_revisions
+ *
+ * `storageType()` and the widget/formatter lookups serve the generator
+ * (ADR 0002): what a new storage, instance and display entry look like.
  */
 final class DrupalTypeMap
 {
-    private const ACCEPTED = [
-        'text' => ['string', 'string_long', 'email', 'telephone'],
-        'text_multiline' => ['string_long', 'text_long', 'text'],
-        'richtext' => ['text_long', 'text', 'text_with_summary'],
-        'number' => ['integer', 'decimal', 'float'],
-        'boolean' => ['boolean'],
-        'select' => ['list_string', 'list_integer', 'list_float'],
-        'media' => ['entity_reference', 'image', 'file'],
-        'link' => ['link'],
-        'reference' => ['entity_reference'],
-        'date' => ['datetime', 'daterange', 'timestamp'],
-        'object' => ['entity_reference_revisions'],
-        'list' => ['entity_reference_revisions'],
-        'flexible_content' => ['entity_reference_revisions'],
-    ];
+    public const DEFAULT_PATH = __DIR__ . '/../../schemas/drupal-type-map.yaml';
+
+    /** @var array<string,array<string,mixed>> path => parsed map */
+    private static array $cache = [];
+
+    /** @var array<string,mixed> */
+    private readonly array $map;
+
+    public function __construct(?string $path = null)
+    {
+        $path ??= self::DEFAULT_PATH;
+        if (!isset(self::$cache[$path])) {
+            $parsed = Yaml::parseFile($path);
+            if (!is_array($parsed) || !is_array($parsed['kit_types'] ?? null) || !is_array($parsed['storage_types'] ?? null)) {
+                throw new \RuntimeException("Malformed Drupal type map (needs kit_types and storage_types): {$path}");
+            }
+            self::$cache[$path] = $parsed;
+        }
+        $this->map = self::$cache[$path];
+    }
 
     /** @param array<string,mixed> $field */
     public function key(array $field): string
@@ -66,13 +77,13 @@ final class DrupalTypeMap
             return [$pinned];
         }
 
-        return self::ACCEPTED[$this->key($field)] ?? [];
+        return $this->acceptedFor($this->key($field));
     }
 
     /** @param array<string,mixed> $field */
     public function canonical(array $field): ?string
     {
-        return self::ACCEPTED[$this->key($field)][0] ?? null;
+        return $this->acceptedFor($this->key($field))[0] ?? null;
     }
 
     /**
@@ -136,5 +147,135 @@ final class DrupalTypeMap
         }
 
         return null;
+    }
+
+    /**
+     * The storage types a kit type key accepts, canonical first.
+     *
+     * @return list<string>
+     */
+    public function acceptedFor(string $key): array
+    {
+        $types = $this->map['kit_types'][$key] ?? [];
+
+        return is_array($types) ? array_values(array_map('strval', $types)) : [];
+    }
+
+    /** @return list<string> every kit type key the map knows */
+    public function kitTypeKeys(): array
+    {
+        return array_map('strval', array_keys($this->map['kit_types']));
+    }
+
+    /** @return list<string> every storage type the generator can create */
+    public function storageTypes(): array
+    {
+        return array_map('strval', array_keys($this->map['storage_types']));
+    }
+
+    /**
+     * What a new field of this storage type looks like.
+     *
+     * @return array{module: string, storage_settings: array<string,mixed>, instance_settings: array<string,mixed>, widget: array{type: string, settings: array<string,mixed>}, formatter: array{type: string, label: string, settings: array<string,mixed>}}
+     */
+    public function storageType(string $storageType): array
+    {
+        $entry = $this->map['storage_types'][$storageType] ?? null;
+        if (!is_array($entry)) {
+            throw new \DomainException("The Drupal type map has no storage type '{$storageType}'.");
+        }
+
+        return [
+            'module' => (string) ($entry['module'] ?? 'core'),
+            'storage_settings' => self::map($entry['storage_settings'] ?? []),
+            'instance_settings' => self::map($entry['instance_settings'] ?? []),
+            'widget' => self::plugin($entry['widget'] ?? null, $storageType, 'widget'),
+            'formatter' => self::plugin($entry['formatter'] ?? null, $storageType, 'formatter') + ['label' => 'above'],
+        ];
+    }
+
+    /**
+     * The default widget for a storage type. A reference to media uses the
+     * media library widget instead of the entity_reference one.
+     *
+     * @return array{type: string, settings: array<string,mixed>}
+     */
+    public function widget(string $storageType, ?string $targetType = null): array
+    {
+        if ('entity_reference' === $storageType && 'media' === $targetType) {
+            return self::plugin($this->map['media_reference']['widget'] ?? null, 'media_reference', 'widget');
+        }
+
+        return $this->storageType($storageType)['widget'];
+    }
+
+    /** @return array{type: string, label: string, settings: array<string,mixed>} */
+    public function formatter(string $storageType, ?string $targetType = null): array
+    {
+        if ('entity_reference' === $storageType && 'media' === $targetType) {
+            return self::plugin($this->map['media_reference']['formatter'] ?? null, 'media_reference', 'formatter') + ['label' => 'hidden'];
+        }
+
+        return $this->storageType($storageType)['formatter'];
+    }
+
+    /** The module that provides a widget plugin, or null for core or an unknown plugin. */
+    public function widgetModule(string $widget): ?string
+    {
+        return self::module($this->map['widget_modules'][$widget] ?? null);
+    }
+
+    /** The module that provides a formatter plugin, or null for core or an unknown plugin. */
+    public function formatterModule(string $formatter): ?string
+    {
+        return self::module($this->map['formatter_modules'][$formatter] ?? null);
+    }
+
+    /** The module that provides a field type, or null for core. */
+    public function storageModule(string $storageType): ?string
+    {
+        return self::module($this->storageType($storageType)['module']);
+    }
+
+    /** The module that provides an entity type, or null when the map does not know it. */
+    public function targetTypeModule(string $targetType): ?string
+    {
+        return self::module($this->map['target_types'][$targetType]['module'] ?? null);
+    }
+
+    /**
+     * The config name prefix of a target entity type's bundles
+     * (`media.type`), or null when its bundles are not config entities.
+     */
+    public function bundleConfigPrefix(string $targetType): ?string
+    {
+        $prefix = $this->map['target_types'][$targetType]['bundle_config'] ?? null;
+
+        return is_string($prefix) && '' !== $prefix ? $prefix : null;
+    }
+
+    private static function module(mixed $module): ?string
+    {
+        return is_string($module) && '' !== $module && 'core' !== $module ? $module : null;
+    }
+
+    /** @return array<string,mixed> */
+    private static function map(mixed $value): array
+    {
+        return is_array($value) ? $value : [];
+    }
+
+    /** @return array{type: string, settings: array<string,mixed>} */
+    private static function plugin(mixed $entry, string $owner, string $what): array
+    {
+        if (!is_array($entry) || !is_string($entry['type'] ?? null)) {
+            throw new \DomainException("The Drupal type map gives '{$owner}' no {$what} type.");
+        }
+        $plugin = ['type' => $entry['type'], 'settings' => self::map($entry['settings'] ?? [])];
+        if (is_string($entry['label'] ?? null)) {
+            $plugin['label'] = $entry['label'];
+        }
+
+        return $plugin;
     }
 }

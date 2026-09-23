@@ -1,0 +1,268 @@
+# The kit's CMS-neutral field types against Drupal field storage types.
+# Read by src/Drupal/DrupalTypeMap.php. See ADR 0001 (lint, migration) and
+# ADR 0002 (generation).
+#
+# kit_types: <key> => the storage types a definition field of that kit type
+#   accepts. The first one is canonical: the migration leaves it implicit and
+#   the generator creates it. Every other accepted type needs a
+#   `drupal.storage` pin in the definition. The key is the kit type, or
+#   `text_multiline` for `type: text` with `multiline: true`.
+#
+# storage_types: <storage type> => what the generator writes when it creates
+#   a field of that type:
+#     module            field.storage `module:` (the module that provides the field type)
+#     storage_settings  field.storage `settings:`
+#     instance_settings field.field `settings:`
+#     widget            default form display widget: {type, settings}
+#     formatter         default view display formatter: {type, label, settings}
+#
+# widget_modules / formatter_modules: plugin id => providing module. A plugin
+#   from `core` adds no module dependency.
+
+kit_types:
+  text: [string, string_long, email, telephone]
+  text_multiline: [string_long, text_long, text]
+  richtext: [text_long, text, text_with_summary]
+  number: [integer, decimal, float]
+  boolean: [boolean]
+  select: [list_string, list_integer, list_float]
+  media: [entity_reference, image, file]
+  link: [link]
+  reference: [entity_reference]
+  date: [datetime, daterange, timestamp]
+  object: [entity_reference_revisions]
+  list: [entity_reference_revisions]
+  flexible_content: [entity_reference_revisions]
+
+storage_types:
+  string:
+    module: core
+    storage_settings: {max_length: 255, case_sensitive: false, is_ascii: false}
+    instance_settings: {}
+    widget: {type: string_textfield, settings: {size: 60, placeholder: ''}}
+    formatter: {type: string, label: above, settings: {link_to_entity: false}}
+  string_long:
+    module: core
+    storage_settings: {case_sensitive: false}
+    instance_settings: {}
+    widget: {type: string_textarea, settings: {rows: 5, placeholder: ''}}
+    formatter: {type: basic_string, label: above, settings: {}}
+  email:
+    module: core
+    storage_settings: {}
+    instance_settings: {}
+    widget: {type: email_default, settings: {placeholder: '', size: 60}}
+    formatter: {type: basic_string, label: above, settings: {}}
+  telephone:
+    module: telephone
+    storage_settings: {}
+    instance_settings: {}
+    widget: {type: telephone_default, settings: {placeholder: ''}}
+    formatter: {type: basic_string, label: above, settings: {}}
+  text:
+    module: text
+    storage_settings: {max_length: 255}
+    instance_settings: {allowed_formats: []}
+    widget: {type: text_textfield, settings: {size: 60, placeholder: ''}}
+    formatter: {type: text_default, label: above, settings: {}}
+  text_long:
+    module: text
+    storage_settings: {}
+    instance_settings: {allowed_formats: []}
+    widget: {type: text_textarea, settings: {rows: 5, placeholder: ''}}
+    formatter: {type: text_default, label: above, settings: {}}
+  text_with_summary:
+    module: text
+    storage_settings: {}
+    instance_settings: {display_summary: false, required_summary: false, allowed_formats: []}
+    widget: {type: text_textarea_with_summary, settings: {rows: 9, summary_rows: 3, placeholder: '', show_summary: false}}
+    formatter: {type: text_default, label: above, settings: {}}
+  integer:
+    module: core
+    storage_settings: {unsigned: false, size: normal}
+    instance_settings: {min: null, max: null, prefix: '', suffix: ''}
+    widget: {type: number, settings: {placeholder: ''}}
+    formatter: {type: number_integer, label: above, settings: {thousand_separator: '', prefix_suffix: true}}
+  decimal:
+    module: core
+    storage_settings: {precision: 10, scale: 2}
+    instance_settings: {min: null, max: null, prefix: '', suffix: ''}
+    widget: {type: number, settings: {placeholder: ''}}
+    formatter: {type: number_decimal, label: above, settings: {}}
+  float:
+    module: core
+    storage_settings: {}
+    instance_settings: {min: null, max: null, prefix: '', suffix: ''}
+    widget: {type: number, settings: {placeholder: ''}}
+    formatter: {type: number_decimal, label: above, settings: {}}
+  boolean:
+    module: core
+    storage_settings: {}
+    instance_settings: {on_label: 'On', off_label: 'Off'}
+    widget: {type: boolean_checkbox, settings: {display_label: true}}
+    formatter: {type: boolean, label: above, settings: {}}
+  list_string:
+    module: options
+    storage_settings: {allowed_values: [], allowed_values_function: ''}
+    instance_settings: {}
+    widget: {type: options_select, settings: {}}
+    formatter: {type: list_default, label: above, settings: {}}
+  list_integer:
+    module: options
+    storage_settings: {allowed_values: [], allowed_values_function: ''}
+    instance_settings: {}
+    widget: {type: options_select, settings: {}}
+    formatter: {type: list_default, label: above, settings: {}}
+  list_float:
+    module: options
+    storage_settings: {allowed_values: [], allowed_values_function: ''}
+    instance_settings: {}
+    widget: {type: options_select, settings: {}}
+    formatter: {type: list_default, label: above, settings: {}}
+  entity_reference:
+    module: core
+    storage_settings: {target_type: node}
+    instance_settings:
+      handler: 'default:node'
+      handler_settings: {target_bundles: null, sort: {field: _none, direction: ASC}, auto_create: false, auto_create_bundle: ''}
+    widget: {type: entity_reference_autocomplete, settings: {match_operator: CONTAINS, match_limit: 10, size: 60, placeholder: ''}}
+    formatter: {type: entity_reference_label, label: above, settings: {link: true}}
+  image:
+    module: image
+    storage_settings:
+      target_type: file
+      display_field: false
+      display_default: false
+      uri_scheme: public
+      default_image: {uuid: null, alt: '', title: '', width: null, height: null}
+    instance_settings:
+      handler: 'default:file'
+      handler_settings: {}
+      file_directory: '[date:custom:Y]-[date:custom:m]'
+      file_extensions: 'png gif jpg jpeg webp'
+      max_filesize: ''
+      max_resolution: ''
+      min_resolution: ''
+      alt_field: true
+      alt_field_required: true
+      title_field: false
+      title_field_required: false
+      default_image: {uuid: null, alt: '', title: '', width: null, height: null}
+    widget: {type: image_image, settings: {progress_indicator: throbber, preview_image_style: thumbnail}}
+    formatter: {type: image, label: above, settings: {image_link: '', image_style: '', image_loading: {attribute: lazy}}}
+  file:
+    module: file
+    storage_settings: {target_type: file, display_field: false, display_default: false, uri_scheme: public}
+    instance_settings:
+      handler: 'default:file'
+      handler_settings: {}
+      file_directory: '[date:custom:Y]-[date:custom:m]'
+      file_extensions: txt
+      max_filesize: ''
+      description_field: false
+    widget: {type: file_generic, settings: {progress_indicator: throbber}}
+    formatter: {type: file_default, label: above, settings: {use_description_as_link_text: true}}
+  link:
+    module: link
+    storage_settings: {}
+    instance_settings: {title: 1, link_type: 17}
+    widget: {type: link_default, settings: {placeholder_url: '', placeholder_title: ''}}
+    formatter: {type: link, label: above, settings: {trim_length: 80, url_only: false, url_plain: false, rel: '', target: ''}}
+  datetime:
+    module: datetime
+    storage_settings: {datetime_type: datetime}
+    instance_settings: {}
+    widget: {type: datetime_default, settings: {}}
+    formatter: {type: datetime_default, label: above, settings: {timezone_override: '', format_type: medium}}
+  daterange:
+    module: datetime_range
+    storage_settings: {datetime_type: datetime}
+    instance_settings: {}
+    widget: {type: daterange_default, settings: {}}
+    formatter: {type: daterange_default, label: above, settings: {timezone_override: '', format_type: medium, separator: '-'}}
+  timestamp:
+    module: core
+    storage_settings: {}
+    instance_settings: {}
+    widget: {type: datetime_timestamp, settings: {}}
+    formatter: {type: timestamp, label: above, settings: {}}
+  entity_reference_revisions:
+    module: entity_reference_revisions
+    storage_settings: {target_type: paragraph}
+    instance_settings:
+      handler: 'default:paragraph'
+      handler_settings: {target_bundles: null, negate: 0, target_bundles_drag_drop: {}}
+    widget:
+      type: paragraphs
+      settings:
+        title: Paragraph
+        title_plural: Paragraphs
+        edit_mode: open
+        closed_mode: summary
+        autocollapse: none
+        closed_mode_threshold: 0
+        add_mode: dropdown
+        form_display_mode: default
+        default_paragraph_type: ''
+        features: {collapse_edit_all: collapse_edit_all, duplicate: duplicate}
+    formatter: {type: entity_reference_revisions_entity_view, label: hidden, settings: {view_mode: default, link: ''}}
+
+# A media reference is an entity_reference to `media`: the generator uses
+# this widget and formatter instead of the entity_reference ones.
+media_reference:
+  widget: {type: media_library_widget, settings: {media_types: {}}}
+  formatter: {type: entity_reference_entity_view, label: hidden, settings: {view_mode: default, link: false}}
+
+# Target entity type => the module that provides it (a storage dependency)
+# and the config prefix of its bundles (an instance dependency per target
+# bundle).
+target_types:
+  paragraph: {module: paragraphs, bundle_config: paragraphs.paragraphs_type}
+  media: {module: media, bundle_config: media.type}
+  node: {module: node, bundle_config: node.type}
+  taxonomy_term: {module: taxonomy, bundle_config: taxonomy.vocabulary}
+  file: {module: file, bundle_config: null}
+  user: {module: user, bundle_config: null}
+  paragraphs_library_item: {module: paragraphs_library, bundle_config: null}
+  webform: {module: webform, bundle_config: null}
+
+widget_modules:
+  string_textfield: core
+  string_textarea: core
+  email_default: core
+  telephone_default: telephone
+  text_textfield: text
+  text_textarea: text
+  text_textarea_with_summary: text
+  number: core
+  boolean_checkbox: core
+  options_select: options
+  options_buttons: options
+  entity_reference_autocomplete: core
+  media_library_widget: media_library
+  image_image: image
+  file_generic: file
+  link_default: link
+  datetime_default: datetime
+  datetime_timestamp: core
+  daterange_default: datetime_range
+  paragraphs: paragraphs
+  entity_reference_paragraphs: paragraphs
+
+formatter_modules:
+  string: core
+  basic_string: core
+  text_default: text
+  number_integer: core
+  number_decimal: core
+  boolean: core
+  list_default: options
+  entity_reference_label: core
+  entity_reference_entity_view: core
+  image: image
+  file_default: file
+  link: link
+  datetime_default: datetime
+  daterange_default: datetime_range
+  timestamp: core
+  entity_reference_revisions_entity_view: entity_reference_revisions

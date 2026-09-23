@@ -20,6 +20,17 @@ use Symfony\Component\Yaml\Yaml;
  *     - from_library
  *   ignore_fields:                 # framework fields present on many bundles
  *     - field_wrapper_id
+ *   # Generator only (fields-generate --target=drupal, ADR 0002):
+ *   langcode: cs                   # langcode of new config entities (default en)
+ *   text_format: basic             # allowed format of a new richtext instance
+ *   media_bundles:                 # media kind => media types of a new media field
+ *     image: [image]
+ *   host_fields:                   # fields that get each new top-level paragraph type as a target
+ *     - field.field.node.page.field_paragraphs
+ *   translation: true              # new bundles get language.content_settings (content_translation)
+ *   view_display: hidden           # where a new field goes on the view display: content (default) | hidden
+ *   field_config_cardinality: true # an instance may narrow its storage's cardinality (contrib module)
+ *   baseline: drupal-baseline.yaml # merged over schemas/drupal-defaults-baseline.yaml, relative to this file
  * ```
  *
  * Discovery matches {@see KeyStyle::discoverFor()}: next to the components
@@ -33,12 +44,31 @@ final class DrupalSettings
     public const NAMING_GENERIC = 'generic';
     public const NAMING_PREFIXED = 'prefixed';
 
-    private const KEYS = ['field_naming', 'bundle_aliases', 'bundles_without_component', 'ignore_fields'];
+    public const VIEW_CONTENT = 'content';
+    public const VIEW_HIDDEN = 'hidden';
+
+    private const KEYS = [
+        'field_naming',
+        'bundle_aliases',
+        'bundles_without_component',
+        'ignore_fields',
+        'langcode',
+        'text_format',
+        'media_bundles',
+        'host_fields',
+        'translation',
+        'view_display',
+        'field_config_cardinality',
+        'baseline',
+    ];
 
     /**
      * @param array<string,string> $bundleAliases bundle => component
      * @param list<string> $bundlesWithoutComponent
      * @param list<string> $ignoreFields
+     * @param array<string,list<string>> $mediaBundles media kind => media types
+     * @param list<string> $hostFields config names of fields that host top-level paragraph types
+     * @param string|null $baseline absolute path of the project baseline file
      */
     public function __construct(
         public readonly string $fieldNaming = self::NAMING_GENERIC,
@@ -46,13 +76,30 @@ final class DrupalSettings
         public readonly array $bundlesWithoutComponent = [],
         public readonly array $ignoreFields = [],
         public readonly ?string $path = null,
+        public readonly string $langcode = 'en',
+        public readonly ?string $textFormat = null,
+        public readonly array $mediaBundles = [],
+        public readonly array $hostFields = [],
+        public readonly bool $translation = false,
+        public readonly string $viewDisplay = self::VIEW_CONTENT,
+        public readonly bool $fieldConfigCardinality = false,
+        public readonly ?string $baseline = null,
     ) {
+        $where = null !== $path ? " in {$path}" : '';
         if (!in_array($fieldNaming, [self::NAMING_GENERIC, self::NAMING_PREFIXED], true)) {
             throw new \RuntimeException(sprintf(
                 "Invalid drupal.field_naming '%s'%s — expected generic|prefixed.",
                 $fieldNaming,
-                null !== $path ? " in {$path}" : '',
+                $where,
             ));
+        }
+        if (!in_array($viewDisplay, [self::VIEW_CONTENT, self::VIEW_HIDDEN], true)) {
+            throw new \RuntimeException("Invalid drupal.view_display '{$viewDisplay}'{$where} — expected content|hidden.");
+        }
+        foreach ($hostFields as $hostField) {
+            if (1 !== preg_match('/^field\.field\.[a-z0-9_]+\.[a-z0-9_]+\.[a-z0-9_]+$/', $hostField)) {
+                throw new \RuntimeException("drupal.host_fields{$where}: '{$hostField}' is not a field.field.<entity>.<bundle>.<field> config name.");
+            }
         }
     }
 
@@ -111,13 +158,60 @@ final class DrupalSettings
             $bundleAliases[(string) $bundle] = $component;
         }
 
+        $mediaBundles = [];
+        $media = $section['media_bundles'] ?? [];
+        if (!is_array($media) || (array_is_list($media) && [] !== $media)) {
+            throw new \RuntimeException("drupal.media_bundles{$where} must be a map of media kind => media types.");
+        }
+        foreach ($media as $kind => $types) {
+            $mediaBundles[(string) $kind] = self::stringList($media, (string) $kind, $where, 'media_bundles.');
+        }
+
+        $baseline = self::optionalString($section, 'baseline', $where);
+        if (null !== $baseline && !str_starts_with($baseline, '/')) {
+            $baseline = (null !== $path ? \dirname($path) : (string) getcwd()) . '/' . $baseline;
+        }
+
         return new self(
             fieldNaming: $naming,
             bundleAliases: $bundleAliases,
             bundlesWithoutComponent: self::stringList($section, 'bundles_without_component', $where),
             ignoreFields: self::stringList($section, 'ignore_fields', $where),
             path: $path,
+            langcode: self::optionalString($section, 'langcode', $where) ?? 'en',
+            textFormat: self::optionalString($section, 'text_format', $where),
+            mediaBundles: $mediaBundles,
+            hostFields: self::stringList($section, 'host_fields', $where),
+            translation: self::optionalBool($section, 'translation', $where) ?? false,
+            viewDisplay: self::optionalString($section, 'view_display', $where) ?? self::VIEW_CONTENT,
+            fieldConfigCardinality: self::optionalBool($section, 'field_config_cardinality', $where) ?? false,
+            baseline: $baseline,
         );
+    }
+
+    /** @param array<mixed> $section */
+    private static function optionalString(array $section, string $key, string $where): ?string
+    {
+        $value = $section[$key] ?? null;
+        if (null === $value) {
+            return null;
+        }
+        if (!is_string($value) || '' === $value) {
+            throw new \RuntimeException("drupal.{$key}{$where} must be a non-empty string.");
+        }
+
+        return $value;
+    }
+
+    /** @param array<mixed> $section */
+    private static function optionalBool(array $section, string $key, string $where): ?bool
+    {
+        $value = $section[$key] ?? null;
+        if (null !== $value && !is_bool($value)) {
+            throw new \RuntimeException("drupal.{$key}{$where} must be true or false.");
+        }
+
+        return $value;
     }
 
     public function ignores(string $fieldName): bool
@@ -159,16 +253,16 @@ final class DrupalSettings
      * @param array<mixed> $section
      * @return list<string>
      */
-    private static function stringList(array $section, string $key, string $where): array
+    private static function stringList(array $section, string $key, string $where, string $prefix = ''): array
     {
         $value = $section[$key] ?? [];
         if (!is_array($value) || !array_is_list($value)) {
-            throw new \RuntimeException("drupal.{$key}{$where} must be a list.");
+            throw new \RuntimeException("drupal.{$prefix}{$key}{$where} must be a list.");
         }
         $list = [];
         foreach ($value as $item) {
             if (!is_string($item) || '' === $item) {
-                throw new \RuntimeException("drupal.{$key}{$where} must list non-empty strings.");
+                throw new \RuntimeException("drupal.{$prefix}{$key}{$where} must list non-empty strings.");
             }
             $list[] = $item;
         }

@@ -1,0 +1,101 @@
+# What `fields-generate --target=drupal` writes into a config entity it
+# CREATES, beyond the keys the definition owns (ADR 0002). An entity that
+# already exists keeps its own values for all of this.
+#
+# Read by src/Drupal/DrupalBaseline.php. A project extends it with the file
+# that `drupal.baseline` in definition-kit.yaml names: that file is
+# deep-merged over this one (maps merge key by key, lists and scalars
+# replace). Use it for contrib third-party settings, for example:
+#
+#   paragraphs_type:
+#     third_party_settings:
+#       paragraphs_library: {allow_library_conversion: true}
+#   widget_third_party_settings:
+#     media_library_widget:
+#       media_library_edit: {show_edit: '1', edit_form_mode: default}
+#
+# A module named as a key of any `third_party_settings` becomes a module
+# dependency of the entity that carries it.
+
+# paragraphs.paragraphs_type.<bundle>
+paragraphs_type:
+  status: true
+  third_party_settings: {}
+  icon_uuid: null
+  icon_default: null
+  behavior_plugins: {}
+
+# field.storage.paragraph.<field>
+field_storage:
+  status: true
+  locked: false
+  translatable: true
+  indexes: {}
+  persist_with_no_fields: false
+  custom_storage: false
+
+# field.field.paragraph.<bundle>.<field>
+field_instance:
+  status: true
+  third_party_settings: {}
+  translatable: true
+  default_value: {}
+  default_value_callback: ''
+
+# field_config_cardinality third-party settings on an instance that narrows
+# its storage's cardinality. The generator sets `cardinality_config`.
+field_config_cardinality:
+  cardinality_label_config: false
+  unlimited_not_required: ''
+  limited_not_required: ''
+  limited_required: ''
+
+# Media types a `type: media` field targets when it has no
+# `drupal.target_bundles` pin and definition-kit.yaml sets no
+# `drupal.media_bundles` for its kind.
+media_bundles:
+  image: [image]
+  gallery: [image]
+  file: [document]
+
+# core.entity_form_display.paragraph.<bundle>.default
+form_display:
+  status: true
+  hidden: {created: true, status: true}
+  # With `drupal.translation: true`, this entry joins `content:`.
+  translation: {weight: 0, region: content, settings: {}, third_party_settings: {}}
+  # field_group group for an `object` without a `drupal.field` pin.
+  field_group:
+    region: content
+    format_type: details
+    format_settings:
+      classes: ''
+      show_empty_fields: false
+      id: ''
+      label_as_html: false
+      open: false
+      description: ''
+      required_fields: true
+
+# Third-party settings per widget plugin id, added to a new form display
+# entry. Empty by default.
+widget_third_party_settings: {}
+
+# core.entity_view_display.paragraph.<bundle>.default
+view_display:
+  status: true
+  # Components always in `content:` of a new view display, for example an
+  # extra field that renders the paragraph through a component.
+  content: {}
+  hidden: {}
+
+# language.content_settings.paragraph.<bundle>, written for a new bundle
+# when definition-kit.yaml sets `drupal.translation: true`.
+language_content_settings:
+  status: true
+  third_party_settings:
+    content_translation:
+      enabled: true
+      bundle_settings: {untranslatable_fields_hide: '0'}
+  default_langcode: site_default
+  language_alterable: false
