@@ -26,7 +26,7 @@ Five executables land in `vendor/bin/`:
 
 | Command | Does |
 | --- | --- |
-| `fields-migrate` | Bootstrap: `acf.json` (+ sibling `block.json`, + `<name>.twig` front-comment for metadata) → authored `<name>.yaml`. |
+| `fields-migrate` | Bootstrap: `acf.json` (+ sibling `block.json`, + `<name>.twig` front-comment for metadata) → authored `<name>.yaml`, stripping the front-comment once written. `--strip-comment` retires the comment on a component migrated before this. |
 | `fields-generate` | `<name>.yaml` → `acf.json` + `block.json` projection, for `kind: block` and for a definition with no `kind`. With `--target=drupal`, paragraph config merged into a Drupal config export instead. |
 | `fields-validate` | Validate `<name>.yaml` against the bundled JSON Schema (`page.schema.json` for a page, `doc.schema.json` for a doc, see below). |
 | `fields-lint` | Drift-lint: fail when the committed projection differs from `generate(migrate(source))`. |
@@ -46,6 +46,15 @@ vendor/bin/fields-lint --root=path/to/components
 `fields-generate` writes projections only for `kind: block`. A component with another `kind` (`section`, `element`, `part`, `utility`) registers no Gutenberg block, so it prints `SKIP <name>: kind <kind> has no CMS projection` and gets neither file. The generator never deletes or rewrites an `acf.json` or `block.json` that is already on disk. A definition with no `kind` still gets both files, because the `kind` backfill may not have reached it yet. `--dry-run` writes nothing and reports the same lines.
 
 The last line reads `N component(s), N failed`, and ends in `, N skipped` when a component was skipped. A page or doc is not in either count. The exit code is 1 when anything failed, and 0 when the rest only skipped.
+
+`fields-migrate` on a component strips the twig front-comment once `<name>.yaml` is written and complete, the same way page/doc migration always has — a migrated component's metadata then lives in exactly one file, not two. A component migrated before this (#84) still has both: `<name>.yaml` exists and the comment is still sitting on the twig. Retire it separately with `--strip-comment`, which never re-derives anything and only removes the comment, and only when `<name>.yaml` already says everything the comment says:
+
+```bash
+vendor/bin/fields-migrate --strip-comment --root=path/to/components          # prints what would strip
+vendor/bin/fields-migrate --strip-comment --write --root=path/to/components  # strips the matching ones
+```
+
+A component is refused, per key, when the yaml disagrees with the comment or lacks a key the comment has — `FAIL <name>: category: comment='Block' yaml='Content'` — so a hand-edited yaml the comment fell behind never loses the disagreement silently. `usage: a, b` in the comment matches `usage: [a, b]` in the yaml regardless of order. A component with no front-comment left reports `OK <name>: no front-comment left to strip` and is not counted.
 
 ## Pages — `page/<id>/<id>.yaml`
 
