@@ -8,6 +8,25 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 <!-- New entries go directly under this line. It is the anchor that keeps a branch's
      changelog edit from merging into a version that shipped without it. -->
 
+### Fixed
+
+- **`FixtureAudit\Auditor` distinguishes a failed render again.** Since
+  `parisek/styleguide` 1.18.0, `Renderer::render()` stopped setting
+  `http_response_code()` as a side effect — the signal `Auditor` used to
+  detect a render failure. `component/broken` (`{{ 1 / 0 }}`) silently read
+  back as a successful render (`broken OK`) instead of `error
+  render-failed`. `Auditor::renderFixture()` now reads `$result['status']`
+  from `Styleguide::renderObserved()` (`status` added in
+  parisek/styleguide 1.20.0, parisek/styleguide#152). Fixes #89.
+
+### Changed
+
+- **Raised the `parisek/styleguide` floor to `^1.20`.** The `>=1.11 <1.18`
+  cap from #90 is gone — there is no version of styleguide where both the
+  old `http_response_code()` signal and the new `status` key exist, so
+  `Auditor` requires the floor that has `status` rather than branching on
+  which signal is available.
+
 ## [0.19.1] - 2026-09-25
 
 ### Fixed

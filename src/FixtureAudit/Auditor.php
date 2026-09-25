@@ -48,11 +48,14 @@ use Parisek\Styleguide\Styleguide;
  *     this class used to do itself (and the informal "styleguide.<variant>.twig"
  *     naming rule it had to restate to interpret the results).
  *   - `Styleguide::renderObserved(kind, slug, variant?)` renders exactly one
- *     fixture and returns `{html, calls, unobservable}` — `calls` is the
- *     trace this class used to build by hand; `unobservable` declares
+ *     fixture and returns `{html, status, calls, unobservable}` — `calls` is
+ *     the trace this class used to build by hand; `unobservable` declares
  *     `{% include '@component/x/x.twig' %}` call sites the package cannot
  *     observe (`include` is a Twig tag, not a function it can wrap) instead
- *     of silently missing them.
+ *     of silently missing them; `status` (parisek/styleguide >= 1.20.0, added
+ *     for parisek/styleguide#152 / parisek/definition-kit#89) is the HTTP
+ *     status the underlying render produced, which is how this class tells
+ *     a failed render apart from a successful one — see `renderFixture()`.
  *
  * This class is constructed exactly like `static/index.php` (no `twig` key
  * — the package builds its own pristine environment, which is what already
@@ -254,23 +257,26 @@ final class Auditor
 
         // `renderObserved()` does NOT throw for a genuine component/page
         // runtime failure — `Renderer::render()` (which it delegates to)
-        // catches the \Throwable itself, calls `http_response_code(500)`,
-        // and returns HTML with an inline error block instead (deliberately:
-        // a health check or CI smoke test polling the HTTP render endpoint
-        // must see 500, not a silently-caught 200 — see `Renderer::render()`'s
-        // own docblock). `renderObserved()` only throws for a malformed call
-        // (`InvalidArgumentException` on a bad `$kind`) or an unobservable
-        // environment (`LogicException` — never reachable from this class,
-        // which never passes a pre-built `twig` env, see class docblock) —
-        // both genuinely exceptional, not a normal per-fixture outcome, so
-        // still worth catching defensively.
+        // catches the \Throwable itself and returns a `Result` carrying a
+        // `500` status plus HTML with an inline error block instead
+        // (deliberately: a health check or CI smoke test polling the HTTP
+        // render endpoint must see 500, not a silently-caught 200 — see
+        // `Renderer::render()`'s own docblock). `renderObserved()` only
+        // throws for a malformed call (`InvalidArgumentException` on a bad
+        // `$kind`) or an unobservable environment (`LogicException` — never
+        // reachable from this class, which never passes a pre-built `twig`
+        // env, see class docblock) — both genuinely exceptional, not a
+        // normal per-fixture outcome, so still worth catching defensively.
         //
-        // http_response_code() is reset before the call and re-read after:
-        // it is the one signal `Renderer::render()`'s docblock documents as
-        // stable for "did this render fail", and is preferred here over
-        // pattern-matching the (@internal, unversioned) inline error markup
-        // `errorMarkup()` emits.
-        http_response_code(200);
+        // `$result['status']` (parisek/styleguide 1.20.0+, added for exactly
+        // this: parisek/styleguide#152 / parisek/definition-kit#89) is the
+        // status `Renderer::render()` produced for this fixture. Earlier
+        // versions read `http_response_code()` around the call instead, but
+        // that side effect was REMOVED from `Renderer::render()` in 1.18.0
+        // (parisek/styleguide#144) — there is no version of styleguide where
+        // both signals exist, so this class requires the floor that has
+        // `status` (see composer.json) rather than branching on which one is
+        // available.
         try {
             $result = $this->styleguide->renderObserved($kind, $slug, $variant);
         } catch (\Throwable $e) {
@@ -283,7 +289,7 @@ final class Auditor
             return;
         }
 
-        if (500 === http_response_code()) {
+        if (500 === $result['status']) {
             $reason = self::extractRenderErrorMessage($result['html'])
                 ?? 'render failed (see rendered HTML — no structured error message available)';
             if ('component' === $kind) {
@@ -350,7 +356,7 @@ final class Auditor
     /**
      * Best-effort extraction of the underlying exception message from
      * `Renderer::errorMarkup()`'s inline error block (`@internal`, unversioned
-     * markup — see `renderFixture()`'s docblock on why `http_response_code()`,
+     * markup — see `renderFixture()`'s docblock on why `$result['status']`,
      * not this, is the primary failure signal). Returns `null` when the shape
      * doesn't match, in which case the caller falls back to a generic
      * message — a diagnostic nicety degrading gracefully, not a contract.
