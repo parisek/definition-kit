@@ -8,6 +8,19 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 <!-- New entries go directly under this line. It is the anchor that keeps a branch's
      changelog edit from merging into a version that shipped without it. -->
 
+### Fixed
+
+- **`TwigMetadataReader::read()` no longer carries an explicitly empty
+  quoted value (`description: ""`) forward as `''`.** Its emptiness check
+  ran on the still-quoted two-character literal `""`, before unquoting,
+  so it never caught it; every other reader on this path
+  (`EntryMetadataMigrator`, `AcfJsonReader`) drops an empty value instead
+  of carrying it forward. Surfaced by the `fields-migrate --strip-comment`
+  (#84/#87) dry run against a 49-component Drupal project: 5 components
+  were refused as a false mismatch (`description: comment has '', yaml
+  has no such key`) purely because their yaml, correctly, omits an empty
+  `description:` that the comment still states as `""`.
+
 ## [0.19.0] - 2026-09-25
 
 ### Fixed

@@ -45,6 +45,16 @@ final class TwigMetadataReader
             if (strlen($val) >= 2 && '"' === $val[0] && '"' === $val[-1]) {
                 $val = substr($val, 1, -1);
             }
+            // `description: ""` is empty content, quoted -- the emptiness
+            // check above ran on the still-quoted `""`, two non-empty
+            // characters, so it let this through. Re-check after unquoting:
+            // a key whose comment value is an explicitly empty string is the
+            // same "nothing here" as a key that isn't written at all, and
+            // every other reader (EntryMetadataMigrator, AcfJsonReader) drops
+            // an empty value rather than carrying it forward as ''.
+            if ('' === $val) {
+                continue;
+            }
             $meta[trim($mm[1])] = $val;
         }
         return $meta;

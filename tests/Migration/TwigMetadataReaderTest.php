@@ -35,6 +35,38 @@ final class TwigMetadataReaderTest extends TestCase
         ], $meta);
     }
 
+    /**
+     * `description: ""` is empty content, quoted. The two-char literal `""`
+     * is not empty, so a naive emptiness check before unquoting lets it
+     * through and carries an empty string forward as if it were real
+     * content -- exactly what `fields-migrate --strip-comment` (#89 dry-run
+     * against arkero) surfaced: a component's yaml correctly has no
+     * `description:` key (empty values are dropped on migration), so the
+     * comparison against a comment that still says `description: ""`
+     * refused the component as a false mismatch.
+     */
+    public function test_an_empty_quoted_value_is_dropped_the_same_as_an_empty_unquoted_one(): void
+    {
+        $twig = <<<'TWIG'
+            {#
+            name: "About Slider"
+            usage: homepage
+            description: ""
+            category: "Block"
+            #}
+            <div></div>
+            TWIG;
+
+        $meta = (new TwigMetadataReader())->read($twig);
+
+        self::assertSame([
+            'name' => 'About Slider',
+            'usage' => 'homepage',
+            'category' => 'Block',
+        ], $meta);
+        self::assertArrayNotHasKey('description', $meta);
+    }
+
     public function test_stops_at_fields_line_and_never_reads_field_annotation_lines(): void
     {
         $twig = <<<'TWIG'
