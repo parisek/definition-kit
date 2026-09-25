@@ -8,6 +8,30 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 <!-- New entries go directly under this line. It is the anchor that keeps a branch's
      changelog edit from merging into a version that shipped without it. -->
 
+### Fixed
+
+- **Pinned `parisek/styleguide` to `>=1.11,<1.18`** (#89). `parisek/styleguide`
+  1.18.0 (PR parisek/styleguide#144) changed `Renderer::render()` from
+  returning an HTML string plus an `http_response_code()` side effect to
+  returning a `Result` object carrying the status, but
+  `Styleguide::renderObserved()` — the method `FixtureAudit\Auditor` uses —
+  was not updated to forward that status: it takes only `->body` from the
+  `Result` and its own return array has no status key at all.
+  `Auditor::renderFixture()` detects a fixture render failure by resetting
+  `http_response_code(200)` and reading it back after the render (documented
+  by `Renderer::render()` itself as the stable signal); with nothing calling
+  `http_response_code()` any more, `Auditor` can no longer tell a failed
+  render (`component/broken`'s `{{ 1 / 0 }}`) from a successful one — every
+  fixture reads back `OK` regardless of whether it actually rendered.
+  `fields-contract`'s render-failure detection has no other signal to fall
+  back on without an upstream change to `renderObserved()`'s return shape, so
+  the constraint is capped below `1.18.0` (last known-good: `1.17.0`) until
+  `parisek/styleguide` restores an observable status. Confirmed
+  `parisek/styleguide` 1.17.0 through 1.19.0-adjacent CI drift was the sole
+  cause: `composer install` from a clean checkout of `main` reproduced the
+  same 5 `AuditorTest` failures purely from the unpinned constraint floating
+  onto 1.19.0, with no other change involved.
+
 ## [0.18.1] - 2026-09-23
 
 ### Fixed
