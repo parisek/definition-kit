@@ -31,6 +31,24 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   cause: `composer install` from a clean checkout of `main` reproduced the
   same 5 `AuditorTest` failures purely from the unpinned constraint floating
   onto 1.19.0, with no other change involved.
+- **`fields-migrate` on a component now strips the twig front-comment once
+  `<name>.yaml` is written, the same way page/doc migration always has**
+  (#84). Component migration used to leave the comment on the twig, so every
+  migrated component carried its metadata twice — proven downstream on a
+  49-component Drupal project where every already-migrated component still
+  opened with the same `name:`/`usage:`/`category:` block its `<name>.yaml`
+  already recorded. The strip happens only after the yaml write completes,
+  mirroring the existing page/doc write-then-strip order.
+
+### Added
+
+- **`fields-migrate --strip-comment [--write] <component-dir>|--root=<root>`**
+  retires the front-comment on a component that was already migrated before
+  the fix above, without re-deriving anything. It removes the comment only
+  when every key it carries matches `<name>.yaml` — normalising a
+  comma-separated `usage:` against a yaml list — and refuses the component,
+  per key, when the yaml disagrees or is missing a key, printing what
+  differs. Dry run by default, like `--rename-structural-types`.
 
 ## [0.18.1] - 2026-09-23
 

@@ -41,6 +41,25 @@ final class FieldsMigrateCliTest extends TestCase
         self::assertFileExists("{$dir}/demo.yaml");
     }
 
+    /**
+     * Issue #84. Component migration used to leave the twig front-comment
+     * behind after moving its content into name.yaml, unlike page/doc
+     * migration — every migrated component then carried its metadata twice.
+     */
+    public function test_migration_strips_the_front_comment_like_page_and_doc_migration_does(): void
+    {
+        $dir = $this->makeComponentDir('demo', [
+            'key' => 'group_demo', 'title' => 'Demo',
+            'fields' => [['key' => 'field_demo_title', 'name' => 'title', 'label' => 'Nadpis', 'type' => 'text']],
+        ], "{#\nname: Demo\ncategory: Content\n#}\n<div></div>\n");
+
+        shell_exec(sprintf('php %s %s 2>&1', escapeshellarg($this->binPath), escapeshellarg($dir)));
+
+        $twig = (string) file_get_contents("{$dir}/demo.twig");
+        self::assertStringNotContainsString('{#', $twig);
+        self::assertSame("<div></div>\n", $twig);
+    }
+
     public function test_a_component_without_a_category_is_refused_naming_the_key(): void
     {
         // `category` is required on a component (#67). acf.json does not

@@ -12,10 +12,13 @@ use Parisek\DefinitionKit\Migration\DrupalParagraphReader;
 use Parisek\DefinitionKit\Migration\TwigMetadataReader;
 use Parisek\DefinitionKit\Support\KeyStyle;
 use Parisek\DefinitionKit\Migration\BlockResidualCapturer;
+use Parisek\DefinitionKit\Migration\ComponentCommentMatcher;
 use Parisek\DefinitionKit\Migration\FieldsYamlWriter;
 use Parisek\DefinitionKit\Migration\EntryMetadataMigrator;
 use Parisek\DefinitionKit\Migration\StructuralTypeRenamer;
+use Parisek\DefinitionKit\Migration\TwigFrontCommentStripper;
 use Parisek\DefinitionKit\Support\EntryDefinition;
+use Symfony\Component\Yaml\Yaml;
 
 foreach ([__DIR__ . '/../vendor/autoload.php', __DIR__ . '/../../../autoload.php'] as $autoload) {
     if (is_file($autoload)) {
@@ -282,6 +285,21 @@ function fields_migrate_one(string $componentDir, bool $dryRun, bool $force, Key
         return ['ok' => true, 'component' => $componentName] + (null !== $note ? ['note' => $note] : []);
     }
 
+    // Same retirement page/doc migration already does above: strip the
+    // front-comment only now that the yaml it was moved into is written and
+    // complete, never before. A component whose twig has no front-comment at
+    // all (acf.json-only, no name:/category: block) has nothing to strip.
+    if (is_string($twigSource) && (new TwigFrontCommentStripper())->hasFrontComment($twigSource)) {
+        $stripped = (new TwigFrontCommentStripper())->strip($twigSource);
+        if (!fields_migrate_write_atomically($twigPath, $stripped)) {
+            return [
+                'ok' => false,
+                'component' => $componentName,
+                'error' => "wrote {$outPath} but cannot strip the front-comment from {$twigPath}",
+            ];
+        }
+    }
+
     return ['ok' => true, 'component' => $componentName, 'out' => $outPath] + (null !== $note ? ['note' => $note] : []);
 }
 
@@ -371,6 +389,112 @@ if (in_array('--rename-structural-types', $args, true)) {
     }
     exit($failures > 0 ? 1 : 0);
 }
+
+// `--strip-comment` (#84) is a codemod over a component migrated BEFORE
+// component migration retired the twig front-comment the way page/doc
+// migration always did: the yaml exists, the comment is still sitting on
+// top of the twig, so every migrated component carries its metadata twice.
+// It never re-derives anything and never touches the yaml — it only removes
+// a comment, and only when the yaml already says everything the comment
+// says. Same shape as --rename-structural-types: prints by default, writes
+// only with --write.
+if (in_array('--strip-comment', $args, true)) {
+    $stripUsage = "usage: fields-migrate --strip-comment [--write] <component-dir>\n"
+        . "       fields-migrate --strip-comment [--write] --root=<components-root>\n"
+        . "  Removes the twig front-comment from an already-migrated component (name.yaml exists)\n"
+        . "  when every key the comment carries matches what name.yaml already says.\n"
+        . "  Refuses a component, per key, when the yaml disagrees or lacks the key -- nothing is\n"
+        . "  ever lost silently. Prints what would change and writes nothing unless --write is given.\n";
+    $write = false;
+    $stripRoot = null;
+    $stripSingle = null;
+    foreach ($args as $arg) {
+        if ('--strip-comment' === $arg) {
+            continue;
+        }
+        if ('--write' === $arg) {
+            $write = true;
+            continue;
+        }
+        if (str_starts_with($arg, '--root=')) {
+            $stripRoot = substr($arg, 7);
+            continue;
+        }
+        if (str_starts_with($arg, '-')) {
+            fwrite(STDERR, "unknown option with --strip-comment: {$arg}\n" . $stripUsage);
+            exit(2);
+        }
+        $stripSingle = $arg;
+    }
+    if ((null === $stripRoot) === (null === $stripSingle)) {
+        fwrite(STDERR, $stripUsage);
+        exit(2);
+    }
+    $scanDir = $stripRoot ?? $stripSingle;
+    if (!is_dir((string) $scanDir)) {
+        fwrite(STDERR, "not a directory: {$scanDir}\n");
+        exit(2);
+    }
+
+    $dirs = null !== $stripRoot ? (glob(rtrim($stripRoot, '/') . '/*', GLOB_ONLYDIR) ?: []) : [rtrim((string) $stripSingle, '/')];
+    sort($dirs);
+    $matcher = new ComponentCommentMatcher();
+    $reader = new TwigMetadataReader();
+    $stripper = new TwigFrontCommentStripper();
+    $failures = 0;
+    $stripped = 0;
+    $seen = 0;
+    foreach ($dirs as $dir) {
+        $name = basename($dir);
+        $twigPath = "{$dir}/{$name}.twig";
+        $yamlPath = "{$dir}/{$name}.yaml";
+        if (!is_file($twigPath) || !is_file($yamlPath)) {
+            if (null !== $stripSingle) {
+                echo "FAIL {$name}: needs both {$name}.twig and {$name}.yaml at {$dir}\n";
+                $failures++;
+            }
+            continue;
+        }
+        $twigSource = (string) file_get_contents($twigPath);
+        if (!$stripper->hasFrontComment($twigSource)) {
+            echo "OK   {$name}: no front-comment left to strip\n";
+            continue;
+        }
+        $seen++;
+        try {
+            $yamlTree = Yaml::parseFile($yamlPath);
+        } catch (\Throwable $e) {
+            echo "FAIL {$name}: {$yamlPath} is not valid YAML: {$e->getMessage()}\n";
+            $failures++;
+            continue;
+        }
+        if (!is_array($yamlTree)) {
+            echo "FAIL {$name}: {$yamlPath} does not contain a YAML mapping\n";
+            $failures++;
+            continue;
+        }
+        $commentMeta = $reader->read($twigSource);
+        $diffs = $matcher->diff($commentMeta, $yamlTree);
+        if ([] !== $diffs) {
+            echo "FAIL {$name}: " . implode('; ', $diffs) . "\n";
+            $failures++;
+            continue;
+        }
+        $stripped++;
+        if ($write && !fields_migrate_write_atomically($twigPath, $stripper->strip($twigSource))) {
+            echo "FAIL {$name}: cannot write {$twigPath}\n";
+            $failures++;
+            continue;
+        }
+        echo sprintf("%s %s: front-comment matches %s%s\n", $write ? 'OK  ' : 'WOULD', $name, $yamlPath, $write ? ", stripped -> {$twigPath}" : '');
+    }
+    echo sprintf("%d component(s) with a comment to check, %d to strip, %d failed\n", $seen, $stripped, $failures);
+    if (!$write && $stripped > 0) {
+        echo "nothing written — re-run with --write to apply\n";
+    }
+    exit($failures > 0 ? 1 : 0);
+}
+
 $root = null;
 $dryRun = false;
 $force = false;
@@ -397,7 +521,9 @@ $usage = "usage: fields-migrate [--dry-run] [--force] [--assume-role=parent|quer
     . "  a field's provenance is ambiguous and migration refuses the component. Ignored for an\n"
     . "  acf.json-backed component. A field's own twig `role:` annotation always wins over it.\n"
     . "       fields-migrate --rename-structural-types [--write] <component-dir>|--root=<components-root>\n"
-    . "  rewrites `type: group`/`repeater` to `object`/`list` in existing definitions.\n";
+    . "  rewrites `type: group`/`repeater` to `object`/`list` in existing definitions.\n"
+    . "       fields-migrate --strip-comment [--write] <component-dir>|--root=<components-root>\n"
+    . "  removes an already-migrated component's twig front-comment once name.yaml matches it.\n";
 
 $assumableRoles = ['parent', 'query', 'global'];
 
