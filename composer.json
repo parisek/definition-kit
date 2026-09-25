@@ -24,7 +24,7 @@
     "require": {
         "php": "^8.3",
         "opis/json-schema": "^2.3",
-        "parisek/styleguide": ">=1.11 <1.18",
+        "parisek/styleguide": "^1.20",
         "symfony/yaml": "^6.4 || ^7.0",
         "twig/twig": "^3.10"
     },
