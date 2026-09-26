@@ -168,4 +168,28 @@ final class ComponentDefinitionSchemaTest extends TestCase
 
         self::assertTrue($result->valid, print_r($result->errors, true));
     }
+
+    public function testAStringAliasIsValid(): void
+    {
+        $result = $this->validateDefinition(['aliases' => ['hero-banner']]);
+        self::assertTrue($result->valid, print_r($result->errors, true));
+    }
+
+    public function testAMapAliasIsValid(): void
+    {
+        $result = $this->validateDefinition(['aliases' => [['name' => 'hero-banner', 'variant' => 'dark']]]);
+        self::assertTrue($result->valid, print_r($result->errors, true));
+    }
+
+    public function testAMapAliasWithAnInvalidVariantIdIsRefused(): void
+    {
+        $result = $this->validateDefinition(['aliases' => [['name' => 'hero-banner', 'variant' => 'Dark_Mode']]]);
+        self::assertFalse($result->valid, 'variant must match ^[a-z0-9-]+$');
+    }
+
+    public function testAMapAliasWithAnUnknownKeyIsRefused(): void
+    {
+        $result = $this->validateDefinition(['aliases' => [['name' => 'hero-banner', 'label' => 'Dark']]]);
+        self::assertFalse($result->valid, 'a map alias is additionalProperties: false');
+    }
 }

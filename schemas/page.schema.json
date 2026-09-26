@@ -71,6 +71,9 @@
             "$ref": "#/$defs/multivalueAnnotation",
             "description": "Notes for the DEVELOPER working on this page. Stays in the YAML: the styleguide does not read it."
         },
+        "aliases": {
+            "$ref": "#/$defs/aliases"
+        },
         "weight": {
             "type": "integer"
         },
@@ -110,6 +113,24 @@
         }
     },
     "$defs": {
+        "aliases": {
+            "type": "array",
+            "items": {
+                "oneOf": [
+                    { "type": "string", "minLength": 1 },
+                    {
+                        "type": "object",
+                        "required": ["name"],
+                        "additionalProperties": false,
+                        "properties": {
+                            "name": { "type": "string", "minLength": 1 },
+                            "variant": { "type": "string", "pattern": "^[a-z0-9-]+$" }
+                        }
+                    }
+                ]
+            },
+            "description": "Extra search names: a string opens the entry, `{name, variant}` opens that variant tile. Shared between component, page and doc — older `parisek/styleguide` versions ignore the key."
+        },
         "multivalueAnnotation": {
             "oneOf": [
                 {
