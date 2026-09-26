@@ -99,11 +99,45 @@
         "wp": {
             "$ref": "#/$defs/wpOverlay"
         },
+        "aliases": {
+            "$ref": "#/$defs/aliases"
+        },
+        "variants_order": {
+            "$ref": "#/$defs/variantsOrder"
+        },
         "fields": {
             "$ref": "#/$defs/rootFieldMap"
         }
     },
     "$defs": {
+        "variantsOrder": {
+            "oneOf": [
+                { "type": "string", "pattern": "^[a-z0-9-]+$" },
+                {
+                    "type": "array",
+                    "items": { "type": "string", "pattern": "^[a-z0-9-]+$" }
+                }
+            ],
+            "description": "Variant tile ids to show first; the rest keep file-name order."
+        },
+        "aliases": {
+            "type": "array",
+            "items": {
+                "oneOf": [
+                    { "type": "string", "minLength": 1 },
+                    {
+                        "type": "object",
+                        "required": ["name"],
+                        "additionalProperties": false,
+                        "properties": {
+                            "name": { "type": "string", "minLength": 1 },
+                            "variant": { "type": "string", "pattern": "^[a-z0-9-]+$" }
+                        }
+                    }
+                ]
+            },
+            "description": "Extra search names: a string opens the entry, `{name, variant}` opens that variant tile. Shared between component, page and doc — older `parisek/styleguide` versions ignore the key."
+        },
         "wpOverlay": {
             "type": "object",
             "propertyNames": {

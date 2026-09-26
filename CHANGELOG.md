@@ -8,6 +8,21 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 <!-- New entries go directly under this line. It is the anchor that keeps a branch's
      changelog edit from merging into a version that shipped without it. -->
 
+### Added
+
+- **`aliases:` on a component, page or doc.** An array of extra search names
+  for `parisek/styleguide`'s upcoming alias search: a string opens the entry
+  itself, `{name, variant}` opens a specific variant tile. Schema-only —
+  `schemas/component.fields.schema.json`, `schemas/page.schema.json` and
+  `schemas/doc.schema.json` all accept it via a shared `$defs/aliases`; no
+  generator, migration or lint tool needs to learn the key, since it has no
+  CMS projection and no legacy twig front-comment representation. An older
+  `parisek/styleguide` ignores the key.
+- **`variants_order:` on a component, page or doc.** A variant tile id, or a
+  list of them, to show first in the catalogue; the rest keep file-name
+  order. Same treatment as `aliases:` — a shared `$defs/variantsOrder` in all
+  three schemas, no other tool needs to learn it.
+
 ## [0.20.0] - 2026-09-25
 
 ### Fixed
