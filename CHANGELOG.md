@@ -18,6 +18,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   generator, migration or lint tool needs to learn the key, since it has no
   CMS projection and no legacy twig front-comment representation. An older
   `parisek/styleguide` ignores the key.
+- **`variants_order:` on a component, page or doc.** A variant tile id, or a
+  list of them, to show first in the catalogue; the rest keep file-name
+  order. Same treatment as `aliases:` — a shared `$defs/variantsOrder` in all
+  three schemas, no other tool needs to learn it.
 
 ## [0.20.0] - 2026-09-25
 

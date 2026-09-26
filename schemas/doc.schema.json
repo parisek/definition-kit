@@ -24,6 +24,9 @@
         "aliases": {
             "$ref": "#/$defs/aliases"
         },
+        "variants_order": {
+            "$ref": "#/$defs/variantsOrder"
+        },
         "weight": {
             "type": "integer"
         },
@@ -60,6 +63,16 @@
         }
     },
     "$defs": {
+        "variantsOrder": {
+            "oneOf": [
+                { "type": "string", "pattern": "^[a-z0-9-]+$" },
+                {
+                    "type": "array",
+                    "items": { "type": "string", "pattern": "^[a-z0-9-]+$" }
+                }
+            ],
+            "description": "Variant tile ids to show first; the rest keep file-name order."
+        },
         "aliases": {
             "type": "array",
             "items": {

@@ -192,4 +192,22 @@ final class ComponentDefinitionSchemaTest extends TestCase
         $result = $this->validateDefinition(['aliases' => [['name' => 'hero-banner', 'label' => 'Dark']]]);
         self::assertFalse($result->valid, 'a map alias is additionalProperties: false');
     }
+
+    public function testAStringVariantsOrderIsValid(): void
+    {
+        $result = $this->validateDefinition(['variants_order' => 'dark']);
+        self::assertTrue($result->valid, print_r($result->errors, true));
+    }
+
+    public function testAListVariantsOrderIsValid(): void
+    {
+        $result = $this->validateDefinition(['variants_order' => ['dark', 'light']]);
+        self::assertTrue($result->valid, print_r($result->errors, true));
+    }
+
+    public function testAnInvalidVariantsOrderIdIsRefused(): void
+    {
+        $result = $this->validateDefinition(['variants_order' => 'Dark_Mode']);
+        self::assertFalse($result->valid, 'variants_order ids must match ^[a-z0-9-]+$');
+    }
 }
