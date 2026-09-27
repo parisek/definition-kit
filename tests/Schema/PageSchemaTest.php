@@ -110,13 +110,57 @@ final class PageSchemaTest extends TestCase
         foreach (['name', 'category', 'web', 'asana', 'figma', 'drupal', 'weight', 'responsive'] as $key) {
             self::assertSame($component['properties'][$key], $page['properties'][$key], "`{$key}` drifted between the two schemas");
         }
-        foreach (['usage', 'render', 'description', 'dev'] as $key) {
+        foreach (['usage', 'render', 'description', 'dev', 'aliases', 'variants_order'] as $key) {
             $c = $component['properties'][$key];
             $p = $page['properties'][$key];
             unset($c['description'], $p['description']);
             self::assertSame($c, $p, "`{$key}` drifted between the two schemas");
         }
         self::assertSame($component['$defs']['multivalueAnnotation'], $page['$defs']['multivalueAnnotation']);
+        self::assertSame($component['$defs']['aliases'], $page['$defs']['aliases']);
+        self::assertSame($component['$defs']['variantsOrder'], $page['$defs']['variantsOrder']);
         self::assertSame(ComponentParser::RENDER_MODES, $page['properties']['render']['enum']);
+    }
+
+    #[Test]
+    public function a_string_alias_is_valid(): void
+    {
+        self::assertTrue(self::validate("name: Home\naliases: [dashboard]\n")->valid);
+    }
+
+    #[Test]
+    public function a_map_alias_is_valid(): void
+    {
+        self::assertTrue(self::validate("name: Home\naliases:\n  - name: gallery\n    variant: dark\n")->valid);
+    }
+
+    #[Test]
+    public function a_map_alias_with_an_invalid_variant_id_is_refused(): void
+    {
+        self::assertFalse(self::validate("name: Home\naliases:\n  - name: gallery\n    variant: Dark_Mode\n")->valid);
+    }
+
+    #[Test]
+    public function a_map_alias_with_an_unknown_key_is_refused(): void
+    {
+        self::assertFalse(self::validate("name: Home\naliases:\n  - name: gallery\n    label: Dark\n")->valid);
+    }
+
+    #[Test]
+    public function a_string_variants_order_is_valid(): void
+    {
+        self::assertTrue(self::validate("name: Home\nvariants_order: dark\n")->valid);
+    }
+
+    #[Test]
+    public function a_list_variants_order_is_valid(): void
+    {
+        self::assertTrue(self::validate("name: Home\nvariants_order: [dark, light]\n")->valid);
+    }
+
+    #[Test]
+    public function an_invalid_variants_order_id_is_refused(): void
+    {
+        self::assertFalse(self::validate("name: Home\nvariants_order: Dark_Mode\n")->valid);
     }
 }
