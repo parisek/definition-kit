@@ -8,6 +8,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 <!-- New entries go directly under this line. It is the anchor that keeps a branch's
      changelog edit from merging into a version that shipped without it. -->
 
+## [0.21.0] - 2026-09-27
+
 ### Added
 
 - **`aliases:` on a component, page or doc.** An array of extra search names
