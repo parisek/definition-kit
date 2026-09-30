@@ -76,13 +76,18 @@ final class ContractLinter
 
     /**
      * A linter honouring the baseline that governs this components root — the
-     * project's own `framework-props-baseline.yaml` when it has one.
+     * project's own `framework-props-baseline.yaml` and `type-return-shapes.yaml`
+     * when it has them.
      *
      * @param array<string,string> $namespaces see the constructor
      */
     public static function forComponentsRoot(string $componentsRoot, array $namespaces = []): self
     {
-        return new self(FrameworkProps::discoverFor($componentsRoot)['props'], $namespaces);
+        return new self(
+            FrameworkProps::discoverFor($componentsRoot)['props'],
+            $namespaces,
+            TypeReturnShapes::discoverFor($componentsRoot)['shapes'],
+        );
     }
 
     public function lint(string $componentDir): ContractResult

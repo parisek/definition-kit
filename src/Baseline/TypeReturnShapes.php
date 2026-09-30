@@ -13,11 +13,41 @@ use Symfony\Component\Yaml\Yaml;
  * The contract check stops at a declared leaf, so a typo below it is accepted.
  * This table lets it look one level further for the types whose return shape
  * is known. A type with no entry returns null and keeps the old behaviour.
+ *
+ * ## Projects override it
+ *
+ * The shipped file describes parisek/timber-kit's `formatFile()`. A project on
+ * another framework, or one ahead of the shipped table, states its own:
+ * `discoverFor()` looks for `type-return-shapes.yaml` next to the components
+ * root, then one level up. A project file REPLACES the shipped one, as
+ * framework-props-baseline.yaml does, so a project can read the whole table
+ * off one page. A type it does not list is unchecked, which is how a project
+ * switches the check off for a type.
  */
 final class TypeReturnShapes
 {
     /** @var array<string,array<string,list<string>>> type => kind => keys */
     private array $shapes = [];
+
+    /**
+     * The table governing a components root: the project's own if it has one,
+     * otherwise the shipped timber-kit table.
+     *
+     * @return array{shapes: self, path: ?string}
+     */
+    public static function discoverFor(string $componentsRoot): array
+    {
+        $componentsRoot = rtrim($componentsRoot, '/');
+
+        foreach ([$componentsRoot, dirname($componentsRoot)] as $directory) {
+            $candidate = $directory . '/type-return-shapes.yaml';
+            if (is_file($candidate)) {
+                return ['shapes' => new self($candidate), 'path' => $candidate];
+            }
+        }
+
+        return ['shapes' => new self(), 'path' => null];
+    }
 
     public function __construct(?string $path = null)
     {
@@ -32,7 +62,7 @@ final class TypeReturnShapes
                 continue;
             }
             foreach ($kinds as $kind => $keys) {
-                if (is_array($keys)) {
+                if (is_array($keys) && [] !== $keys) {
                     $this->shapes[(string) $type][(string) $kind] = array_values(array_map(strval(...), $keys));
                 }
             }

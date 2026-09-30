@@ -10,6 +10,9 @@
 #
 # Keyed by definition `type`, then by `kind`.
 #
+# A project's own `type-return-shapes.yaml` next to its components root REPLACES
+# this file. A type it omits is unchecked.
+#
 # media / file — parisek/timber-kit `Helpers::formatFile()` returns exactly these
 # keys for every input it accepts (attachment object, array, ID, URL). `codecs`
 # is filled for video attachments only, and is an empty value otherwise, so the

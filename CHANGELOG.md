@@ -16,8 +16,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   rendered empty. `schemas/type-return-shapes.yaml` lists the eleven keys
   `parisek/timber-kit`'s `formatFile()` returns; the first key below the leaf
   must be one of them. A type without an entry (`kind: image`, `kind: gallery`)
-  keeps the old behaviour. The note fails the component, like the other two
-  read-side defects. Measured on two downstream themes: no read falls outside
+  keeps the old behaviour. A project's own `type-return-shapes.yaml` next to
+  the components root replaces the table (a type it omits is unchecked), so a
+  project on another framework is not judged against timber-kit's shape. The
+  note fails the component, like the other two read-side defects. Measured on two downstream themes: no read falls outside
   the list.
 
 ## [0.21.0] - 2026-09-27

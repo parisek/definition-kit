@@ -4,6 +4,7 @@
 declare(strict_types=1);
 
 use Parisek\DefinitionKit\Baseline\FrameworkProps;
+use Parisek\DefinitionKit\Baseline\TypeReturnShapes;
 use Parisek\DefinitionKit\Contract\ContractLinter;
 use Parisek\DefinitionKit\Contract\ContractResult;
 use Parisek\DefinitionKit\Lint\DriftLinter;
@@ -119,9 +120,13 @@ $baseline = FrameworkProps::discoverFor($baselineRoot);
 // Same root as the framework-props baseline above — one discovery location,
 // not two for a reader to keep straight.
 $keyStyle = KeyStyle::discoverFor($baselineRoot);
-$contractLinter = new ContractLinter($baseline['props']);
+$returnShapes = TypeReturnShapes::discoverFor($baselineRoot);
+$contractLinter = new ContractLinter($baseline['props'], [], $returnShapes['shapes']);
 if (null !== $baseline['path']) {
     echo "framework props: {$baseline['path']}\n";
+}
+if (null !== $returnShapes['path']) {
+    echo "type return shapes: {$returnShapes['path']}\n";
 }
 
 /** @var list<ContractResult> $contractResults */

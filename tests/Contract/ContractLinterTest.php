@@ -855,6 +855,45 @@ final class ContractLinterTest extends TestCase
         self::assertContains(ContractResult::NOTE_UNKNOWN_RETURN_KEY, $result->noteKinds());
     }
 
+    public function testAProjectReturnShapeTableReplacesTheShippedOne(): void
+    {
+        // A project whose file field returns `url`, not `src`: its own table
+        // makes `url` legal and `src` the unknown key.
+        file_put_contents("{$this->root}/type-return-shapes.yaml", "media:\n  file: [url, mime_type]\n");
+        $dir = $this->component('hero', <<<'YAML'
+        name: Hero
+        fields:
+          video: { type: media, kind: file, label: Video, role: field }
+        YAML, '{{ content.video.url }}');
+
+        $result = ContractLinter::forComponentsRoot($this->root)->lint($dir);
+
+        self::assertSame([], $result->noteKinds());
+
+        $dir = $this->component('hero-src', <<<'YAML'
+        name: Hero
+        fields:
+          video: { type: media, kind: file, label: Video, role: field }
+        YAML, '{{ content.video.src }}');
+
+        self::assertContains(
+            ContractResult::NOTE_UNKNOWN_RETURN_KEY,
+            ContractLinter::forComponentsRoot($this->root)->lint($dir)->noteKinds(),
+        );
+    }
+
+    public function testAProjectTableWithoutTheTypeSwitchesTheCheckOff(): void
+    {
+        file_put_contents("{$this->root}/type-return-shapes.yaml", "media:\n  file: []\n");
+        $dir = $this->component('hero', <<<'YAML'
+        name: Hero
+        fields:
+          video: { type: media, kind: file, label: Video, role: field }
+        YAML, '{{ content.video.url }}');
+
+        self::assertSame([], ContractLinter::forComponentsRoot($this->root)->lint($dir)->noteKinds());
+    }
+
     public function testALayoutLiteralMatchingNoDeclaredLayoutIsDeadCode(): void
     {
         $dir = $this->component('team-gallery', <<<'YAML'
