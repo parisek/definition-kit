@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Parisek\DefinitionKit\Contract;
 
 use Parisek\DefinitionKit\Baseline\FrameworkProps;
+use Parisek\DefinitionKit\Baseline\TypeReturnShapes;
 use Parisek\DefinitionKit\Support\StructuralType;
 
 /**
@@ -69,6 +70,7 @@ final class ContractLinter
     public function __construct(
         private readonly FrameworkProps $frameworkProps = new FrameworkProps(),
         private readonly array $namespaces = [],
+        private readonly TypeReturnShapes $returnShapes = new TypeReturnShapes(),
     ) {
     }
 
@@ -415,7 +417,30 @@ final class ContractLinter
             if (null === $children) {
                 // A declared leaf, or a field whose structure the definition
                 // never claimed to enumerate. Everything below it belongs to
-                // that value, not to the component's contract.
+                // that value, not to the component's contract — except the
+                // first key, when the type's return shape is known (issue
+                // #43). Deeper keys stay accepted: the table lists one level.
+                $returns = 'field' === ($field['role'] ?? 'field') ? $this->returnShapes->returnsFor($field) : null;
+                $next = $segments[$index + 1];
+                if (null !== $returns && !in_array($next, $returns, true)) {
+                    return [
+                        'accounted' => true,
+                        'note' => [
+                            'kind' => ContractResult::NOTE_UNKNOWN_RETURN_KEY,
+                            'detail' => sprintf(
+                                'reads `content.%s`, but `%s` (`%s`, kind `%s`) returns only: %s. '
+                                . '`%s` is never set, so the read renders empty',
+                                $read,
+                                implode('.', array_slice($segments, 0, $index + 1)),
+                                $field['type'],
+                                $field['kind'],
+                                implode(', ', $returns),
+                                $next,
+                            ),
+                        ],
+                    ];
+                }
+
                 return ['accounted' => true, 'note' => null];
             }
 
