@@ -791,6 +791,109 @@ final class ContractLinterTest extends TestCase
         self::assertTrue($result->isFailure());
     }
 
+    public function testAReadPastAFileLeafThatNamesAKeyItNeverReturnsIsFlagged(): void
+    {
+        // formatFile() returns `src`/`type`, never `url`/`mime_type` (issue #43).
+        $dir = $this->component('hero', <<<'YAML'
+        name: Hero
+        fields:
+          video: { type: media, kind: file, label: Video, role: field }
+        YAML, '{% if content.video.url %}<source src="{{ content.video.url }}" type="{{ content.video.mime_type }}">{% endif %}');
+
+        $result = $this->lint($dir);
+
+        self::assertSame([], $result->violations, 'the field is declared; the key below it is the defect');
+        self::assertContains(ContractResult::NOTE_UNKNOWN_RETURN_KEY, $result->noteKinds());
+        self::assertTrue($result->isFailure());
+    }
+
+    public function testEveryKeyAFileReturnsIsAccepted(): void
+    {
+        $dir = $this->component('hero', <<<'YAML'
+        name: Hero
+        fields:
+          video: { type: media, kind: file, label: Video, role: field }
+        YAML, '{{ content.video.src }}{{ content.video.type }}{{ content.video.codecs }}{{ content.video.filesize }}{{ content.video.preview.src }}');
+
+        $result = $this->lint($dir);
+
+        self::assertSame(ContractResult::TYPED, $result->status);
+        self::assertSame([], $result->noteKinds());
+        self::assertFalse($result->isFailure());
+    }
+
+    public function testATypeWithoutAnEntryStillAcceptsEverythingBelowTheLeaf(): void
+    {
+        // `kind: image` and `kind: gallery` have no entry: old behaviour.
+        $dir = $this->component('hero', <<<'YAML'
+        name: Hero
+        fields:
+          photo: { type: media, kind: image, label: Photo, role: field }
+        YAML, '{{ content.photo.anything }}');
+
+        $result = $this->lint($dir);
+
+        self::assertSame([], $result->noteKinds());
+        self::assertFalse($result->isFailure());
+    }
+
+    public function testTheUnknownKeyIsAlsoFlaggedInsideARepeaterRow(): void
+    {
+        $dir = $this->component('grid', <<<'YAML'
+        name: Grid
+        fields:
+          items:
+            type: repeater
+            label: Items
+            role: field
+            fields:
+              video: { type: media, kind: file, label: Video }
+        YAML, '{% for item in content.items %}{{ item.video.url }}{% endfor %}');
+
+        $result = $this->lint($dir);
+
+        self::assertContains(ContractResult::NOTE_UNKNOWN_RETURN_KEY, $result->noteKinds());
+    }
+
+    public function testAProjectReturnShapeTableReplacesTheShippedOne(): void
+    {
+        // A project whose file field returns `url`, not `src`: its own table
+        // makes `url` legal and `src` the unknown key.
+        file_put_contents("{$this->root}/type-return-shapes.yaml", "media:\n  file: [url, mime_type]\n");
+        $dir = $this->component('hero', <<<'YAML'
+        name: Hero
+        fields:
+          video: { type: media, kind: file, label: Video, role: field }
+        YAML, '{{ content.video.url }}');
+
+        $result = ContractLinter::forComponentsRoot($this->root)->lint($dir);
+
+        self::assertSame([], $result->noteKinds());
+
+        $dir = $this->component('hero-src', <<<'YAML'
+        name: Hero
+        fields:
+          video: { type: media, kind: file, label: Video, role: field }
+        YAML, '{{ content.video.src }}');
+
+        self::assertContains(
+            ContractResult::NOTE_UNKNOWN_RETURN_KEY,
+            ContractLinter::forComponentsRoot($this->root)->lint($dir)->noteKinds(),
+        );
+    }
+
+    public function testAProjectTableWithoutTheTypeSwitchesTheCheckOff(): void
+    {
+        file_put_contents("{$this->root}/type-return-shapes.yaml", "media:\n  file: []\n");
+        $dir = $this->component('hero', <<<'YAML'
+        name: Hero
+        fields:
+          video: { type: media, kind: file, label: Video, role: field }
+        YAML, '{{ content.video.url }}');
+
+        self::assertSame([], ContractLinter::forComponentsRoot($this->root)->lint($dir)->noteKinds());
+    }
+
     public function testALayoutLiteralMatchingNoDeclaredLayoutIsDeadCode(): void
     {
         $dir = $this->component('team-gallery', <<<'YAML'

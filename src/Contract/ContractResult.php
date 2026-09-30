@@ -56,6 +56,14 @@ final class ContractResult
     public const NOTE_DEAD_LAYOUT_LITERAL = 'dead-layout-literal';
 
     /**
+     * A read below a declared leaf that names a key the leaf's type never
+     * returns (issue #43): `content.video.url` for a `kind: file` field, which
+     * returns `src`. The value renders empty, so the template silently loses
+     * whatever it was meant to print.
+     */
+    public const NOTE_UNKNOWN_RETURN_KEY = 'unknown-return-key';
+
+    /**
      * @param list<string> $violations props read but accounted for by nothing
      * @param list<array{kind: string, detail: string}> $notes limits the extractor hit
      */
@@ -90,6 +98,7 @@ final class ContractResult
 
         return in_array(self::NOTE_UNRESOLVED_FORWARD, $kinds, true)
             || in_array(self::NOTE_IMPOSSIBLE_DISCRIMINATOR, $kinds, true)
-            || in_array(self::NOTE_DEAD_LAYOUT_LITERAL, $kinds, true);
+            || in_array(self::NOTE_DEAD_LAYOUT_LITERAL, $kinds, true)
+            || in_array(self::NOTE_UNKNOWN_RETURN_KEY, $kinds, true);
     }
 }

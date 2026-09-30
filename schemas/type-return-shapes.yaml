@@ -1,0 +1,37 @@
+# Return shapes of typed values — the keys a template can read BELOW a declared
+# leaf (issue #43). Without an entry the check stops at the leaf and accepts
+# every read under it, so `content.video.url` for a file that returns `src` is
+# never reported.
+#
+# Conservative by design. A type with no entry keeps the old behaviour: read
+# anything below the leaf. A wrong entry is worse than no entry, because the
+# failure it adds is a false positive on a legitimate read. An entry needs
+# evidence from a real corpus, not documentation alone.
+#
+# Keyed by definition `type`, then by `kind`.
+#
+# A project's own `type-return-shapes.yaml` next to its components root REPLACES
+# this file. A type it omits is unchecked.
+#
+# media / file — parisek/timber-kit `Helpers::formatFile()` returns exactly these
+# keys for every input it accepts (attachment object, array, ID, URL). `codecs`
+# is filled for video attachments only, and is an empty value otherwise, so the
+# key is always present. Measured against two downstream themes: every read
+# below a `kind: file` field falls inside this list.
+#
+# Not listed on purpose: `kind: image` (formatImage; ACF return formats vary) and
+# `kind: gallery` (items come from three formatters, so a union would only catch
+# keys no type carries). Both wait for a corpus.
+media:
+  file:
+    - id
+    - src
+    - type
+    - subtype
+    - filename
+    - filesize
+    - alt
+    - caption
+    - description
+    - preview
+    - codecs
