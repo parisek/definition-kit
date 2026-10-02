@@ -10,6 +10,7 @@ use Parisek\DefinitionKit\Generator\GenerationValidationException;
 use Parisek\DefinitionKit\Lint\DerivedFromLinter;
 use Parisek\DefinitionKit\Lint\ForwardedShapeLinter;
 use Parisek\DefinitionKit\Lint\KindLinter;
+use Parisek\DefinitionKit\Lint\LeafWpmlPreferenceLinter;
 use Parisek\DefinitionKit\Lint\TranslatableInertLinter;
 use Parisek\DefinitionKit\Schema\FieldsSchemaValidator;
 use Parisek\DefinitionKit\Support\KeyStyle;
@@ -42,6 +43,7 @@ foreach ($paths as $path) {
 
 $validator = new FieldsSchemaValidator();
 $translatableInertLinter = new TranslatableInertLinter();
+$leafWpmlPreferenceLinter = new LeafWpmlPreferenceLinter();
 $derivedFromLinter = new DerivedFromLinter();
 $forwardedShapeLinter = new ForwardedShapeLinter();
 $failed = false;
@@ -90,6 +92,7 @@ foreach ($paths as $path) {
     $findings = [
         ...$kindLinter->lint($path, $definition),
         ...$translatableInertLinter->lint($path, $definition),
+        ...$leafWpmlPreferenceLinter->lint($path, $definition),
         ...$derivedFromLinter->lint($path, $definition),
         ...$forwardedShapeLinter->lint($path, $definition),
     ];
