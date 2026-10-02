@@ -8,6 +8,19 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 <!-- New entries go directly under this line. It is the anchor that keeps a branch's
      changelog edit from merging into a version that shipped without it. -->
 
+### Added
+
+- **`fields-validate` warns on `wp.wpml_cf_preferences` set by hand on a leaf
+  field.** The key overrides the `translatable` mapping and nothing checked
+  it. A hand-written `3` means Copy once in WPML, not Translate, so the field
+  copies its value to every language. The new `LeafWpmlPreferenceLinter` warns
+  on `3` or `0` (non-canonical for a leaf) and names `translatable: true` as
+  the way to write Translate. A `1` or `2` gets a softer "redundant" warning.
+  Containers and fields without the key stay clean. Nested rows, groups and
+  flexible layouts are walked. A warning never fails validation. Measured on
+  about 100 projects: 5 have leaf value fields on `3`, one of them 46 of 538
+  and another 34 of 48.
+
 ## [0.22.0] - 2026-09-30
 
 ### Added
