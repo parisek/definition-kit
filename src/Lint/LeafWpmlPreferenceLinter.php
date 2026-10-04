@@ -73,7 +73,6 @@ final class LeafWpmlPreferenceLinter
                 !in_array($type, self::CONTAINER_TYPES, true)
                 && is_array($wp)
                 && array_key_exists('wpml_cf_preferences', $wp)
-                && is_numeric($wp['wpml_cf_preferences'])
             ) {
                 $findings[] = [
                     'severity' => 'warning',
@@ -81,7 +80,7 @@ final class LeafWpmlPreferenceLinter
                         basename($definitionPath),
                         implode('.', $fieldChain),
                         $type,
-                        (int) $wp['wpml_cf_preferences'],
+                        $this->asPreference($wp['wpml_cf_preferences']),
                     ),
                 ];
             }
@@ -106,8 +105,30 @@ final class LeafWpmlPreferenceLinter
         }
     }
 
-    private function message(string $file, string $path, string $type, int $value): string
+    /** An integer 0-3, or a string spelling one, is a preference. Anything else is null: no coercion. */
+    private function asPreference(mixed $raw): ?int
     {
+        if (is_int($raw) && $raw >= 0 && $raw <= 3) {
+            return $raw;
+        }
+        if (is_string($raw) && preg_match('/^[0-3]$/', $raw) === 1) {
+            return (int) $raw;
+        }
+        return null;
+    }
+
+    private function message(string $file, string $path, string $type, ?int $value): string
+    {
+        if ($value === null) {
+            return sprintf(
+                "%s: field '%s' (type: %s): `wp.wpml_cf_preferences` is not a valid WPML preference. "
+                . 'Use an integer from 0 to 3, or better `translatable: true` for Translate (2).',
+                $file,
+                $path,
+                $type,
+            );
+        }
+
         if (!$this->mapper->isCanonical($type, $value)) {
             return sprintf(
                 "%s: field '%s' (type: %s): `wp.wpml_cf_preferences: %d` on a leaf is non-canonical: "

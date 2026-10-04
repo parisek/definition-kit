@@ -68,6 +68,21 @@ final class LeafWpmlPreferenceLinterTest extends TestCase
         self::assertStringContainsString('non-canonical', $this->lintLeaf('3')[0]['message']);
     }
 
+    /** @return array<string, array{mixed}> */
+    public static function malformed(): array
+    {
+        return ['float' => [2.5], 'bool' => [true], 'word' => ['translate'], 'out of range' => [7]];
+    }
+
+    #[DataProvider('malformed')]
+    public function test_a_value_that_is_not_an_integer_zero_to_three_is_reported_not_coerced(mixed $value): void
+    {
+        $findings = $this->lintLeaf($value);
+        self::assertCount(1, $findings);
+        self::assertSame('warning', $findings[0]['severity']);
+        self::assertStringContainsString('not a valid', $findings[0]['message']);
+    }
+
     public function test_leaf_with_translatable_and_no_wp_is_clean(): void
     {
         self::assertSame([], $this->linter->lint('demo.yaml', [
