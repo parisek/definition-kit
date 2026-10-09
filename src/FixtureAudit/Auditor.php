@@ -385,6 +385,18 @@ final class Auditor
     }
 
     /**
+     * Whether the component directory holds its own `<name>.twig`. Read from
+     * disk, not from `componentDirectories()['hasTemplate']`: since
+     * parisek/styleguide 1.32.0 that flag means "has an entry marker"
+     * (`<name>.twig`, `<name>.yaml` or `styleguide.twig`), so a `.yaml`-only
+     * directory reports `true`.
+     */
+    private function hasOwnTwig(string $name): bool
+    {
+        return is_file($this->templatesPath . '/component/' . $name . '/' . $name . '.twig');
+    }
+
+    /**
      * @return list<Finding>
      */
     public function computeFindings(): array
@@ -393,7 +405,7 @@ final class Auditor
 
         foreach ($this->styleguide->componentDirectories() as $entry) {
             $name = $entry['id'];
-            if (!$entry['hasTemplate']) {
+            if (!$this->hasOwnTwig($name)) {
                 // Not an auditable component — see renderStatuses()'s
                 // `not-auditable` case for the full rationale. Nothing to
                 // compare declared fields against without a template, so
@@ -693,7 +705,7 @@ final class Auditor
             // has hit the same shape with a directory containing only
             // `js/`). Every OTHER status below still requires a template to
             // even be reachable, so this check must come first.
-            if (!$entry['hasTemplate']) {
+            if (!$this->hasOwnTwig($name)) {
                 $out[$name] = 'not-auditable';
                 continue;
             }

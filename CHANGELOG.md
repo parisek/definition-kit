@@ -8,6 +8,15 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 <!-- New entries go directly under this line. It is the anchor that keeps a branch's
      changelog edit from merging into a version that shipped without it. -->
 
+### Fixed
+
+- **`fields-fixtures` no longer crashes on `parisek/styleguide` 1.32.0.** From
+  1.32.0, `componentDirectories()` reports `hasTemplate: true` for a folder
+  that holds only `<id>.yaml` or `styleguide.twig`. The auditor read the flag
+  as "has `<id>.twig`". It then audited a `.yaml`-only folder, hit a
+  `TypeError` on a list-shaped `fields:`, and printed nothing. The auditor now
+  checks for `<id>.twig` on disk.
+
 ## [0.23.0] - 2026-10-04
 
 ### Added
