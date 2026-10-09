@@ -21,6 +21,11 @@
         }
     ],
     "homepage": "https://github.com/parisek/definition-kit",
+    "support": {
+        "issues": "https://github.com/parisek/definition-kit/issues",
+        "source": "https://github.com/parisek/definition-kit",
+        "security": "https://github.com/parisek/definition-kit/blob/main/SECURITY.md"
+    },
     "require": {
         "php": "^8.3",
         "opis/json-schema": "^2.3",

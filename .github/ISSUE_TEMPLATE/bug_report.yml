@@ -1,0 +1,30 @@
+name: Bug report
+description: Something does not work as documented.
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: definition-kit version
+      placeholder: "0.23.0"
+    validations:
+      required: true
+  - type: input
+    id: php
+    attributes:
+      label: PHP version
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Include the command and a minimal definition or fixture.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual result
+    validations:
+      required: true
