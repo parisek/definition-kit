@@ -12,6 +12,7 @@ use Parisek\DefinitionKit\Lint\ForwardedShapeLinter;
 use Parisek\DefinitionKit\Lint\KindLinter;
 use Parisek\DefinitionKit\Lint\LeafWpmlPreferenceLinter;
 use Parisek\DefinitionKit\Lint\TranslatableInertLinter;
+use Parisek\DefinitionKit\Lint\WpBlockKeyLinter;
 use Parisek\DefinitionKit\Schema\FieldsSchemaValidator;
 use Parisek\DefinitionKit\Support\KeyStyle;
 use Parisek\DefinitionKit\Support\EntryDefinition;
@@ -44,6 +45,7 @@ foreach ($paths as $path) {
 $validator = new FieldsSchemaValidator();
 $translatableInertLinter = new TranslatableInertLinter();
 $leafWpmlPreferenceLinter = new LeafWpmlPreferenceLinter();
+$wpBlockKeyLinter = new WpBlockKeyLinter();
 $derivedFromLinter = new DerivedFromLinter();
 $forwardedShapeLinter = new ForwardedShapeLinter();
 $failed = false;
@@ -93,6 +95,7 @@ foreach ($paths as $path) {
         ...$kindLinter->lint($path, $definition),
         ...$translatableInertLinter->lint($path, $definition),
         ...$leafWpmlPreferenceLinter->lint($path, $definition),
+        ...$wpBlockKeyLinter->lint($path, $definition),
         ...$derivedFromLinter->lint($path, $definition),
         ...$forwardedShapeLinter->lint($path, $definition),
     ];

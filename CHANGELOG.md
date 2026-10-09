@@ -8,6 +8,17 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 <!-- New entries go directly under this line. It is the anchor that keeps a branch's
      changelog edit from merging into a version that shipped without it. -->
 
+### Added
+
+- **`fields-validate` warns on a `wp.block` key the generator ignores.** The
+  schema keeps `wp` open, and `BlockJsonGenerator` replays only `description`,
+  `keywords`, `acf`, `supports`, `attributes` and `example`. Any other key,
+  such as `icon` or `title`, was dropped without a trace. The new
+  `WpBlockKeyLinter` names the key and lists the ones that work. It is a
+  warning, so `fields-generate` is not blocked. A new end-to-end test also
+  pins the #51 round trip: `description` and `keywords` survive
+  `fields-migrate` and `fields-generate`, and `fields-lint` reports no drift.
+
 ### Fixed
 
 - **`fields-fixtures` no longer crashes on `parisek/styleguide` 1.32.0.** From
