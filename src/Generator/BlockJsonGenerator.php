@@ -40,6 +40,13 @@ final class BlockJsonGenerator
         'postTypes' => [],
     ];
 
+    /**
+     * The `wp.block` keys the generator replays over the derived block.json.
+     * Any other key under `wp.block` is ignored; `Lint\WpBlockKeyLinter` warns
+     * about it.
+     */
+    public const OVERLAY_SECTIONS = ['description', 'keywords', 'acf', 'supports', 'attributes', 'example'];
+
     public function __construct(private readonly ?string $iconPath = null)
     {
     }
@@ -99,7 +106,7 @@ final class BlockJsonGenerator
         // no styleguide-shaped preview) must keep it even when regenerating
         // from scratch, where preservation-from-disk has no file to read.
         $wpBlock = (array) (($definitionTree['wp'] ?? [])['block'] ?? []);
-        foreach (['description', 'keywords', 'acf', 'supports', 'attributes', 'example'] as $section) {
+        foreach (self::OVERLAY_SECTIONS as $section) {
             if (array_key_exists($section, $wpBlock)) {
                 $block[$section] = $wpBlock[$section];
             }
