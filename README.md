@@ -2,6 +2,7 @@
 
 [![Packagist Version](https://img.shields.io/packagist/v/parisek/definition-kit.svg)](https://packagist.org/packages/parisek/definition-kit)
 [![PHP Version](https://img.shields.io/packagist/php-v/parisek/definition-kit.svg)](https://packagist.org/packages/parisek/definition-kit)
+[![Twig](https://img.shields.io/badge/Twig-3.10%2B-blue.svg)](https://twig.symfony.com/)
 [![ACF Pro](https://img.shields.io/badge/ACF_Pro-6.8.x-blue.svg)](https://www.advancedcustomfields.com/pro/)
 [![Tests](https://github.com/parisek/definition-kit/actions/workflows/tests.yml/badge.svg)](https://github.com/parisek/definition-kit/actions/workflows/tests.yml)
 [![License](https://img.shields.io/packagist/l/parisek/definition-kit.svg)](LICENSE)
