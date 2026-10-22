@@ -119,6 +119,26 @@ final class DrupalSettingsTest extends TestCase
     }
 
     #[Test]
+    public function type_map_is_a_path_relative_to_definition_kit_yaml(): void
+    {
+        $root = $this->projectWith("drupal:\n  type_map: types/drupal.yaml\n");
+        $settings = DrupalSettings::discoverFor($root);
+
+        self::assertSame(\dirname($root) . '/types/drupal.yaml', $settings->typeMap);
+        self::assertSame('/abs/types.yaml', DrupalSettings::fromArray(['type_map' => '/abs/types.yaml'])->typeMap);
+        self::assertNull((new DrupalSettings())->typeMap);
+    }
+
+    #[Test]
+    public function type_map_must_be_a_non_empty_string(): void
+    {
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('drupal.type_map');
+
+        DrupalSettings::fromArray(['type_map' => ['a.yaml']]);
+    }
+
+    #[Test]
     public function the_generator_keys_default_to_plain_drupal(): void
     {
         $settings = new DrupalSettings();

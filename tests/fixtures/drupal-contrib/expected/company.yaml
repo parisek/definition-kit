@@ -1,0 +1,24 @@
+name: Company
+category: Block
+kind: block
+fields:
+  title:
+    type: text
+    role: field
+    label: Title
+  address:
+    type: object
+    role: field
+    label: Address
+    required: true
+    open: true
+    drupal:
+      field: field_address
+      storage: address
+  branches:
+    type: list
+    role: field
+    label: Branches
+    open: true
+    drupal:
+      storage: address

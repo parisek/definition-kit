@@ -1,0 +1,27 @@
+langcode: en
+status: true
+dependencies: {  }
+id: paragraph.workshop_form.default
+targetEntityType: paragraph
+bundle: workshop_form
+mode: default
+content:
+  field_title:
+    type: string_textfield
+    weight: 0
+    region: content
+    settings:
+      size: 60
+      placeholder: ''
+    third_party_settings: {  }
+  field_webform:
+    type: webform_entity_reference_select
+    weight: 1
+    region: content
+    settings:
+      default_data: true
+      webforms: {  }
+    third_party_settings: {  }
+hidden:
+  created: true
+  status: true

@@ -16,6 +16,8 @@ final class FieldSpec
      * @param list<string>|null $targetBundles null: not said
      * @param array<string,string>|null $allowedValues select options, value => label, in order
      * @param list<string> $groups field_group names from the outermost in, for a new form display
+     * @param array<string,array{type: string, label: string, required: bool, options: array<string,string>|null}>|null $parts
+     *        the named parts of a double_field-like value, for a new storage and instance
      */
     public function __construct(
         public readonly string $bundle,
@@ -36,6 +38,7 @@ final class FieldSpec
         public readonly ?string $widget,
         public readonly ?string $formatter,
         public readonly array $groups,
+        public readonly ?array $parts = null,
     ) {
     }
 
@@ -63,6 +66,7 @@ final class FieldSpec
             'targetBundles' => $this->targetBundles,
             'allowedValues' => $this->allowedValues,
             'linkUrlOnly' => $this->linkUrlOnly,
+            'parts' => $this->parts,
         ];
     }
 }

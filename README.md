@@ -166,7 +166,7 @@ A field the aliased bundles do not all share names the ones that do have it in a
 
 | Kit type | Drupal storage (first is the default) |
 | --- | --- |
-| `text` | `string`, `string_long`, `email`, `telephone` |
+| `text` | `string`, `string_long`, `email`, `telephone`, `language_field` |
 | `text` + `multiline: true` | `string_long`, `text_long`, `text` |
 | `richtext` | `text_long`, `text`, `text_with_summary` |
 | `number` | `integer`, `decimal`, `float` |
@@ -174,11 +174,22 @@ A field the aliased bundles do not all share names the ones that do have it in a
 | `select` | `list_string`, `list_integer`, `list_float` |
 | `media` | `entity_reference` to media, `image`, `file` |
 | `link` | `link` |
-| `reference` | `entity_reference` |
+| `reference` | `entity_reference`, `webform` |
 | `date` | `datetime`, `daterange`, `timestamp` |
-| `list`, `flexible_content`, pinned `object` | `entity_reference_revisions` |
+| `list`, `flexible_content`, pinned `object` | `entity_reference_revisions`; `list` and `object` also `double_field`, `address` |
 
 `drupal.storage` pins one exact type. The migration writes it wherever the export uses a type other than the default.
+
+**Contrib field types.** Four contrib storage types are in the bundled map. Each one always carries its `drupal.storage` pin:
+
+| Storage type (module) | Kit type | Notes |
+| --- | --- | --- |
+| `double_field` ([Double Field](https://www.drupal.org/project/double_field)) | `list` (several values) or `object` (one value, pinned by `drupal.field`) | `fields:` holds the two parts, `first` and `second`. A part is `text`, `richtext`, `number`, `boolean` or `date` after its subfield type, or `select` when the instance gives it a fixed list of values. `label` and `required` come from the instance. The lint checks the two part names and each part's type against its subfield type. `max:` is the cardinality limit. |
+| `address` ([Address](https://www.drupal.org/project/address)) | `object` (one value) or `list` (several), `open: true` | The address properties that are active depend on the instance's country settings, and a display class reshapes them. So the definition does not list them. |
+| `webform` ([Webform](https://www.drupal.org/project/webform)) | `reference` with `of: entity:webform` | The target type is compared like a core entity reference. |
+| `language_field` ([Language Field](https://www.drupal.org/project/languagefield)) | `text`, `multiple: true` when the field takes several values | The value is a language code. The list of languages is the site's, not the author's, so a `select` with options would go stale. |
+
+The generator creates these types from the map. For a `double_field` it takes the subfield storage types, labels, required flags and options from the parts. It never changes the subfield storage types of an existing field: a part its subfield cannot hold is a `REFUSE`.
 
 A `reference` targeting an entity type outside `term:`/`post:`/media (a config entity such as `webform`, or a content entity Drupal-side only) uses `of: entity:<target_type>[:<bundle>,…]` — omitting the bundle list means no restriction, Drupal's own `target_bundles: null`. See [ADR 0009](docs/adr/0009-generic-drupal-entity-reference-target-vocabulary.md).
 
@@ -187,7 +198,7 @@ A `reference` targeting an entity type outside `term:`/`post:`/media (a config e
 **`fields-generate --target=drupal`.** It plans the whole export in one pass, because components share field storage, and prints one line per config entity:
 
 - `REUSE`: the entity exists and every key the definition owns already matches.
-- `CREATE`: the entity does not exist. The generator writes it whole, from the type map (`schemas/drupal-type-map.yaml`) and the defaults baseline (`schemas/drupal-defaults-baseline.yaml`). A new file has no `uuid`.
+- `CREATE`: the entity does not exist. The generator writes it whole, from the type map (`schemas/drupal-type-map.yaml`, plus the project's `drupal.type_map`) and the defaults baseline (`schemas/drupal-defaults-baseline.yaml`). A new file has no `uuid`.
 - `UPDATE`: an owned key differs. Only that key changes; the rest of the file stays byte for byte.
 - `REFUSE`: the change needs a data migration, or two definitions contradict each other. Then nothing is written and the exit code is 1.
 
@@ -220,7 +231,32 @@ drupal:
   view_display: hidden        # a new field on the view display: content (default) | hidden
   field_config_cardinality: true  # an instance may narrow its storage's cardinality (contrib module)
   baseline: drupal-baseline.yaml  # deep-merged over schemas/drupal-defaults-baseline.yaml, relative to this file
+  type_map: drupal-types.yaml     # merged over schemas/drupal-type-map.yaml, relative to this file
 ```
+
+**A project type map.** A paragraph field whose storage type is not in `schemas/drupal-type-map.yaml` stops `fields-migrate`, and `fields-generate` cannot create it. To map a contrib type without a kit release, set `drupal.type_map` to a YAML file. The path is relative to `definition-kit.yaml`. All three commands read it: `fields-migrate --drupal-config`, `fields-lint-drupal` and `fields-generate --target=drupal`. The error for an unknown storage type names this setting. The other way out is `drupal.ignore_fields`, which hides the field name on every bundle.
+
+The file has the sections of the bundled map (read its header for each key). Every section is optional:
+
+```yaml
+kit_types:                       # kit type => storage types it accepts
+  text: [color_field_type]       # appended after the bundled list, so the canonical type stays first
+storage_types:                   # what the generator writes when it creates the field
+  color_field_type:
+    module: color_field
+    storage_settings: {format: '#HEXHEX', opacity: false}
+    instance_settings: {opacity: false}
+    widget: {type: color_field_widget_default, settings: {}}
+    formatter: {type: color_field_formatter_text, label: above, settings: {format: hex, opacity: false}}
+widget_modules:                  # plugin id => providing module (a dependency of a new display entry)
+  color_field_widget_default: color_field
+formatter_modules:
+  color_field_formatter_text: color_field
+```
+
+- **Merge.** `kit_types` lists are appended to the bundled lists. `storage_types`, `widget_modules`, `formatter_modules`, `target_types` and `media_reference` replace the bundled entry of the same name as a whole. State the full entry to change one key of it.
+- **Checks.** The overlay passes the same checks as the bundled map. Each `storage_types` entry needs a `module`, a `widget.type` and a `formatter.type`. Each storage type that a `kit_types` list names needs a `storage_types` entry. A violation stops the command (exit 2) and names the file and the entry.
+- **What the migration writes.** It reads the kit type from the `kit_types` list that names the storage type: `text`, `text_multiline`, `richtext`, `number`, `boolean`, `date`, `select` and `reference` give a field of that type. `object` and `list` give an `open` field, or the named parts when the entry has `parts` and `part_types` as `double_field` does. The migration pins the storage type with `drupal.storage`. A storage type under `media`, `link`, `flexible_content` or the paragraph types is not readable from an overlay.
 
 The project baseline carries what a new entity needs beyond the kit's defaults, typically contrib third-party settings. A module named as a `third_party_settings` key becomes a module dependency:
 

@@ -1,0 +1,31 @@
+langcode: en
+status: true
+dependencies:
+  module:
+    - double_field
+    - paragraphs
+id: paragraph.field_pair
+field_name: field_pair
+entity_type: paragraph
+type: double_field
+settings:
+  storage:
+    first:
+      type: integer
+      maxlength: 255
+      precision: 10
+      scale: 2
+      datetime_type: datetime
+    second:
+      type: boolean
+      maxlength: 255
+      precision: 10
+      scale: 2
+      datetime_type: datetime
+module: double_field
+locked: false
+cardinality: 1
+translatable: true
+indexes: {  }
+persist_with_no_fields: false
+custom_storage: false

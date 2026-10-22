@@ -39,16 +39,25 @@ use Parisek\DefinitionKit\Drupal\DrupalTypeMap;
  * bundles, one layout per bundle). Media and other references pin
  * `drupal.target_bundles` unless `of:` already says it.
  *
+ * Contrib storage types come from the type map ({@see contrib()}): double_field
+ * is a `list` or `object` with the parts `first` and `second`, address an
+ * `open` object, webform a `reference` to `entity:webform`, language_field a
+ * `text`. A project overlay (`drupal.type_map`) adds more.
+ *
  * @phpstan-import-type Entry from DisplayEvidence
  */
 final class DrupalParagraphReader
 {
+    private readonly DrupalTypeMap $types;
+
+    /** @param DrupalTypeMap|null $types default: the bundled map plus the overlay the settings name */
     public function __construct(
         private readonly DrupalConfig $config,
         private readonly DrupalSettings $settings = new DrupalSettings(),
         private readonly ?DisplayEvidence $evidence = null,
-        private readonly DrupalTypeMap $types = new DrupalTypeMap(),
+        ?DrupalTypeMap $types = null,
     ) {
+        $this->types = $types ?? DrupalTypeMap::forSettings($settings);
     }
 
     /**
@@ -255,12 +264,7 @@ final class DrupalParagraphReader
             'file' => ['type' => 'media', 'kind' => 'file'],
             'entity_reference' => $this->reference($d),
             'entity_reference_revisions' => $this->nested($d, $bundle, $childEvidence, $stack),
-            default => throw new \DomainException(sprintf(
-                "Drupal field %s on '%s' has storage type '%s', which the kit has no type for.",
-                $d->name,
-                $bundle,
-                $d->type,
-            )),
+            default => $this->contrib($d, $bundle),
         };
 
         $field['label'] = '' !== trim($d->label) ? $d->label : $d->name;
@@ -287,6 +291,112 @@ final class DrupalParagraphReader
         }
 
         return $field;
+    }
+
+    /**
+     * A storage type outside the core table, read through the type map: the
+     * bundled contrib entries (double_field, address, webform, language_field)
+     * and a project overlay (`drupal.type_map`) alike. The kit types that
+     * `kit_types` lists the storage type under decide the field.
+     *
+     * @return array<string,mixed>
+     */
+    private function contrib(DrupalField $d, string $bundle): array
+    {
+        $keys = $this->types->kitKeysFor($d->type);
+        if ([] === $keys) {
+            throw new \DomainException(sprintf(
+                "Drupal field %s on '%s' has storage type '%s', which the kit has no type for. "
+                . 'Map it in a type map overlay (set drupal.type_map in definition-kit.yaml, see README, Drupal paragraphs), '
+                . 'or leave the field out with drupal.ignore_fields.',
+                $d->name,
+                $bundle,
+                $d->type,
+            ));
+        }
+
+        if (array_intersect($keys, ['list', 'object']) !== []) {
+            return $this->structured($d, $keys);
+        }
+
+        return match ($keys[0]) {
+            'text' => ['type' => 'text'],
+            'text_multiline' => ['type' => 'text', 'multiline' => true],
+            'richtext' => ['type' => 'richtext'],
+            'number' => ['type' => 'number'],
+            'boolean' => ['type' => 'boolean'],
+            'date' => ['type' => 'date'],
+            'select' => $this->select($d),
+            'reference' => $this->reference($d),
+            default => throw new \DomainException(sprintf(
+                "Drupal field %s on '%s': storage type '%s' is mapped to the kit type '%s', which the migration cannot read from a contrib type. "
+                . 'Map it to text, text_multiline, richtext, number, boolean, date, select, reference, object or list.',
+                $d->name,
+                $bundle,
+                $d->type,
+                $keys[0],
+            )),
+        };
+    }
+
+    /**
+     * A value that holds its parts in the field itself: `object` for one
+     * item, `list` for several. A type with named parts (double_field) gets
+     * one sub-field per part; any other (address) is an `open` map.
+     *
+     * @param list<string> $keys
+     * @return array<string,mixed>
+     */
+    private function structured(DrupalField $d, array $keys): array
+    {
+        $kind = $d->isMultiple() ? 'list' : 'object';
+        if (!in_array($kind, $keys, true)) {
+            $kind = in_array('object', $keys, true) ? 'object' : 'list';
+        }
+        $field = ['type' => $kind];
+        $parts = $this->types->parts($d->type);
+        if ([] === $parts) {
+            $field['open'] = true;
+
+            return $field;
+        }
+        $field['fields'] = [];
+        foreach ($parts as $part) {
+            $field['fields'][$part] = $this->part($d, $part);
+        }
+
+        return $field;
+    }
+
+    /**
+     * One named part of a field item (double_field `first` or `second`): its
+     * type follows the subfield storage type, its label and required flag the
+     * instance settings. A subfield with a fixed list of values becomes a
+     * `select`.
+     *
+     * @return array<string,mixed>
+     */
+    private function part(DrupalField $d, string $part): array
+    {
+        $storage = $d->settings['storage'][$part]['type'] ?? 'string';
+        $instance = is_array($d->settings[$part] ?? null) ? $d->settings[$part] : [];
+        $kinds = $this->types->partKitTypes($d->type, is_string($storage) ? $storage : 'string');
+        $field = ['type' => $kinds[0] ?? 'text', 'role' => 'field'];
+
+        $label = is_string($instance['label'] ?? null) ? trim($instance['label']) : '';
+        $field['label'] = '' !== $label ? $label : ucfirst($part);
+        if (true === ($instance['required'] ?? false)) {
+            $field['required'] = true;
+        }
+        if (true === ($instance['list'] ?? false) && in_array('select', $kinds, true)) {
+            $options = DrupalField::parseAllowedValues($instance['allowed_values'] ?? null);
+            if ([] !== $options && !array_is_list($options)) {
+                $field['type'] = 'select';
+                $field['options'] = $options;
+            }
+        }
+
+        return $this->orderKeys($field);
     }
 
     /** @return array<string,mixed> */

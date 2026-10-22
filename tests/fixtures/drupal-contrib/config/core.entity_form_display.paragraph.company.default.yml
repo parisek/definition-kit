@@ -1,0 +1,33 @@
+langcode: en
+status: true
+dependencies: {  }
+id: paragraph.company.default
+targetEntityType: paragraph
+bundle: company
+mode: default
+content:
+  field_title:
+    type: string_textfield
+    weight: 0
+    region: content
+    settings:
+      size: 60
+      placeholder: ''
+    third_party_settings: {  }
+  field_address:
+    type: address_default
+    weight: 1
+    region: content
+    settings:
+      wrapper_type: details
+    third_party_settings: {  }
+  field_branches:
+    type: address_default
+    weight: 2
+    region: content
+    settings:
+      wrapper_type: details
+    third_party_settings: {  }
+hidden:
+  created: true
+  status: true

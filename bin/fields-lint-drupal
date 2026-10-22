@@ -5,6 +5,7 @@ declare(strict_types=1);
 
 use Parisek\DefinitionKit\Drupal\DrupalConfig;
 use Parisek\DefinitionKit\Drupal\DrupalSettings;
+use Parisek\DefinitionKit\Drupal\DrupalTypeMap;
 use Parisek\DefinitionKit\Lint\DrupalDriftLinter;
 use Parisek\DefinitionKit\Lint\DrupalDriftResult;
 use Parisek\DefinitionKit\Schema\FieldsSchemaValidator;
@@ -55,6 +56,7 @@ if (!is_dir($scan)) {
 try {
     $config = DrupalConfig::fromDirectory($configDir);
     $settings = DrupalSettings::discoverFor($root ?? dirname(rtrim((string) $single, '/')));
+    $types = DrupalTypeMap::forSettings($settings);
 } catch (\RuntimeException $e) {
     fwrite(STDERR, $e->getMessage() . "\n");
     exit(2);
@@ -65,7 +67,7 @@ if (null !== $settings->path) {
     echo "settings: {$settings->path}\n";
 }
 
-$linter = new DrupalDriftLinter($config, $settings);
+$linter = new DrupalDriftLinter($config, $settings, $types);
 $validator = new FieldsSchemaValidator();
 
 $dirs = null !== $root ? (glob(rtrim($root, '/') . '/*', GLOB_ONLYDIR) ?: []) : [rtrim((string) $single, '/')];

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Parisek\DefinitionKit\Drupal;
 
 use Parisek\DefinitionKit\Support\StructuralType;
+use Symfony\Component\Yaml\Exception\ParseException;
 use Symfony\Component\Yaml\Yaml;
 
 /**
@@ -18,7 +19,7 @@ use Symfony\Component\Yaml\Yaml;
  * which storage it expects.
  *
  *   kit type                 canonical                   also accepted
- *   text                     string                      string_long, email, telephone
+ *   text                     string                      string_long, email, telephone, language_field
  *   text (multiline: true)   string_long                 text_long, text
  *   richtext                 text_long                   text, text_with_summary
  *   number                   integer                     decimal, float
@@ -26,18 +27,24 @@ use Symfony\Component\Yaml\Yaml;
  *   select                   list_string                 list_integer, list_float
  *   media                    entity_reference (media)    image, file
  *   link                     link
- *   reference                entity_reference
+ *   reference                entity_reference            webform
  *   date                     datetime                    daterange, timestamp
- *   object                   (a field_group, no storage) entity_reference_revisions when pinned by drupal.field
- *   list                     entity_reference_revisions
+ *   object                   (a field_group, no storage) entity_reference_revisions when pinned by drupal.field; double_field, address
+ *   list                     entity_reference_revisions  double_field, address
  *   flexible_content         entity_reference_revisions
  *
  * `storageType()` and the widget/formatter lookups serve the generator
  * (ADR 0002): what a new storage, instance and display entry look like.
+ *
+ * A project can extend the bundled map with an overlay file
+ * (`drupal.type_map` in definition-kit.yaml, see {@see forSettings()}). The
+ * overlay is checked by the same rules as the bundled map, and the merge too.
  */
 final class DrupalTypeMap
 {
     public const DEFAULT_PATH = __DIR__ . '/../../schemas/drupal-type-map.yaml';
+
+    private const SECTIONS = ['kit_types', 'storage_types', 'media_reference', 'target_types', 'widget_modules', 'formatter_modules'];
 
     /** @var array<string,array<string,mixed>> path => parsed map */
     private static array $cache = [];
@@ -45,17 +52,154 @@ final class DrupalTypeMap
     /** @var array<string,mixed> */
     private readonly array $map;
 
-    public function __construct(?string $path = null)
+    /**
+     * @param string|null $path the bundled map (default: schemas/drupal-type-map.yaml)
+     * @param string|null $overlay a project overlay, merged over the bundled map
+     */
+    public function __construct(?string $path = null, ?string $overlay = null)
     {
         $path ??= self::DEFAULT_PATH;
         if (!isset(self::$cache[$path])) {
-            $parsed = Yaml::parseFile($path);
-            if (!is_array($parsed) || !is_array($parsed['kit_types'] ?? null) || !is_array($parsed['storage_types'] ?? null)) {
-                throw new \RuntimeException("Malformed Drupal type map (needs kit_types and storage_types): {$path}");
-            }
+            $parsed = self::parse($path, 'type map');
+            self::validate($parsed, $path, true);
             self::$cache[$path] = $parsed;
         }
-        $this->map = self::$cache[$path];
+        $map = self::$cache[$path];
+        if (null !== $overlay) {
+            $over = self::parse($overlay, 'type map overlay (drupal.type_map)');
+            self::validate($over, $overlay, false);
+            $map = self::merge($map, $over);
+            self::validateKitTypes($map, $overlay);
+        }
+        $this->map = $map;
+    }
+
+    /** The bundled map with the project overlay of the settings, when it names one. */
+    public static function forSettings(DrupalSettings $settings): self
+    {
+        return new self(null, $settings->typeMap);
+    }
+
+    /** @return array<string,mixed> */
+    private static function parse(string $path, string $what): array
+    {
+        if (!is_file($path)) {
+            throw new \RuntimeException("Drupal {$what} not found: {$path}");
+        }
+        try {
+            $parsed = Yaml::parseFile($path);
+        } catch (ParseException $e) {
+            throw new \RuntimeException("Malformed Drupal {$what} {$path}: " . $e->getMessage(), 0, $e);
+        }
+        if (!is_array($parsed) || ($parsed !== [] && array_is_list($parsed))) {
+            throw new \RuntimeException("Malformed Drupal {$what} {$path}: the file must be a map of sections (" . implode(', ', self::SECTIONS) . ').');
+        }
+
+        return $parsed;
+    }
+
+    /**
+     * The one rule set for the bundled map and for an overlay. The bundled map
+     * needs `kit_types` and `storage_types`; an overlay may carry any section.
+     *
+     * @param array<string,mixed> $map
+     */
+    private static function validate(array $map, string $source, bool $bundled): void
+    {
+        $fail = static fn (string $why): \RuntimeException => new \RuntimeException("Malformed Drupal type map {$source}: {$why}");
+
+        $unknown = array_diff(array_map('strval', array_keys($map)), self::SECTIONS);
+        if ([] !== $unknown) {
+            throw $fail('unknown section(s) ' . implode(', ', $unknown) . ' — expected: ' . implode(', ', self::SECTIONS) . '.');
+        }
+        if ($bundled) {
+            foreach (['kit_types', 'storage_types'] as $required) {
+                if (!is_array($map[$required] ?? null)) {
+                    throw $fail("needs kit_types and storage_types ({$required} is missing).");
+                }
+            }
+        }
+        foreach ($map as $section => $value) {
+            if (!is_array($value) || ([] !== $value && array_is_list($value))) {
+                throw $fail("{$section} must be a map.");
+            }
+        }
+
+        foreach ((array) ($map['kit_types'] ?? []) as $key => $types) {
+            if (!is_array($types) || !array_is_list($types) || [] !== array_filter($types, static fn (mixed $t): bool => !is_string($t) || '' === $t)) {
+                throw $fail("kit_types.{$key} must be a list of storage type names.");
+            }
+        }
+        foreach ((array) ($map['storage_types'] ?? []) as $type => $entry) {
+            if (!is_array($entry) || !is_string($entry['module'] ?? null) || '' === $entry['module']) {
+                throw $fail("storage_types.{$type} needs a `module` (core for a core field type).");
+            }
+            foreach (['widget', 'formatter'] as $plugin) {
+                if (!is_array($entry[$plugin] ?? null) || !is_string($entry[$plugin]['type'] ?? null) || '' === $entry[$plugin]['type']) {
+                    throw $fail("storage_types.{$type} needs a {$plugin} with a `type`.");
+                }
+            }
+            foreach (['storage_settings', 'instance_settings', 'part_types'] as $mapKey) {
+                if (isset($entry[$mapKey]) && !is_array($entry[$mapKey])) {
+                    throw $fail("storage_types.{$type}.{$mapKey} must be a map.");
+                }
+            }
+            if (isset($entry['parts']) && (!is_array($entry['parts']) || !array_is_list($entry['parts']) || [] !== array_filter($entry['parts'], static fn (mixed $p): bool => !is_string($p) || '' === $p))) {
+                throw $fail("storage_types.{$type}.parts must be a list of names.");
+            }
+            if (isset($entry['reference']) && !is_bool($entry['reference'])) {
+                throw $fail("storage_types.{$type}.reference must be true or false.");
+            }
+        }
+        foreach (['widget_modules', 'formatter_modules'] as $section) {
+            foreach ((array) ($map[$section] ?? []) as $plugin => $module) {
+                if (!is_string($module) || '' === $module) {
+                    throw $fail("{$section}.{$plugin} must name a module.");
+                }
+            }
+        }
+        foreach ((array) ($map['target_types'] ?? []) as $target => $entry) {
+            if (!is_array($entry) || !is_string($entry['module'] ?? null) || '' === $entry['module']) {
+                throw $fail("target_types.{$target} needs a `module`.");
+            }
+        }
+    }
+
+    /**
+     * Every storage type a `kit_types` list names must exist in
+     * `storage_types`, or the generator could not create it.
+     *
+     * @param array<string,mixed> $map
+     */
+    private static function validateKitTypes(array $map, string $source): void
+    {
+        foreach ((array) ($map['kit_types'] ?? []) as $key => $types) {
+            foreach ((array) $types as $type) {
+                if (!isset($map['storage_types'][$type])) {
+                    throw new \RuntimeException("Malformed Drupal type map {$source}: kit_types.{$key} names storage type '{$type}', which no storage_types entry defines.");
+                }
+            }
+        }
+    }
+
+    /**
+     * @param array<string,mixed> $base
+     * @param array<string,mixed> $overlay
+     * @return array<string,mixed>
+     */
+    private static function merge(array $base, array $overlay): array
+    {
+        foreach ($overlay as $section => $entries) {
+            if ('kit_types' === $section) {
+                foreach ((array) $entries as $key => $types) {
+                    $base['kit_types'][$key] = array_values(array_unique([...(array) ($base['kit_types'][$key] ?? []), ...(array) $types]));
+                }
+                continue;
+            }
+            $base[$section] = 'media_reference' === $section ? $entries : array_replace((array) ($base[$section] ?? []), (array) $entries);
+        }
+
+        return $base;
     }
 
     /** @param array<string,mixed> $field */
@@ -101,7 +245,7 @@ final class DrupalTypeMap
         if ('entity_reference_revisions' === $drupalType) {
             return 'paragraph';
         }
-        if ('entity_reference' !== $drupalType) {
+        if ('entity_reference' !== $drupalType && !$this->isReference($drupalType)) {
             return null;
         }
         $type = (string) ($field['type'] ?? '');
@@ -223,7 +367,7 @@ final class DrupalTypeMap
     {
         $entry = $this->map['storage_types'][$storageType] ?? null;
         if (!is_array($entry)) {
-            throw new \DomainException("The Drupal type map has no storage type '{$storageType}'.");
+            throw new \DomainException("The Drupal type map has no storage type '{$storageType}'. Map it in a type map overlay: set drupal.type_map in definition-kit.yaml (README, Drupal paragraphs).");
         }
 
         return [
@@ -233,6 +377,91 @@ final class DrupalTypeMap
             'widget' => self::plugin($entry['widget'] ?? null, $storageType, 'widget'),
             'formatter' => self::plugin($entry['formatter'] ?? null, $storageType, 'formatter') + ['label' => 'above'],
         ];
+    }
+
+    /** True when the map defines this storage type. */
+    public function hasStorageType(string $storageType): bool
+    {
+        return is_array($this->map['storage_types'][$storageType] ?? null);
+    }
+
+    /**
+     * The kit type keys that accept a storage type, in map order. Empty for a
+     * storage type no kit type lists.
+     *
+     * @return list<string>
+     */
+    public function kitKeysFor(string $storageType): array
+    {
+        $keys = [];
+        foreach ($this->map['kit_types'] as $key => $types) {
+            if (is_array($types) && in_array($storageType, $types, true)) {
+                $keys[] = (string) $key;
+            }
+        }
+
+        return $keys;
+    }
+
+    /** True for an entity reference type: `entity_reference` and a contrib type flagged `reference`. */
+    public function isReference(string $storageType): bool
+    {
+        return 'entity_reference' === $storageType || true === ($this->map['storage_types'][$storageType]['reference'] ?? false);
+    }
+
+    /**
+     * The named values one item of a storage type holds (double_field:
+     * first, second). Empty for a type with one value.
+     *
+     * @return list<string>
+     */
+    public function parts(string $storageType): array
+    {
+        $parts = $this->map['storage_types'][$storageType]['parts'] ?? [];
+
+        return is_array($parts) ? array_values(array_map('strval', $parts)) : [];
+    }
+
+    /**
+     * The kit types a part of this subfield storage type accepts, the one the
+     * migration writes first.
+     *
+     * @return list<string>
+     */
+    public function partKitTypes(string $storageType, string $subfieldType): array
+    {
+        $types = $this->map['storage_types'][$storageType]['part_types'][$subfieldType] ?? [];
+
+        return is_array($types) ? array_values(array_map('strval', $types)) : [];
+    }
+
+    /** The subfield storage type to create for a part of this kit type, or null when none fits. */
+    public function partStorageType(string $storageType, string $kitType): ?string
+    {
+        $partTypes = $this->map['storage_types'][$storageType]['part_types'] ?? [];
+        foreach (is_array($partTypes) ? $partTypes : [] as $subfield => $kitTypes) {
+            if (is_array($kitTypes) && in_array($kitType, $kitTypes, true)) {
+                return (string) $subfield;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * True when a `list`, `object` or `flexible_content` field is stored as
+     * nested paragraphs. A `list` or `object` pinned to a structured contrib
+     * storage (double_field, address) holds its values in the field itself.
+     *
+     * @param array<string,mixed> $field
+     */
+    public function nestsParagraphs(array $field): bool
+    {
+        if (!in_array(StructuralType::canonical((string) ($field['type'] ?? '')), [StructuralType::LIST, StructuralType::OBJECT, 'flexible_content'], true)) {
+            return false;
+        }
+
+        return 'entity_reference_revisions' === ($this->accepted($field)[0] ?? null);
     }
 
     /**

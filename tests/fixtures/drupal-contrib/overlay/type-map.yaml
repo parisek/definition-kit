@@ -1,0 +1,18 @@
+# A project overlay for tests: the Color Field module's `color_field_type`,
+# a contrib storage type the kit does not know, stored as a text value.
+kit_types:
+  text: [color_field_type]
+
+storage_types:
+  color_field_type:
+    module: color_field
+    storage_settings: {format: '#HEXHEX', opacity: false}
+    instance_settings: {opacity: false}
+    widget: {type: color_field_widget_default, settings: {}}
+    formatter: {type: color_field_formatter_text, label: above, settings: {format: hex, opacity: false}}
+
+widget_modules:
+  color_field_widget_default: color_field
+
+formatter_modules:
+  color_field_formatter_text: color_field

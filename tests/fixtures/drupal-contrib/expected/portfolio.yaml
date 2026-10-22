@@ -1,0 +1,22 @@
+name: Portfolio
+category: Block
+kind: block
+fields:
+  portfolio:
+    type: list
+    role: field
+    label: Items
+    max: 4
+    fields:
+      first:
+        type: text
+        role: field
+        label: Number
+        required: true
+      second:
+        type: text
+        role: field
+        label: Description
+        required: true
+    drupal:
+      storage: double_field

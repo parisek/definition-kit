@@ -82,7 +82,17 @@ final class DrupalField
      */
     public function allowedValues(): array
     {
-        $raw = $this->settings['allowed_values'] ?? null;
+        return self::parseAllowedValues($this->settings['allowed_values'] ?? null);
+    }
+
+    /**
+     * The same reading for any `allowed_values` setting, such as one subfield
+     * of a double_field.
+     *
+     * @return array<int|string,string>
+     */
+    public static function parseAllowedValues(mixed $raw): array
+    {
         if (!is_array($raw)) {
             return [];
         }

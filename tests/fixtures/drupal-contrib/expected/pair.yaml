@@ -1,0 +1,21 @@
+name: Pair
+category: Block
+kind: block
+fields:
+  pair:
+    type: object
+    role: field
+    label: Pair
+    fields:
+      first:
+        type: number
+        role: field
+        label: Count
+        required: true
+      second:
+        type: boolean
+        role: field
+        label: Active
+    drupal:
+      field: field_pair
+      storage: double_field

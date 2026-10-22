@@ -6,7 +6,9 @@
 #   accepts. The first one is canonical: the migration leaves it implicit and
 #   the generator creates it. Every other accepted type needs a
 #   `drupal.storage` pin in the definition. The key is the kit type, or
-#   `text_multiline` for `type: text` with `multiline: true`.
+#   `text_multiline` for `type: text` with `multiline: true`. A contrib
+#   storage type (double_field, address, webform, language_field) is listed
+#   under the kit type the migration writes for it.
 #
 # storage_types: <storage type> => what the generator writes when it creates
 #   a field of that type:
@@ -20,7 +22,7 @@
 #   from `core` adds no module dependency.
 
 kit_types:
-  text: [string, string_long, email, telephone]
+  text: [string, string_long, email, telephone, language_field]
   text_multiline: [string_long, text_long, text]
   richtext: [text_long, text, text_with_summary]
   number: [integer, decimal, float]
@@ -28,10 +30,10 @@ kit_types:
   select: [list_string, list_integer, list_float]
   media: [entity_reference, image, file]
   link: [link]
-  reference: [entity_reference]
+  reference: [entity_reference, webform]
   date: [datetime, daterange, timestamp]
-  object: [entity_reference_revisions]
-  list: [entity_reference_revisions]
+  object: [entity_reference_revisions, double_field, address]
+  list: [entity_reference_revisions, double_field, address]
   flexible_content: [entity_reference_revisions]
 
 storage_types:
@@ -207,6 +209,71 @@ storage_types:
         features: {collapse_edit_all: collapse_edit_all, duplicate: duplicate}
     formatter: {type: entity_reference_revisions_entity_view, label: hidden, settings: {view_mode: default, link: ''}}
 
+  # Contrib field types. Module sources: double_field, address, webform and
+  # languagefield (defaultStorageSettings, defaultFieldSettings, default_widget,
+  # default_formatter of each field type plugin).
+  double_field:
+    module: double_field
+    parts: [first, second]
+    part_types:
+      boolean: [boolean]
+      string: [text, select]
+      text: [richtext, text]
+      float: [number, select]
+      integer: [number, select]
+      numeric: [number]
+      email: [text]
+      telephone: [text]
+      uri: [text]
+      datetime_iso8601: [date]
+    storage_settings:
+      storage:
+        first: {type: string, maxlength: 255, precision: 10, scale: 2, datetime_type: datetime}
+        second: {type: string, maxlength: 255, precision: 10, scale: 2, datetime_type: datetime}
+    instance_settings:
+      first: {label: '', min: '', max: '', list: false, allowed_values: [], required: true, on_label: 'On', off_label: 'Off'}
+      second: {label: '', min: '', max: '', list: false, allowed_values: [], required: true, on_label: 'On', off_label: 'Off'}
+    widget:
+      type: double_field
+      settings:
+        first: {type: textfield, label_display: block, size: 30, placeholder: '', label: Ok, cols: 10, rows: 5}
+        second: {type: textfield, label_display: block, size: 30, placeholder: '', label: Ok, cols: 10, rows: 5}
+        inline: false
+    formatter:
+      type: double_field_unformatted_list
+      label: above
+      settings:
+        first: {format_type: medium, link: false, hidden: false, key: false, decimal_separator: '.', thousand_separator: '', scale: 2}
+        second: {format_type: medium, link: false, hidden: false, key: false, decimal_separator: '.', thousand_separator: '', scale: 2}
+        inline: false
+  address:
+    module: address
+    storage_settings: {}
+    instance_settings: {available_countries: {}, langcode_override: '', field_overrides: {}, fields: {}}
+    widget: {type: address_default, settings: {wrapper_type: fieldset}}
+    formatter: {type: address_default, label: above, settings: {}}
+  webform:
+    module: webform
+    reference: true
+    storage_settings: {target_type: webform}
+    instance_settings:
+      handler: 'default:webform'
+      handler_settings: {target_bundles: null, auto_create: false}
+    widget: {type: webform_entity_reference_select, settings: {default_data: true, webforms: {}}}
+    formatter: {type: webform_entity_reference_entity_view, label: hidden, settings: {source_entity: true, lazy: false}}
+  language_field:
+    module: languagefield
+    storage_settings:
+      maxlength: 12
+      language_range: {11: 11}
+      included_languages: {}
+      excluded_languages: {}
+      groups: ''
+      allowed_values_function: languagefield_allowed_values
+    instance_settings: {}
+    widget: {type: languagefield_select, settings: {format: {icon: false, iso: false, name: name, name_native: false}}}
+    formatter: {type: languagefield_default, label: above, settings: {format: {icon: false, iso: false, name: name, name_native: false}}}
+
 # A media reference is an entity_reference to `media`: the generator uses
 # this widget and formatter instead of the entity_reference ones.
 media_reference:
@@ -248,6 +315,10 @@ widget_modules:
   daterange_default: datetime_range
   paragraphs: paragraphs
   entity_reference_paragraphs: paragraphs
+  double_field: double_field
+  address_default: address
+  webform_entity_reference_select: webform
+  languagefield_select: languagefield
 
 formatter_modules:
   string: core
@@ -266,3 +337,7 @@ formatter_modules:
   daterange_default: datetime_range
   timestamp: core
   entity_reference_revisions_entity_view: entity_reference_revisions
+  double_field_unformatted_list: double_field
+  address_default: address
+  webform_entity_reference_entity_view: webform
+  languagefield_default: languagefield

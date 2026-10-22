@@ -55,13 +55,17 @@ final class DrupalConfigPlanner
 
     private readonly DrupalBaseline $baseline;
 
+    private readonly DrupalTypeMap $types;
+
+    /** @param DrupalTypeMap|null $types default: the bundled map plus the overlay the settings name */
     public function __construct(
         private readonly ConfigStore $store,
         private readonly DrupalSettings $settings = new DrupalSettings(),
         ?DrupalBaseline $baseline = null,
-        private readonly DrupalTypeMap $types = new DrupalTypeMap(),
+        ?DrupalTypeMap $types = null,
     ) {
         $this->baseline = $baseline ?? DrupalBaseline::load($settings->baseline);
+        $this->types = $types ?? DrupalTypeMap::forSettings($settings);
     }
 
     /** @param list<BundleSpec> $specs */
@@ -150,6 +154,22 @@ final class DrupalConfigPlanner
         return $signatures;
     }
 
+    /**
+     * @param array<string,array{type: string, label: string, required: bool, options: array<string,string>|null}> $parts
+     * @param array<string,mixed> $existing
+     */
+    private function partsFit(string $type, array $parts, array $existing): bool
+    {
+        foreach ($parts as $part => $info) {
+            $subfield = $existing['settings']['storage'][$part]['type'] ?? null;
+            if (is_string($subfield) && !in_array($info['type'], $this->types->partKitTypes($type, $subfield), true)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     private function paragraphType(BundleSpec $spec): void
     {
         $name = "paragraphs.paragraphs_type.{$spec->bundle}";
@@ -222,6 +242,15 @@ final class DrupalConfigPlanner
                     $field->path,
                     $field->bundle,
                     implode('|', $field->accepted),
+                ));
+                $refused = true;
+                continue;
+            }
+            if (null !== $field->parts && !$this->partsFit($type, $field->parts, $existing)) {
+                $this->refuse($name, sprintf(
+                    '`%s` on %s declares parts the existing subfield storage types do not hold — a subfield type change needs a data migration',
+                    $field->path,
+                    $field->bundle,
                 ));
                 $refused = true;
                 continue;
@@ -315,6 +344,21 @@ final class DrupalConfigPlanner
         }
         if (null !== $allowed) {
             $settings['allowed_values'] = self::allowedValuesList($allowed, $type);
+        }
+        foreach ($fields as $field) {
+            if (null === $field->parts) {
+                continue;
+            }
+            foreach ($field->parts as $part => $partInfo) {
+                $subfield = $this->types->partStorageType($type, $partInfo['type']);
+                if (null === $subfield) {
+                    $this->refuse($name, "`{$field->path}` on {$field->bundle}: part {$part} has kit type {$partInfo['type']}, which {$type} cannot store");
+
+                    return;
+                }
+                $settings['storage'][$part]['type'] = $subfield;
+            }
+            break;
         }
         $modules = [$this->types->storageModule($type), $this->types->targetTypeModule('paragraph')];
         if (is_string($settings['target_type'] ?? null)) {
@@ -442,6 +486,14 @@ final class DrupalConfigPlanner
         }
         if (null !== $field->linkUrlOnly && $field->linkUrlOnly) {
             $settings['title'] = 0;
+        }
+        foreach ($field->parts ?? [] as $part => $info) {
+            $settings[$part]['label'] = $info['label'];
+            $settings[$part]['required'] = $info['required'];
+            if (null !== $info['options']) {
+                $settings[$part]['list'] = true;
+                $settings[$part]['allowed_values'] = self::allowedValuesList($info['options'], 'list_string');
+            }
         }
 
         $base = $this->baseline->section('field_instance');

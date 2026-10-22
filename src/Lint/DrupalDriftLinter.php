@@ -43,17 +43,24 @@ use Parisek\DefinitionKit\Support\StructuralType;
  *     field is a single nested paragraph.
  *   - A `list` expects the child bundle `<bundle>_item` unless
  *     `drupal.target_bundles` pins another.
+ *   - A `list` or `object` pinned to a contrib storage type (double_field,
+ *     address) holds its values in the field itself: no nested paragraph
+ *     type. A type with named parts (double_field) must declare exactly them.
  */
 final class DrupalDriftLinter
 {
     /** @var array<string,true> bundle => compared by some lint() call */
     private array $claimed = [];
 
+    private readonly DrupalTypeMap $types;
+
+    /** @param DrupalTypeMap|null $types default: the bundled map plus the overlay the settings name */
     public function __construct(
         private readonly DrupalConfig $config,
         private readonly DrupalSettings $settings = new DrupalSettings(),
-        private readonly DrupalTypeMap $types = new DrupalTypeMap(),
+        ?DrupalTypeMap $types = null,
     ) {
+        $this->types = $types ?? DrupalTypeMap::forSettings($settings);
     }
 
     /** @param array<mixed> $definition */
@@ -243,6 +250,10 @@ final class DrupalDriftLinter
 
         $this->compareCardinality($field, $type, $drupal, $at, $findings);
 
+        if ([] !== $this->types->parts($drupal->type)) {
+            $this->compareParts($field, $drupal, $at, $findings);
+        }
+
         $expectedTargetType = $this->types->expectedTargetType($field, $drupal->type);
         $actualTargetType = $drupal->targetType();
         if (null !== $expectedTargetType && null !== $actualTargetType && $expectedTargetType !== $actualTargetType) {
@@ -302,6 +313,57 @@ final class DrupalDriftLinter
             );
         } elseif (DrupalField::UNLIMITED === $drupal->cardinality && null !== $max && $max > 0) {
             $findings[] = "{$at}: Drupal allows unlimited values; the definition sets max: {$max}";
+        }
+    }
+
+    /**
+     * A `list` or `object` stored in a type with named parts (double_field):
+     * the definition declares exactly those parts, and each part has a kit
+     * type the subfield storage type allows. An `open` field declares none.
+     *
+     * @param array<mixed> $field
+     * @param list<string> $findings
+     */
+    private function compareParts(array $field, DrupalField $drupal, string $at, array &$findings): void
+    {
+        if (true === ($field['open'] ?? false)) {
+            return;
+        }
+        $parts = $this->types->parts($drupal->type);
+        $declared = is_array($field['fields'] ?? null) ? $field['fields'] : [];
+        $names = array_map('strval', array_keys($declared));
+        if ([] !== array_diff($names, $parts) || [] !== array_diff($parts, $names)) {
+            $findings[] = sprintf(
+                '%s: %s stores the values %s; the definition declares %s',
+                $at,
+                $drupal->type,
+                implode(', ', $parts),
+                [] === $names ? 'none' : implode(', ', $names),
+            );
+
+            return;
+        }
+        foreach ($parts as $part) {
+            $definition = $declared[$part] ?? null;
+            if (!is_array($definition)) {
+                continue;
+            }
+            $storage = $drupal->settings['storage'][$part]['type'] ?? null;
+            if (!is_string($storage)) {
+                continue;
+            }
+            $allowed = $this->types->partKitTypes($drupal->type, $storage);
+            $kind = StructuralType::canonical((string) ($definition['type'] ?? ''));
+            if ([] !== $allowed && !in_array($kind, $allowed, true)) {
+                $findings[] = sprintf(
+                    '%s: %s is a %s subfield in Drupal; the definition type %s expects %s',
+                    $at,
+                    $part,
+                    $storage,
+                    $kind,
+                    implode('|', $allowed),
+                );
+            }
         }
     }
 

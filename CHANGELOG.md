@@ -8,6 +8,45 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 <!-- New entries go directly under this line. It is the anchor that keeps a branch's
      changelog edit from merging into a version that shipped without it. -->
 
+### Added
+
+- **Drupal: the four common contrib paragraph field types (#106).**
+  `fields-migrate --drupal-config`, `fields-lint-drupal` and
+  `fields-generate --target=drupal` now map `double_field`, `address`,
+  `webform` and `language_field`. Before, each stopped the migration, so a
+  site put the field names in `drupal.ignore_fields`, and the definitions
+  lost those fields on every bundle. Each type pins its storage in
+  `drupal.storage`:
+  - `double_field` is a `list` (several values, `max:` is the cardinality
+    limit) or an `object` (one value) with the parts `first` and `second`.
+    A part is typed after its subfield storage type, or is a `select` when
+    the instance gives it a fixed list. The lint checks the part names and
+    types. The generator builds the subfield types, labels, required flags
+    and options of a new field from the parts, and refuses a part that the
+    subfield of an existing field cannot hold.
+  - `address` is an `open: true` `object` (or `list`).
+  - `webform` is a `reference` with `of: entity:webform`.
+  - `language_field` is a `text`, `multiple: true` for several values.
+- **`drupal.type_map` in `definition-kit.yaml`.** A project file, relative to
+  `definition-kit.yaml`, merged over `schemas/drupal-type-map.yaml`. A project
+  can map a contrib storage type the kit does not know without a kit release.
+  The overlay passes the same checks as the bundled map, and a malformed one
+  stops the command (exit 2) with the file and the entry. `kit_types` lists
+  append to the bundled lists, other sections replace entries by name. See
+  README, Drupal paragraphs.
+
+### Changed
+
+- The error for an unknown Drupal storage type names `drupal.type_map` as the
+  fix, next to `drupal.ignore_fields`.
+- `DrupalTypeMap::forSettings()` builds the map with the project overlay. The
+  reader, the linter, the spec builder and the planner build it from their
+  `DrupalSettings` when no map is passed. `DrupalSettings` has a `typeMap`
+  property.
+- An unpinned `text`, `reference`, `object` or `list` field now accepts the
+  contrib storage types listed under it in the map. The lint finding for a
+  storage type mismatch lists them too.
+
 ## [0.25.0] - 2026-10-22
 
 ### Added
