@@ -226,6 +226,7 @@ storage_types:
       telephone: [text]
       uri: [text]
       datetime_iso8601: [date]
+    part_widgets: {default: textfield, list: select, boolean: checkbox, text: textarea, datetime_iso8601: datetime, integer: number, float: number, numeric: number}
     storage_settings:
       storage:
         first: {type: string, maxlength: 255, precision: 10, scale: 2, datetime_type: datetime}
@@ -254,12 +255,11 @@ storage_types:
     formatter: {type: address_default, label: above, settings: {}}
   webform:
     module: webform
-    reference: true
     storage_settings: {target_type: webform}
     instance_settings:
       handler: 'default:webform'
       handler_settings: {target_bundles: null, auto_create: false}
-    widget: {type: webform_entity_reference_select, settings: {default_data: true, webforms: {}}}
+    widget: {type: webform_entity_reference_select, settings: {default_data: true, webforms: {}, allow_status: true}}
     formatter: {type: webform_entity_reference_entity_view, label: hidden, settings: {source_entity: true, lazy: false}}
   language_field:
     module: languagefield
@@ -272,7 +272,7 @@ storage_types:
       allowed_values_function: languagefield_allowed_values
     instance_settings: {}
     widget: {type: languagefield_select, settings: {format: {icon: false, iso: false, name: name, name_native: false}}}
-    formatter: {type: languagefield_default, label: above, settings: {format: {icon: false, iso: false, name: name, name_native: false}}}
+    formatter: {type: languagefield_default, label: above, settings: {link_to_entity: false, format: {icon: false, iso: false, name: name, name_native: false}}}
 
 # A media reference is an entity_reference to `media`: the generator uses
 # this widget and formatter instead of the entity_reference ones.

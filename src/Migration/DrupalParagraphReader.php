@@ -390,6 +390,9 @@ final class DrupalParagraphReader
         }
         if (true === ($instance['list'] ?? false) && in_array('select', $kinds, true)) {
             $options = DrupalField::parseAllowedValues($instance['allowed_values'] ?? null);
+            // Options keyed 0, 1, 2 read back as a list, which a definition
+            // cannot keep as a map (same limit as select()): the part stays
+            // a plain value.
             if ([] !== $options && !array_is_list($options)) {
                 $field['type'] = 'select';
                 $field['options'] = $options;

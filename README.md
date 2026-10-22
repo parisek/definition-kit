@@ -189,7 +189,7 @@ A field the aliased bundles do not all share names the ones that do have it in a
 | `webform` ([Webform](https://www.drupal.org/project/webform)) | `reference` with `of: entity:webform` | The target type is compared like a core entity reference. |
 | `language_field` ([Language Field](https://www.drupal.org/project/languagefield)) | `text`, `multiple: true` when the field takes several values | The value is a language code. The list of languages is the site's, not the author's, so a `select` with options would go stale. |
 
-The generator creates these types from the map. For a `double_field` it takes the subfield storage types, labels, required flags and options from the parts. It never changes the subfield storage types of an existing field: a part its subfield cannot hold is a `REFUSE`.
+The generator creates these types from the map. For a `double_field` it takes the subfield storage types, sub-widgets (select for a fixed list, checkbox, textarea, datetime, number, else textfield), labels, required flags and options from the parts. Fields that share one `double_field` storage must agree on the subfield types, or the plan refuses. It never changes the subfield storage types of an existing field: a part its subfield cannot hold is a `REFUSE`.
 
 A `reference` targeting an entity type outside `term:`/`post:`/media (a config entity such as `webform`, or a content entity Drupal-side only) uses `of: entity:<target_type>[:<bundle>,…]` — omitting the bundle list means no restriction, Drupal's own `target_bundles: null`. See [ADR 0009](docs/adr/0009-generic-drupal-entity-reference-target-vocabulary.md).
 
@@ -255,7 +255,7 @@ formatter_modules:
 ```
 
 - **Merge.** `kit_types` lists are appended to the bundled lists. `storage_types`, `widget_modules`, `formatter_modules`, `target_types` and `media_reference` replace the bundled entry of the same name as a whole. State the full entry to change one key of it.
-- **Checks.** The overlay passes the same checks as the bundled map. Each `storage_types` entry needs a `module`, a `widget.type` and a `formatter.type`. Each storage type that a `kit_types` list names needs a `storage_types` entry. A violation stops the command (exit 2) and names the file and the entry.
+- **Checks.** The overlay passes the same checks as the bundled map. Each `storage_types` entry needs a `module`, a `widget.type` and a `formatter.type`. Each storage type that a `kit_types` list names needs a `storage_types` entry. A `kit_types` key must be a bundled kit type, and a storage type under `object` or `list` must be listed under both, because the migration picks one by cardinality. A storage type under `reference` is an entity reference. An empty file is valid and changes nothing. A violation stops the command (exit 2) and names the file and the entry.
 - **What the migration writes.** It reads the kit type from the `kit_types` list that names the storage type: `text`, `text_multiline`, `richtext`, `number`, `boolean`, `date`, `select` and `reference` give a field of that type. `object` and `list` give an `open` field, or the named parts when the entry has `parts` and `part_types` as `double_field` does. The migration pins the storage type with `drupal.storage`. A storage type under `media`, `link`, `flexible_content` or the paragraph types is not readable from an overlay.
 
 The project baseline carries what a new entity needs beyond the kit's defaults, typically contrib third-party settings. A module named as a `third_party_settings` key becomes a module dependency:

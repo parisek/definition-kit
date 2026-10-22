@@ -330,6 +330,15 @@ final class DrupalContribTypesTest extends TestCase
         self::assertSame(['float', 'boolean'], [$pair->settings['storage']['first']['type'], $pair->settings['storage']['second']['type']]);
         self::assertFalse($pair->settings['second']['required']);
 
+        // Each part gets the sub-widget its type and fixed list call for.
+        $formWidgets = static fn (string $bundle, string $field): array => array_map(
+            static fn (mixed $part): mixed => is_array($part) ? $part['type'] : null,
+            (array) (Yaml::parseFile("{$target}/core.entity_form_display.paragraph.{$bundle}.default.yml")['content'][$field]['settings'] ?? []),
+        );
+        self::assertSame('select', $formWidgets('benefits', 'field_benefits')['first']);
+        self::assertSame('textfield', $formWidgets('benefits', 'field_benefits')['second']);
+        self::assertSame(['first' => 'number', 'second' => 'checkbox'], array_intersect_key($formWidgets('pair', 'field_pair'), ['first' => 1, 'second' => 1]));
+
         // webform: the instance points at the webform entity type, any bundle.
         $webform = $generated->fields('contact_form')['field_webform'];
         self::assertSame('webform', $webform->targetType());
@@ -353,6 +362,75 @@ final class DrupalContribTypesTest extends TestCase
             self::assertSame(DrupalDriftResult::OK, $result->status, "{$slug}: " . implode("\n", $result->findings));
         }
         self::assertSame([], $this->plan($definitions, $target, $generated)->changedNames());
+    }
+
+    #[Test]
+    public function a_date_part_gets_a_datetime_sub_widget_and_a_datetime_subfield(): void
+    {
+        $definition = [
+            'name' => 'Agenda',
+            'category' => 'Block',
+            'kind' => 'block',
+            'drupal' => '/admin/structure/paragraphs_type/agenda/fields',
+            'fields' => ['slots' => [
+                'type' => 'list', 'role' => 'field', 'label' => 'Slots', 'drupal' => ['storage' => 'double_field'],
+                'fields' => [
+                    'first' => ['type' => 'date', 'role' => 'field', 'label' => 'Day'],
+                    'second' => ['type' => 'richtext', 'role' => 'field', 'label' => 'Note'],
+                ],
+            ]],
+        ];
+        $target = $this->tempDir();
+        $plan = $this->plan(['agenda' => $definition], $target, null);
+        self::assertFalse($plan->refused());
+        (new DrupalConfigWriter())->write($plan, new ConfigStore($target));
+
+        $storage = Yaml::parseFile("{$target}/field.storage.paragraph.field_slots.yml");
+        $form = Yaml::parseFile("{$target}/core.entity_form_display.paragraph.agenda.default.yml");
+        self::assertIsArray($storage);
+        self::assertIsArray($form);
+        self::assertSame(['datetime_iso8601', 'text'], [$storage['settings']['storage']['first']['type'], $storage['settings']['storage']['second']['type']]);
+        self::assertSame(['datetime', 'textarea'], [$form['content']['field_slots']['settings']['first']['type'], $form['content']['field_slots']['settings']['second']['type']]);
+    }
+
+    #[Test]
+    public function fields_that_share_a_double_field_storage_with_different_part_types_are_refused(): void
+    {
+        $make = static fn (string $second): array => [
+            'name' => 'X', 'category' => 'Block', 'kind' => 'block',
+            'fields' => ['pairs' => [
+                'type' => 'list', 'role' => 'field', 'label' => 'Pairs', 'drupal' => ['field' => 'field_pairs', 'storage' => 'double_field'],
+                'fields' => [
+                    'first' => ['type' => 'text', 'role' => 'field', 'label' => 'A'],
+                    'second' => ['type' => $second, 'role' => 'field', 'label' => 'B'],
+                ],
+            ]],
+        ];
+        $one = $make('text');
+        $one['drupal'] = '/admin/structure/paragraphs_type/one/fields';
+        $two = $make('boolean');
+        $two['drupal'] = '/admin/structure/paragraphs_type/two/fields';
+
+        $plan = $this->plan(['one' => $one, 'two' => $two], $this->tempDir(), null);
+
+        self::assertTrue($plan->refused());
+        $lines = implode("\n", array_map(static fn (PlanEntry $e): string => $e->line(), $plan->entries));
+        self::assertStringContainsString('different double_field subfield types for part second', $lines);
+    }
+
+    #[Test]
+    public function option_values_keyed_0_1_2_leave_the_part_a_plain_value(): void
+    {
+        $dir = $this->copyConfig();
+        $file = "{$dir}/field.field.paragraph.benefits.field_benefits.yml";
+        $yaml = (string) file_get_contents($file);
+        $yaml = str_replace(['value: reward', 'value: map', 'value: graph'], ['value: \'0\'', 'value: \'1\'', 'value: \'2\''], $yaml);
+        file_put_contents($file, $yaml);
+
+        $fields = (new DrupalParagraphReader(DrupalConfig::fromDirectory($dir), new DrupalSettings()))->read('benefits');
+
+        self::assertSame('text', $fields['benefits']['fields']['first']['type']);
+        self::assertArrayNotHasKey('options', $fields['benefits']['fields']['first']);
     }
 
     #[Test]

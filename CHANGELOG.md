@@ -33,7 +33,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   The overlay passes the same checks as the bundled map, and a malformed one
   stops the command (exit 2) with the file and the entry. `kit_types` lists
   append to the bundled lists, other sections replace entries by name. See
-  README, Drupal paragraphs.
+  README, Drupal paragraphs. A `kit_types` key must be a known kit type, and
+  a structured type must be listed under both `object` and `list`.
 
 ### Changed
 

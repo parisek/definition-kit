@@ -68,6 +68,16 @@ final class DrupalTypeMap
         if (null !== $overlay) {
             $over = self::parse($overlay, 'type map overlay (drupal.type_map)');
             self::validate($over, $overlay, false);
+            $known = array_map('strval', array_keys((array) $map['kit_types']));
+            $misspelled = array_diff(array_map('strval', array_keys((array) ($over['kit_types'] ?? []))), $known);
+            if ([] !== $misspelled) {
+                throw new \RuntimeException(sprintf(
+                    'Malformed Drupal type map overlay (drupal.type_map) %s: kit_types.%s is not a kit type — expected one of: %s.',
+                    $overlay,
+                    implode(', kit_types.', $misspelled),
+                    implode(', ', $known),
+                ));
+            }
             $map = self::merge($map, $over);
             self::validateKitTypes($map, $overlay);
         }
@@ -91,6 +101,9 @@ final class DrupalTypeMap
         } catch (ParseException $e) {
             throw new \RuntimeException("Malformed Drupal {$what} {$path}: " . $e->getMessage(), 0, $e);
         }
+        if (null === $parsed) {
+            $parsed = []; // an empty or comment-only file
+        }
         if (!is_array($parsed) || ($parsed !== [] && array_is_list($parsed))) {
             throw new \RuntimeException("Malformed Drupal {$what} {$path}: the file must be a map of sections (" . implode(', ', self::SECTIONS) . ').');
         }
@@ -106,7 +119,8 @@ final class DrupalTypeMap
      */
     private static function validate(array $map, string $source, bool $bundled): void
     {
-        $fail = static fn (string $why): \RuntimeException => new \RuntimeException("Malformed Drupal type map {$source}: {$why}");
+        $label = $bundled ? 'type map' : 'type map overlay (drupal.type_map)';
+        $fail = static fn (string $why): \RuntimeException => new \RuntimeException("Malformed Drupal {$label} {$source}: {$why}");
 
         $unknown = array_diff(array_map('strval', array_keys($map)), self::SECTIONS);
         if ([] !== $unknown) {
@@ -144,11 +158,21 @@ final class DrupalTypeMap
                     throw $fail("storage_types.{$type}.{$mapKey} must be a map.");
                 }
             }
+            foreach ((array) ($entry['part_types'] ?? []) as $subfield => $kinds) {
+                if (!is_array($kinds) || !array_is_list($kinds) || [] === $kinds || [] !== array_filter($kinds, static fn (mixed $k): bool => !is_string($k) || '' === $k)) {
+                    throw $fail("storage_types.{$type}.part_types.{$subfield} must be a list of kit types.");
+                }
+            }
+            if (isset($entry['part_widgets']) && (!is_array($entry['part_widgets']) || array_is_list($entry['part_widgets']) || [] !== array_filter($entry['part_widgets'], static fn (mixed $w): bool => !is_string($w) || '' === $w))) {
+                throw $fail("storage_types.{$type}.part_widgets must be a map of subfield type => widget type.");
+            }
+            foreach (['widget', 'formatter'] as $plugin) {
+                if (isset($entry[$plugin]['settings']) && !is_array($entry[$plugin]['settings'])) {
+                    throw $fail("storage_types.{$type}.{$plugin}.settings must be a map.");
+                }
+            }
             if (isset($entry['parts']) && (!is_array($entry['parts']) || !array_is_list($entry['parts']) || [] !== array_filter($entry['parts'], static fn (mixed $p): bool => !is_string($p) || '' === $p))) {
                 throw $fail("storage_types.{$type}.parts must be a list of names.");
-            }
-            if (isset($entry['reference']) && !is_bool($entry['reference'])) {
-                throw $fail("storage_types.{$type}.reference must be true or false.");
             }
         }
         foreach (['widget_modules', 'formatter_modules'] as $section) {
@@ -158,9 +182,20 @@ final class DrupalTypeMap
                 }
             }
         }
+        if (isset($map['media_reference'])) {
+            foreach (['widget', 'formatter'] as $plugin) {
+                $entry = $map['media_reference'][$plugin] ?? null;
+                if (!is_array($entry) || !is_string($entry['type'] ?? null) || '' === $entry['type'] || (isset($entry['settings']) && !is_array($entry['settings']))) {
+                    throw $fail("media_reference needs a {$plugin} with a `type` and a map of `settings`.");
+                }
+            }
+        }
         foreach ((array) ($map['target_types'] ?? []) as $target => $entry) {
             if (!is_array($entry) || !is_string($entry['module'] ?? null) || '' === $entry['module']) {
                 throw $fail("target_types.{$target} needs a `module`.");
+            }
+            if (isset($entry['bundle_config']) && !is_string($entry['bundle_config'])) {
+                throw $fail("target_types.{$target}.bundle_config must be a config prefix or null.");
             }
         }
     }
@@ -176,9 +211,17 @@ final class DrupalTypeMap
         foreach ((array) ($map['kit_types'] ?? []) as $key => $types) {
             foreach ((array) $types as $type) {
                 if (!isset($map['storage_types'][$type])) {
-                    throw new \RuntimeException("Malformed Drupal type map {$source}: kit_types.{$key} names storage type '{$type}', which no storage_types entry defines.");
+                    throw new \RuntimeException("Malformed Drupal type map overlay (drupal.type_map) {$source}: kit_types.{$key} names storage type '{$type}', which no storage_types entry defines.");
                 }
             }
+        }
+        // A structured value is one item (`object`) or several (`list`); the
+        // migration picks by cardinality, so a type must be listed under both.
+        $object = (array) ($map['kit_types']['object'] ?? []);
+        $list = (array) ($map['kit_types']['list'] ?? []);
+        foreach (array_unique([...array_diff($object, $list), ...array_diff($list, $object)]) as $type) {
+            $has = in_array($type, $object, true) ? 'object' : 'list';
+            throw new \RuntimeException("Malformed Drupal type map overlay (drupal.type_map) {$source}: storage type '{$type}' is listed under kit_types.{$has} only — list it under both object and list, because the migration picks one by cardinality.");
         }
     }
 
@@ -379,12 +422,6 @@ final class DrupalTypeMap
         ];
     }
 
-    /** True when the map defines this storage type. */
-    public function hasStorageType(string $storageType): bool
-    {
-        return is_array($this->map['storage_types'][$storageType] ?? null);
-    }
-
     /**
      * The kit type keys that accept a storage type, in map order. Empty for a
      * storage type no kit type lists.
@@ -403,10 +440,10 @@ final class DrupalTypeMap
         return $keys;
     }
 
-    /** True for an entity reference type: `entity_reference` and a contrib type flagged `reference`. */
+    /** True for an entity reference type: `entity_reference` and a storage type listed under the kit type `reference`. */
     public function isReference(string $storageType): bool
     {
-        return 'entity_reference' === $storageType || true === ($this->map['storage_types'][$storageType]['reference'] ?? false);
+        return 'entity_reference' === $storageType || in_array('reference', $this->kitKeysFor($storageType), true);
     }
 
     /**
@@ -435,7 +472,12 @@ final class DrupalTypeMap
         return is_array($types) ? array_values(array_map('strval', $types)) : [];
     }
 
-    /** The subfield storage type to create for a part of this kit type, or null when none fits. */
+    /**
+     * The subfield storage type to create for a part of this kit type, or null
+     * when none fits. The first `part_types` entry that lists the kit type
+     * wins, so the order of `part_types` in the map decides (`number` gives
+     * `float` because `float` comes before `integer`).
+     */
     public function partStorageType(string $storageType, string $kitType): ?string
     {
         $partTypes = $this->map['storage_types'][$storageType]['part_types'] ?? [];
@@ -446,6 +488,20 @@ final class DrupalTypeMap
         }
 
         return null;
+    }
+
+    /**
+     * The sub-widget for a part of a new field: by the list flag first, then
+     * by the subfield storage type, then the `default` entry of `part_widgets`.
+     */
+    public function partWidget(string $storageType, string $subfieldType, bool $list): string
+    {
+        $widgets = $this->map['storage_types'][$storageType]['part_widgets'] ?? [];
+        $widgets = is_array($widgets) ? $widgets : [];
+        $widget = $list ? ($widgets['list'] ?? null) : null;
+        $widget ??= $widgets[$subfieldType] ?? $widgets['default'] ?? 'textfield';
+
+        return (string) $widget;
     }
 
     /**

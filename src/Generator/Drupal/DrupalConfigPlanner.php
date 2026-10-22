@@ -345,20 +345,35 @@ final class DrupalConfigPlanner
         if (null !== $allowed) {
             $settings['allowed_values'] = self::allowedValuesList($allowed, $type);
         }
+        $chosen = [];
         foreach ($fields as $field) {
-            if (null === $field->parts) {
-                continue;
-            }
-            foreach ($field->parts as $part => $partInfo) {
+            foreach ($field->parts ?? [] as $part => $partInfo) {
                 $subfield = $this->types->partStorageType($type, $partInfo['type']);
                 if (null === $subfield) {
                     $this->refuse($name, "`{$field->path}` on {$field->bundle}: part {$part} has kit type {$partInfo['type']}, which {$type} cannot store");
 
                     return;
                 }
-                $settings['storage'][$part]['type'] = $subfield;
+                if (isset($chosen[$part]) && $chosen[$part][0] !== $subfield) {
+                    $this->refuse($name, sprintf(
+                        'fields that share it need different %s subfield types for part %s (`%s` on %s: %s, `%s` on %s: %s)',
+                        $type,
+                        $part,
+                        $chosen[$part][1]->path,
+                        $chosen[$part][1]->bundle,
+                        $chosen[$part][0],
+                        $field->path,
+                        $field->bundle,
+                        $subfield,
+                    ));
+
+                    return;
+                }
+                $chosen[$part] = [$subfield, $field];
             }
-            break;
+        }
+        foreach ($chosen as $part => [$subfield]) {
+            $settings['storage'][$part]['type'] = $subfield;
         }
         $modules = [$this->types->storageModule($type), $this->types->targetTypeModule('paragraph')];
         if (is_string($settings['target_type'] ?? null)) {
@@ -807,14 +822,40 @@ final class DrupalConfigPlanner
         $type = $this->storages[$field->machine]['type'];
         $default = $this->types->widget($type, $this->storageTargetType($field->machine));
         $widget = $field->widget ?? $default['type'];
+        $settings = $widget === $default['type'] ? $default['settings'] : [];
+        if ($widget === $default['type']) {
+            $settings = $this->subwidgets($field, $type, $settings);
+        }
 
         return [[
             'type' => $widget,
             'weight' => $weight,
             'region' => 'content',
-            'settings' => $widget === $default['type'] ? $default['settings'] : [],
+            'settings' => $settings,
             'third_party_settings' => $this->baseline->widgetThirdPartySettings($widget),
         ], $this->types->widgetModule($widget)];
+    }
+
+    /**
+     * The sub-widget of each part of a new double_field-like widget follows
+     * the part (a fixed list, a boolean, a date) and its subfield storage
+     * type, as the module's own widget offers them.
+     *
+     * @param array<string,mixed> $settings the default widget settings
+     * @return array<string,mixed>
+     */
+    private function subwidgets(FieldSpec $field, string $type, array $settings): array
+    {
+        $subfields = $this->working["field.storage.paragraph.{$field->machine}"]['settings']['storage'] ?? null;
+        foreach ($field->parts ?? [] as $part => $info) {
+            $subfield = is_array($subfields) ? ($subfields[$part]['type'] ?? null) : null;
+            if (!is_string($subfield) || !is_array($settings[$part] ?? null)) {
+                continue;
+            }
+            $settings[$part]['type'] = $this->types->partWidget($type, $subfield, null !== $info['options']);
+        }
+
+        return $settings;
     }
 
     /** @return array{0: array<string,mixed>, 1: ?string} */

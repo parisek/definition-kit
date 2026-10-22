@@ -176,7 +176,7 @@ final class DrupalTypeMapTest extends TestCase
         $map = new DrupalTypeMap();
 
         foreach (['double_field', 'address', 'webform', 'language_field'] as $storage) {
-            self::assertTrue($map->hasStorageType($storage), $storage);
+            self::assertContains($storage, $map->storageTypes());
             self::assertNotSame([], $map->kitKeysFor($storage), $storage);
         }
         self::assertSame(['text'], $map->kitKeysFor('language_field'));
@@ -263,8 +263,8 @@ final class DrupalTypeMapTest extends TestCase
         $map = DrupalTypeMap::forSettings($settings);
 
         self::assertSame("{$dir}/sub/types.yaml", $settings->typeMap);
-        self::assertTrue($map->hasStorageType('color_field_type'));
-        self::assertFalse(DrupalTypeMap::forSettings(new \Parisek\DefinitionKit\Drupal\DrupalSettings())->hasStorageType('color_field_type'));
+        self::assertContains('color_field_type', $map->storageTypes());
+        self::assertNotContains('color_field_type', DrupalTypeMap::forSettings(new \Parisek\DefinitionKit\Drupal\DrupalSettings())->storageTypes());
         @rmdir("{$dir}/sub");
         @rmdir($dir);
     }
@@ -291,6 +291,29 @@ final class DrupalTypeMapTest extends TestCase
             "storage_types:\n  foo:\n    module: m\n    parts: first\n    widget: {type: w, settings: {}}\n    formatter: {type: f, label: above, settings: {}}\n",
             'storage_types.foo.parts must be a list of names',
         ];
+        yield 'a misspelled kit type' => ["kit_types:\n  txt: [string]\n", 'kit_types.txt is not a kit type'];
+        yield 'a structured type under object only' => [
+            "kit_types:\n  object: [thing]\nstorage_types:\n  thing:\n    module: m\n    widget: {type: w, settings: {}}\n    formatter: {type: f, label: above, settings: {}}\n",
+            "storage type 'thing' is listed under kit_types.object only",
+        ];
+        yield 'a structured type under list only' => [
+            "kit_types:\n  list: [thing]\nstorage_types:\n  thing:\n    module: m\n    widget: {type: w, settings: {}}\n    formatter: {type: f, label: above, settings: {}}\n",
+            "storage type 'thing' is listed under kit_types.list only",
+        ];
+        yield 'media_reference without a formatter' => ["media_reference:\n  widget: {type: w, settings: {}}\n", 'media_reference needs a formatter'];
+        yield 'media_reference settings that are not a map' => ["media_reference:\n  widget: {type: w, settings: 5}\n  formatter: {type: f}\n", 'media_reference needs a widget'];
+        yield 'part_types with a scalar' => [
+            "storage_types:\n  foo:\n    module: m\n    part_types: {string: text}\n    widget: {type: w, settings: {}}\n    formatter: {type: f, label: above, settings: {}}\n",
+            'storage_types.foo.part_types.string must be a list of kit types',
+        ];
+        yield 'widget settings that are not a map' => [
+            "storage_types:\n  foo:\n    module: m\n    widget: {type: w, settings: 5}\n    formatter: {type: f, label: above, settings: {}}\n",
+            'storage_types.foo.widget.settings must be a map',
+        ];
+        yield 'part_widgets with a list' => [
+            "storage_types:\n  foo:\n    module: m\n    part_widgets: [a]\n    widget: {type: w, settings: {}}\n    formatter: {type: f, label: above, settings: {}}\n",
+            'storage_types.foo.part_widgets must be a map',
+        ];
         yield 'a widget module that is not a string' => ["widget_modules:\n  w: [a]\n", 'widget_modules.w must name a module'];
     }
 
@@ -304,9 +327,55 @@ final class DrupalTypeMapTest extends TestCase
             new DrupalTypeMap(null, $file);
             self::fail('The malformed overlay was accepted.');
         } catch (\RuntimeException $e) {
-            self::assertStringContainsString($file, $e->getMessage());
+            self::assertStringContainsString("Drupal type map overlay (drupal.type_map) {$file}", $e->getMessage());
             self::assertStringContainsString($reason, $e->getMessage());
         }
+    }
+
+    #[Test]
+    public function an_empty_or_comment_only_overlay_changes_nothing(): void
+    {
+        foreach (['', "# nothing yet\n", "{}\n"] as $yaml) {
+            $map = new DrupalTypeMap(null, $this->overlayFile($yaml));
+
+            self::assertSame($this->bundled()->storageTypes(), $map->storageTypes());
+            self::assertSame($this->bundled()->acceptedFor('text'), $map->acceptedFor('text'));
+        }
+    }
+
+    #[Test]
+    public function a_storage_type_under_the_kit_type_reference_is_an_entity_reference(): void
+    {
+        $file = $this->overlayFile(<<<'YAML'
+            kit_types:
+              reference: [foo_ref]
+            storage_types:
+              foo_ref:
+                module: foo
+                storage_settings: {target_type: foo_entity}
+                widget: {type: foo_widget, settings: {}}
+                formatter: {type: foo_formatter, label: above, settings: {}}
+            YAML);
+        $map = new DrupalTypeMap(null, $file);
+
+        self::assertSame('foo_entity', $map->expectedTargetType(['type' => 'reference', 'of' => 'entity:foo_entity'], 'foo_ref'));
+        self::assertNull($this->bundled()->expectedTargetType(['type' => 'reference', 'of' => 'entity:foo_entity'], 'foo_ref'));
+    }
+
+    #[Test]
+    public function a_double_field_part_gets_a_sub_widget_after_its_type(): void
+    {
+        $map = new DrupalTypeMap();
+
+        self::assertSame('select', $map->partWidget('double_field', 'string', true));
+        self::assertSame('textfield', $map->partWidget('double_field', 'string', false));
+        self::assertSame('checkbox', $map->partWidget('double_field', 'boolean', false));
+        self::assertSame('textarea', $map->partWidget('double_field', 'text', false));
+        self::assertSame('datetime', $map->partWidget('double_field', 'datetime_iso8601', false));
+        self::assertSame('number', $map->partWidget('double_field', 'integer', false));
+        self::assertSame('textfield', $map->partWidget('double_field', 'email', false));
+        self::assertTrue($map->widget('webform')['settings']['allow_status']);
+        self::assertFalse($map->formatter('language_field')['settings']['link_to_entity']);
     }
 
     #[Test]
