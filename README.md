@@ -132,6 +132,7 @@ The last line reads `N component(s), N failed`. When a component was skipped it 
 - A per-field / root **`wp:` escape hatch** captures genuinely CMS-specific residue verbatim (e.g. block `postTypes`/`supports`, accordion `wpml`) so the round-trip stays lossless without polluting the semantic surface.
 - **Do not set `wp.wpml_cf_preferences` on a leaf field.** Write `translatable: true` for Translate (WPML value 2) and omit it for Copy (1). `fields-validate` warns on a hand-written value. A 3 (Copy once) or 0 (Ignore) is the usual mistake: 3 is not Translate, so the field copies its value to every language. A container (`group`, `repeater`, `flexible_content`) is exempt: its value is always 3.
 - **`wp.block` replays only `description`, `keywords`, `acf`, `supports`, `attributes` and `example`.** `fields-validate` warns on any other key under `wp.block`, because the generator drops it.
+- **A block with an empty or missing `wp.block.acf.postTypes` is open to every post type.** `fields-validate` warns unless a root `dev` item starts with `post-types: open, <reason>`. The reason is the point: it tells the next reader that the open list is a decision.
 - A per-field **`drupal:` block** does the same for Drupal (`field`, `storage`, `widget`, `formatter`, `target_type`, `target_bundles`, `bundles`). It is closed: the Drupal lint reads every key. The root `drupal:` key is something else, the admin link, and stays a string.
 
 The round-trip contract: `generate(migrate(acf.json)) == acf.json`, modulo documented ACF-export-era residuals.

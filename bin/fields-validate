@@ -11,6 +11,7 @@ use Parisek\DefinitionKit\Lint\DerivedFromLinter;
 use Parisek\DefinitionKit\Lint\ForwardedShapeLinter;
 use Parisek\DefinitionKit\Lint\KindLinter;
 use Parisek\DefinitionKit\Lint\LeafWpmlPreferenceLinter;
+use Parisek\DefinitionKit\Lint\PostTypesLinter;
 use Parisek\DefinitionKit\Lint\TranslatableInertLinter;
 use Parisek\DefinitionKit\Lint\WpBlockKeyLinter;
 use Parisek\DefinitionKit\Schema\FieldsSchemaValidator;
@@ -96,6 +97,7 @@ foreach ($paths as $path) {
         ...$translatableInertLinter->lint($path, $definition),
         ...$leafWpmlPreferenceLinter->lint($path, $definition),
         ...$wpBlockKeyLinter->lint($path, $definition),
+        ...(new PostTypesLinter($isDrupalProject))->lint($path, $definition),
         ...$derivedFromLinter->lint($path, $definition),
         ...$forwardedShapeLinter->lint($path, $definition),
     ];

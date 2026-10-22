@@ -8,6 +8,19 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 <!-- New entries go directly under this line. It is the anchor that keeps a branch's
      changelog edit from merging into a version that shipped without it. -->
 
+### Added
+
+- **`fields-validate` warns when a block leaves `postTypes` open without a reason
+  (#104).** An empty or missing `wp.block.acf.postTypes` puts the block in the
+  inserter of every post type. That is right for a footer in a reusable
+  `wp_block`, and usually a forgotten default elsewhere. The new
+  `PostTypesLinter` stays silent for a restricted block and for an open block
+  with a root `dev` item that starts with `post-types: open, <reason>`. It
+  warns on any other open block, and on the marker with no reason. `dev` may be
+  one string or a list. The marker and its reason must sit in the same item.
+  It is a warning, so `fields-generate` is not blocked. A Drupal project and a
+  non-block definition are skipped.
+
 ## [0.24.0] - 2026-10-09
 
 ### Added
