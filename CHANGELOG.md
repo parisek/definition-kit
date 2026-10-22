@@ -33,7 +33,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   language_field's `language_range`, `included_languages`,
   `excluded_languages` and `groups`; a double_field part's `maxlength`,
   `precision`, `scale`, `datetime_type`, `min`, `max` and, for a boolean part,
-  `on_label` and `off_label`. The deprecated address `fields` setting is read
+  `on_label` and `off_label`, each only for the subfield types that use it. The deprecated address `fields` setting is read
   as the equivalent `field_overrides`. The migration writes
   the ones that differ from the default, the lint compares them, the generator
   applies them. A double_field part also pins its exact subfield storage type

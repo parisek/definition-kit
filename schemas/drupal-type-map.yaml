@@ -251,7 +251,19 @@ storage_types:
     module: double_field
     parts: [first, second]
     part_settings_keys: [maxlength, precision, scale, datetime_type, min, max, on_label, off_label]
-    part_settings_applies: {on_label: [boolean], off_label: [boolean]}
+    # Per the module: maxlength sizes a string or telephone column (email and uri
+    # have fixed lengths), precision and scale a numeric one, min and max limit
+    # a number. Drupal keeps the whole settings array when a subfield type
+    # changes, so a stale value on another type means nothing.
+    part_settings_applies:
+      maxlength: [string, telephone]
+      precision: [numeric]
+      scale: [numeric]
+      datetime_type: [datetime_iso8601]
+      min: [integer, float, numeric]
+      max: [integer, float, numeric]
+      on_label: [boolean]
+      off_label: [boolean]
     part_types:
       boolean: [boolean]
       string: [text, select]

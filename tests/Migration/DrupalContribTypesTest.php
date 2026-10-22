@@ -705,6 +705,61 @@ final class DrupalContribTypesTest extends TestCase
         self::assertEqualsCanonicalizing(['field.field.paragraph.company.field_address', 'field.storage.paragraph.field_langcode'], $updated->changedNames());
     }
 
+    /** @return iterable<string, array{string, list<string>}> */
+    public static function applicableSettings(): iterable
+    {
+        yield 'string' => ['string', ['maxlength']];
+        yield 'telephone' => ['telephone', ['maxlength']];
+        yield 'email' => ['email', []];
+        yield 'uri' => ['uri', []];
+        yield 'text' => ['text', []];
+        yield 'integer' => ['integer', ['min', 'max']];
+        yield 'float' => ['float', ['min', 'max']];
+        yield 'numeric' => ['numeric', ['precision', 'scale', 'min', 'max']];
+        yield 'boolean' => ['boolean', ['on_label', 'off_label']];
+        yield 'datetime_iso8601' => ['datetime_iso8601', ['datetime_type']];
+    }
+
+    /**
+     * @param list<string> $applies the settings that mean something for this subfield type
+     */
+    #[Test]
+    #[DataProvider('applicableSettings')]
+    public function a_stale_setting_of_another_subfield_type_is_not_migrated_linted_or_generated(string $type, array $applies): void
+    {
+        // Drupal keeps the whole settings array when a subfield type changes.
+        $stale = ['maxlength' => 100, 'precision' => 12, 'scale' => 4, 'datetime_type' => 'date'];
+        $dir = $this->exportWithPair(
+            ['first' => ['type' => $type] + $stale, 'second' => ['type' => 'boolean']],
+            ['first' => ['min' => 1, 'max' => 9, 'on_label' => 'Yes', 'off_label' => 'No']],
+        );
+        $config = DrupalConfig::fromDirectory($dir);
+        $fields = (new DrupalParagraphReader($config, new DrupalSettings()))->read('pair');
+
+        $kept = array_keys($fields['pair']['fields']['first']['drupal']['settings'] ?? []);
+        sort($kept);
+        $expected = $applies;
+        sort($expected);
+        self::assertSame($expected, $kept, "settings migrated for a {$type} part");
+
+        $definition = ['name' => 'Pair', 'category' => 'Block', 'kind' => 'block', 'drupal' => '/admin/structure/paragraphs_type/pair/fields', 'fields' => $fields];
+        $result = (new DrupalDriftLinter($config, new DrupalSettings()))->lint($definition, 'pair');
+        self::assertSame(DrupalDriftResult::OK, $result->status, implode("\n", $result->findings));
+
+        // A definition without those settings (the author never set them) is not drift either, and generate leaves the export alone.
+        $bare = $definition;
+        foreach ($applies as $key) {
+            unset($bare['fields']['pair']['fields']['first']['drupal']['settings'][$key]);
+        }
+        $bareDrift = implode("\n", (new DrupalDriftLinter($config, new DrupalSettings()))->lint($bare, 'pair')->findings);
+        foreach (array_diff(['maxlength', 'precision', 'scale', 'datetime_type', 'min', 'max', 'on_label', 'off_label'], $applies) as $other) {
+            self::assertStringNotContainsString("setting {$other} ", $bareDrift, "{$other} does not apply to {$type}");
+        }
+        $plan = $this->plan(['pair' => $definition], $dir, $config);
+        self::assertFalse($plan->refused());
+        self::assertSame([], $plan->changedNames());
+    }
+
     #[Test]
     public function the_legacy_address_fields_setting_reads_as_hidden_overrides(): void
     {
