@@ -148,6 +148,81 @@ final class DrupalEvidenceCollisionTest extends TestCase
             PHP);
     }
 
+    #[Test]
+    public function scalar_evidence_and_a_grouped_field_of_the_same_name_do_not_fight_over_it(): void
+    {
+        // Evidence puts `field_x` on the scalar prop `card`; the field group `card` holds `field_title`.
+        foreach (['field_a', 'field_z'] as $evidenceField) {
+            $this->clean();
+            $this->bundle('card', [$evidenceField, 'field_title']);
+            $this->group('card', 'group_card', 'Card', ['field_title']);
+            $tree = $this->read('card', $this->scalarSource('card', substr($evidenceField, 6)));
+
+            self::assertSame($evidenceField, $tree['card']['drupal']['field'] ?? null, $evidenceField);
+            self::assertSame('field_title', $tree['card_field']['fields']['title']['label'] ?? null, $evidenceField);
+            self::assertSame('Card', $tree['card_field']['label'] ?? null, $evidenceField);
+        }
+    }
+
+    #[Test]
+    public function nested_evidence_and_a_scalar_field_of_the_same_name_do_not_fight_over_it(): void
+    {
+        // Evidence puts `field_x` on `card.title`; `field_card` is naturally the scalar `card`.
+        foreach (['field_a', 'field_z'] as $evidenceField) {
+            $this->clean();
+            $this->bundle('card', [$evidenceField, 'field_card']);
+            $tree = $this->read('card', $this->scalarSource('card', substr($evidenceField, 6), 'title'));
+
+            self::assertSame($evidenceField, $tree['card']['fields']['title']['drupal']['field'] ?? null, $evidenceField);
+            self::assertSame('field_card', $tree['card_field']['drupal']['field'] ?? null, $evidenceField);
+        }
+    }
+
+    #[Test]
+    public function the_group_rename_skips_a_name_that_is_in_use(): void
+    {
+        foreach (['field_a', 'field_z'] as $evidenceField) {
+            $this->clean();
+            // `field_card_field` is naturally `card_field`.
+            $this->bundle('card', [$evidenceField, 'field_title', 'field_card_field']);
+            $this->group('card', 'group_card', 'Card', ['field_title']);
+            $tree = $this->read('card', $this->scalarSource('card', substr($evidenceField, 6)));
+
+            self::assertSame($evidenceField, $tree['card']['drupal']['field'] ?? null, $evidenceField);
+            self::assertSame('field_card_field', $tree['card_field']['label'] ?? null, $evidenceField);
+            self::assertSame('field_title', $tree['card_field_2']['fields']['title']['label'] ?? null, $evidenceField);
+        }
+    }
+
+    private function clean(): void
+    {
+        foreach (glob($this->dir . '/*') ?: [] as $file) {
+            unlink($file);
+        }
+    }
+
+    /** @param list<string> $children */
+    private function group(string $bundle, string $name, string $label, array $children): void
+    {
+        $content = [];
+        foreach ($children as $i => $child) {
+            $content[$child] = ['type' => 'string_textfield', 'weight' => $i, 'region' => 'content', 'settings' => []];
+        }
+        $this->put("core.entity_form_display.paragraph.{$bundle}.default.yml", [
+            'bundle' => $bundle,
+            'mode' => 'default',
+            'content' => $content,
+            'third_party_settings' => ['field_group' => [$name => ['children' => $children, 'label' => $label, 'format_type' => 'fieldset']]],
+        ]);
+    }
+
+    private function scalarSource(string $prop, string $field, ?string $sub = null): string
+    {
+        $key = null === $sub ? "['{$prop}']" : "['{$prop}']['{$sub}']";
+
+        return "<?php\nif (\$bundle === 'card') {\n  \$content{$key} = \$this->getTextField(\$entity, '{$field}');\n}\n";
+    }
+
     private function itemSource(string $prop, string $field): string
     {
         return <<<PHP

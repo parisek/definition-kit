@@ -146,21 +146,26 @@ final class DrupalParagraphReader
             }
         }
 
-        // Evidence wins its prop name. A field without evidence may have the
-        // same natural name (a `video` field next to a `$content['video']`
-        // array built from other fields), so the names the evidence uses are
-        // known before any field is placed, whatever the order of the fields.
-        $claimed = [];
+        // Evidence wins its prop name. A field without evidence has a natural
+        // path (its leaf name, under its field group), and two paths conflict
+        // when one is the other or a segment-wise prefix of it (`card` and
+        // `card.title`, not `card` and `cards`). The natural path that
+        // conflicts with evidence moves at the conflicting segment to a free
+        // name (`card` becomes `card_field`). All names are picked before any
+        // field is placed, in the order of the machine names, so the order of
+        // the fields does not change the result.
+        $claimed = []; // every evidence path and its prefixes
+        $leaves = [];  // the evidence paths themselves
         foreach (array_keys($this->config->fields($bundle)) as $machine) {
             $path = $this->settings->ignores($machine) ? [] : ($byField[$machine]['path'] ?? []);
+            if ([] !== $path) {
+                $leaves[implode('.', $path)] = true;
+            }
             foreach (array_keys($path) as $depth) {
                 $claimed[implode('.', array_slice($path, 0, $depth + 1))] = true;
             }
         }
 
-        // Every field without evidence has a natural path. Those that evidence
-        // claims move to a free name; all names are picked before insertion,
-        // in the order of the machine names, so the field order does not matter.
         $natural = [];
         foreach (array_keys($this->config->fields($bundle)) as $machine) {
             if ($this->settings->ignores($machine) || [] !== ($byField[$machine]['path'] ?? [])) {
@@ -171,13 +176,30 @@ final class DrupalParagraphReader
         }
         $taken = $claimed;
         foreach ($natural as $path) {
-            $taken[implode('.', $path)] = true;
+            foreach (array_keys($path) as $depth) {
+                $taken[implode('.', array_slice($path, 0, $depth + 1))] = true;
+            }
         }
-        $moved = array_keys(array_filter($natural, static fn (array $path): bool => isset($claimed[implode('.', $path)])));
-        sort($moved);
-        foreach ($moved as $machine) {
-            $natural[$machine] = $this->freeName($natural[$machine], $taken);
-            $taken[implode('.', $natural[$machine])] = true;
+        $renamed = []; // dotted prefix => its new last segment
+        $machines = array_keys($natural);
+        sort($machines);
+        foreach ($machines as $machine) {
+            $path = $natural[$machine];
+            foreach (array_keys($path) as $depth) {
+                $prefix = implode('.', array_slice($path, 0, $depth + 1));
+                $last = count($path) - 1 === $depth;
+                if (!($last ? isset($claimed[$prefix]) : isset($leaves[$prefix]))) {
+                    continue;
+                }
+                $renamed[$prefix] ??= $this->freeSegment(array_slice($path, 0, $depth), $path[$depth], $taken);
+                $taken[implode('.', [...array_slice($path, 0, $depth), $renamed[$prefix]])] = true;
+                if (0 === $depth && isset($groupLabels[$path[0]])) {
+                    $groupLabels[$renamed[$prefix]] ??= $groupLabels[$path[0]];
+                }
+                $path[$depth] = $renamed[$prefix];
+                break;
+            }
+            $natural[$machine] = $path;
         }
 
         $tree = [];
@@ -229,23 +251,21 @@ final class DrupalParagraphReader
     }
 
     /**
-     * A free path for a field without evidence whose natural name evidence
-     * claims: the same with `_field` added to the last name (`video` becomes
-     * `video_field`), then `_field_2` and on. A name is free when no evidence
-     * path, no other field's natural path and no earlier pick has it. The
-     * definition pins the Drupal field either way, so the name may differ.
+     * A free name for one segment of a path whose segment evidence claims:
+     * the segment with `_field` added (`video` becomes `video_field`), then
+     * `_field_2` and on. A name is free when no evidence path, no field's
+     * natural path and no earlier pick has it. The definition pins the Drupal
+     * field either way, so the name may differ.
      *
-     * @param non-empty-list<string> $path
+     * @param list<string> $parent the segments above it
      * @param array<string,true> $taken dotted paths in use
-     * @return non-empty-list<string>
      */
-    private function freeName(array $path, array $taken): array
+    private function freeSegment(array $parent, string $segment, array $taken): string
     {
-        $last = array_pop($path);
         for ($n = 1;; $n++) {
-            $name = $last . '_field' . ($n > 1 ? "_{$n}" : '');
-            if (!isset($taken[implode('.', [...$path, $name])])) {
-                return [...$path, $name];
+            $name = $segment . '_field' . ($n > 1 ? "_{$n}" : '');
+            if (!isset($taken[implode('.', [...$parent, $name])])) {
+                return $name;
             }
         }
     }
