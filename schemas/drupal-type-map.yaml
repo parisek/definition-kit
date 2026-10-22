@@ -17,6 +17,35 @@
 #     instance_settings field.field `settings:`
 #     widget            default form display widget: {type, settings}
 #     formatter         default view display formatter: {type, label, settings}
+#     parts             the named values one item holds (double_field: first,
+#                       second). A `list` or `object` field whose storage has
+#                       parts declares exactly these keys under `fields:`
+#     part_types        subfield storage type => the kit types a part accepts.
+#                       The first one is what the migration writes (`select`
+#                       for a part with `list: true`). The generator takes the
+#                       first entry that lists a kit type, so the order matters
+#     part_widgets      subfield storage type => the sub-widget of a new field;
+#                       the keys `list` (a fixed list) and `default` also apply
+#     settings_keys     settings that change what the field does (address
+#                       countries, language_field range). A definition keeps
+#                       the ones that differ from the default in
+#                       `drupal.settings`; the lint compares them and the
+#                       generator writes them. Each key needs a default in
+#                       storage_settings or instance_settings
+#     part_settings_keys  the same for a part (double_field subfield storage
+#                       settings and instance limits), in the part's
+#                       `drupal.settings`
+#
+# A storage type that `kit_types` lists under `reference` is an entity
+# reference: its target type (`storage_settings.target_type`) is compared like
+# an entity_reference one (webform). A structured type is listed under both
+# `object` and `list`.
+#
+# A project overlay (`drupal.type_map` in definition-kit.yaml) uses the same
+# keys. `kit_types` lists are appended to the bundled ones. `storage_types`,
+# `target_types` and `media_reference` merge key by key, all the way down (a
+# list or a scalar replaces); `widget_modules` and `formatter_modules` merge
+# by plugin id. See README, Drupal paragraphs.
 #
 # widget_modules / formatter_modules: plugin id => providing module. A plugin
 #   from `core` adds no module dependency.
@@ -215,6 +244,7 @@ storage_types:
   double_field:
     module: double_field
     parts: [first, second]
+    part_settings_keys: [maxlength, precision, scale, datetime_type, min, max]
     part_types:
       boolean: [boolean]
       string: [text, select]
@@ -249,6 +279,7 @@ storage_types:
         inline: false
   address:
     module: address
+    settings_keys: [available_countries, langcode_override, field_overrides]
     storage_settings: {}
     instance_settings: {available_countries: {}, langcode_override: '', field_overrides: {}, fields: {}}
     widget: {type: address_default, settings: {wrapper_type: fieldset}}
@@ -263,6 +294,7 @@ storage_types:
     formatter: {type: webform_entity_reference_entity_view, label: hidden, settings: {source_entity: true, lazy: false}}
   language_field:
     module: languagefield
+    settings_keys: [language_range, included_languages, excluded_languages, groups]
     storage_settings:
       maxlength: 12
       language_range: {11: 11}

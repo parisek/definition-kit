@@ -27,13 +27,23 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `address` is an `open: true` `object` (or `list`).
   - `webform` is a `reference` with `of: entity:webform`.
   - `language_field` is a `text`, `multiple: true` for several values.
+- **`drupal.settings` on a field and on a `double_field` part.** A closed map of
+  the settings that change what the field does: an address's
+  `available_countries`, `langcode_override` and `field_overrides`; a
+  language_field's `language_range`, `included_languages`,
+  `excluded_languages` and `groups`; a double_field part's `maxlength`,
+  `precision`, `scale`, `datetime_type`, `min` and `max`. The migration writes
+  the ones that differ from the default, the lint compares them, the generator
+  applies them. A double_field part also pins its exact subfield storage type
+  in `drupal.storage` (`integer`, `uri`, `email`, ...).
 - **`drupal.type_map` in `definition-kit.yaml`.** A project file, relative to
   `definition-kit.yaml`, merged over `schemas/drupal-type-map.yaml`. A project
   can map a contrib storage type the kit does not know without a kit release.
   The overlay passes the same checks as the bundled map, and a malformed one
   stops the command (exit 2) with the file and the entry. `kit_types` lists
   append to the bundled lists, other sections replace entries by name. See
-  README, Drupal paragraphs. A `kit_types` key must be a known kit type, and
+  README, Drupal paragraphs. `storage_types` entries merge key by key, so an
+  overlay can change one nested setting. A `kit_types` key must be a known kit type, and
   a structured type must be listed under both `object` and `list`.
 
 ### Changed

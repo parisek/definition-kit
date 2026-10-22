@@ -44,6 +44,8 @@ final class DrupalTypeMap
 {
     public const DEFAULT_PATH = __DIR__ . '/../../schemas/drupal-type-map.yaml';
 
+    private const OVERLAY_LABEL = 'type map overlay (drupal.type_map)';
+
     private const SECTIONS = ['kit_types', 'storage_types', 'media_reference', 'target_types', 'widget_modules', 'formatter_modules'];
 
     /** @var array<string,array<string,mixed>> path => parsed map */
@@ -61,13 +63,13 @@ final class DrupalTypeMap
         $path ??= self::DEFAULT_PATH;
         if (!isset(self::$cache[$path])) {
             $parsed = self::parse($path, 'type map');
-            self::validate($parsed, $path, true);
+            self::validate($parsed, $path, 'type map', true);
             self::$cache[$path] = $parsed;
         }
         $map = self::$cache[$path];
         if (null !== $overlay) {
-            $over = self::parse($overlay, 'type map overlay (drupal.type_map)');
-            self::validate($over, $overlay, false);
+            $over = self::parse($overlay, self::OVERLAY_LABEL);
+            self::validate($over, $overlay, self::OVERLAY_LABEL, false);
             $known = array_map('strval', array_keys((array) $map['kit_types']));
             $misspelled = array_diff(array_map('strval', array_keys((array) ($over['kit_types'] ?? []))), $known);
             if ([] !== $misspelled) {
@@ -79,6 +81,8 @@ final class DrupalTypeMap
                 ));
             }
             $map = self::merge($map, $over);
+            // The merged map must be as complete as the bundled one.
+            self::validate($map, $overlay, self::OVERLAY_LABEL, true);
             self::validateKitTypes($map, $overlay);
         }
         $this->map = $map;
@@ -112,21 +116,23 @@ final class DrupalTypeMap
     }
 
     /**
-     * The one rule set for the bundled map and for an overlay. The bundled map
-     * needs `kit_types` and `storage_types`; an overlay may carry any section.
+     * The one rule set for the bundled map, an overlay and the merged result.
+     * A complete map (the bundled one, the merged one) needs `kit_types` and
+     * `storage_types`, and every storage type its `module`, `widget` and
+     * `formatter`. An overlay is partial: it may carry any section, and a
+     * `storage_types` entry may state only the keys it changes.
      *
      * @param array<string,mixed> $map
      */
-    private static function validate(array $map, string $source, bool $bundled): void
+    private static function validate(array $map, string $source, string $label, bool $complete): void
     {
-        $label = $bundled ? 'type map' : 'type map overlay (drupal.type_map)';
         $fail = static fn (string $why): \RuntimeException => new \RuntimeException("Malformed Drupal {$label} {$source}: {$why}");
 
         $unknown = array_diff(array_map('strval', array_keys($map)), self::SECTIONS);
         if ([] !== $unknown) {
             throw $fail('unknown section(s) ' . implode(', ', $unknown) . ' — expected: ' . implode(', ', self::SECTIONS) . '.');
         }
-        if ($bundled) {
+        if ($complete) {
             foreach (['kit_types', 'storage_types'] as $required) {
                 if (!is_array($map[$required] ?? null)) {
                     throw $fail("needs kit_types and storage_types ({$required} is missing).");
@@ -145,12 +151,21 @@ final class DrupalTypeMap
             }
         }
         foreach ((array) ($map['storage_types'] ?? []) as $type => $entry) {
-            if (!is_array($entry) || !is_string($entry['module'] ?? null) || '' === $entry['module']) {
+            if (!is_array($entry)) {
+                throw $fail("storage_types.{$type} must be a map.");
+            }
+            if (($complete || isset($entry['module'])) && (!is_string($entry['module'] ?? null) || '' === $entry['module'])) {
                 throw $fail("storage_types.{$type} needs a `module` (core for a core field type).");
             }
             foreach (['widget', 'formatter'] as $plugin) {
-                if (!is_array($entry[$plugin] ?? null) || !is_string($entry[$plugin]['type'] ?? null) || '' === $entry[$plugin]['type']) {
+                $has = isset($entry[$plugin]);
+                if (($complete || $has) && (!is_array($entry[$plugin] ?? null) || (($complete || isset($entry[$plugin]['type'])) && (!is_string($entry[$plugin]['type'] ?? null) || '' === $entry[$plugin]['type'])))) {
                     throw $fail("storage_types.{$type} needs a {$plugin} with a `type`.");
+                }
+            }
+            foreach (['settings_keys', 'part_settings_keys'] as $listKey) {
+                if (isset($entry[$listKey]) && (!is_array($entry[$listKey]) || !array_is_list($entry[$listKey]) || [] !== array_filter($entry[$listKey], static fn (mixed $k): bool => !is_string($k) || '' === $k))) {
+                    throw $fail("storage_types.{$type}.{$listKey} must be a list of setting names.");
                 }
             }
             foreach (['storage_settings', 'instance_settings', 'part_types'] as $mapKey) {
@@ -185,13 +200,13 @@ final class DrupalTypeMap
         if (isset($map['media_reference'])) {
             foreach (['widget', 'formatter'] as $plugin) {
                 $entry = $map['media_reference'][$plugin] ?? null;
-                if (!is_array($entry) || !is_string($entry['type'] ?? null) || '' === $entry['type'] || (isset($entry['settings']) && !is_array($entry['settings']))) {
+                if (!is_array($entry) || (($complete || isset($entry['type'])) && (!is_string($entry['type'] ?? null) || '' === $entry['type'])) || (isset($entry['settings']) && !is_array($entry['settings']))) {
                     throw $fail("media_reference needs a {$plugin} with a `type` and a map of `settings`.");
                 }
             }
         }
         foreach ((array) ($map['target_types'] ?? []) as $target => $entry) {
-            if (!is_array($entry) || !is_string($entry['module'] ?? null) || '' === $entry['module']) {
+            if (!is_array($entry) || (($complete || isset($entry['module'])) && (!is_string($entry['module'] ?? null) || '' === $entry['module']))) {
                 throw $fail("target_types.{$target} needs a `module`.");
             }
             if (isset($entry['bundle_config']) && !is_string($entry['bundle_config'])) {
@@ -239,7 +254,31 @@ final class DrupalTypeMap
                 }
                 continue;
             }
-            $base[$section] = 'media_reference' === $section ? $entries : array_replace((array) ($base[$section] ?? []), (array) $entries);
+            if (in_array($section, ['storage_types', 'target_types', 'media_reference'], true)) {
+                $base[$section] = self::deepMerge((array) ($base[$section] ?? []), (array) $entries);
+                continue;
+            }
+            $base[$section] = array_replace((array) ($base[$section] ?? []), (array) $entries);
+        }
+
+        return $base;
+    }
+
+    /**
+     * Maps merge key by key, all the way down. A list, a scalar or a type
+     * change replaces the value. An empty map in the overlay changes nothing.
+     *
+     * @param array<mixed> $base
+     * @param array<mixed> $over
+     * @return array<mixed>
+     */
+    private static function deepMerge(array $base, array $over): array
+    {
+        foreach ($over as $key => $value) {
+            $isMap = static fn (mixed $v): bool => is_array($v) && ([] === $v || !array_is_list($v));
+            $base[$key] = $isMap($value) && $isMap($base[$key] ?? null)
+                ? self::deepMerge($base[$key], $value)
+                : $value;
         }
 
         return $base;
@@ -438,6 +477,145 @@ final class DrupalTypeMap
         }
 
         return $keys;
+    }
+
+    /**
+     * The settings of a storage type that change what the field does, and
+     * that a definition keeps in `drupal.settings` (address: countries and
+     * field overrides; language_field: language range and lists). Each key
+     * has a default in the entry's `storage_settings` or `instance_settings`.
+     *
+     * @return list<string>
+     */
+    public function settingsKeys(string $storageType): array
+    {
+        return self::names($this->map['storage_types'][$storageType]['settings_keys'] ?? []);
+    }
+
+    /**
+     * The same for the parts of a field item (double_field: the subfield
+     * storage settings and the instance limits), kept in the part's
+     * `drupal.settings`.
+     *
+     * @return list<string>
+     */
+    public function partSettingsKeys(string $storageType): array
+    {
+        return self::names($this->map['storage_types'][$storageType]['part_settings_keys'] ?? []);
+    }
+
+    /** @return 'storage'|'instance'|null where the generator writes a setting */
+    public function settingScope(string $storageType, string $key, ?string $part = null): ?string
+    {
+        $entry = $this->map['storage_types'][$storageType] ?? [];
+        $storage = null === $part ? ($entry['storage_settings'] ?? []) : ($entry['storage_settings']['storage'][$part] ?? []);
+        $instance = null === $part ? ($entry['instance_settings'] ?? []) : ($entry['instance_settings'][$part] ?? []);
+        if (is_array($instance) && array_key_exists($key, $instance)) {
+            return 'instance';
+        }
+
+        return is_array($storage) && array_key_exists($key, $storage) ? 'storage' : null;
+    }
+
+    /** The default of a setting: the value of a new field. */
+    public function settingDefault(string $storageType, string $key, ?string $part = null): mixed
+    {
+        $entry = $this->map['storage_types'][$storageType] ?? [];
+        $scope = $this->settingScope($storageType, $key, $part);
+        $source = 'instance' === $scope ? ($entry['instance_settings'] ?? []) : ($entry['storage_settings'] ?? []);
+        if (null !== $part) {
+            $source = 'instance' === $scope ? ($source[$part] ?? []) : ($source['storage'][$part] ?? []);
+        }
+
+        return is_array($source) ? ($source[$key] ?? null) : null;
+    }
+
+    /**
+     * The value of each setting key as the field has it: the exported value,
+     * the default for a key the export does not carry.
+     *
+     * @param array<string,mixed> $settings the field's storage and instance settings, merged
+     * @return array<string,mixed>
+     */
+    public function actualSettings(string $storageType, array $settings, ?string $part = null): array
+    {
+        $values = [];
+        foreach (null === $part ? $this->settingsKeys($storageType) : $this->partSettingsKeys($storageType) as $key) {
+            $holder = null === $part ? $settings : (array) ('instance' === $this->settingScope($storageType, $key, $part) ? ($settings[$part] ?? []) : ($settings['storage'][$part] ?? []));
+            $values[$key] = $holder[$key] ?? $this->settingDefault($storageType, $key, $part);
+        }
+
+        return $values;
+    }
+
+    /**
+     * What a definition says about each setting key: its `drupal.settings`
+     * value, the default for a key it leaves out.
+     *
+     * @param array<mixed> $declared `drupal.settings` of the field or the part
+     * @return array<string,mixed>
+     */
+    public function declaredSettings(string $storageType, array $declared, ?string $part = null): array
+    {
+        $values = [];
+        foreach (null === $part ? $this->settingsKeys($storageType) : $this->partSettingsKeys($storageType) as $key) {
+            $values[$key] = array_key_exists($key, $declared) ? $declared[$key] : $this->settingDefault($storageType, $key, $part);
+        }
+
+        return $values;
+    }
+
+    /**
+     * The settings of a field that differ from the default, for a definition's
+     * `drupal.settings`.
+     *
+     * @param array<string,mixed> $settings
+     * @return array<string,mixed>
+     */
+    public function residue(string $storageType, array $settings, ?string $part = null): array
+    {
+        $residue = [];
+        foreach ($this->actualSettings($storageType, $settings, $part) as $key => $value) {
+            if (!self::sameSetting($value, $this->settingDefault($storageType, $key, $part))) {
+                $residue[$key] = $value;
+            }
+        }
+
+        return $residue;
+    }
+
+    /**
+     * Two setting values are the same when they read the same: scalars by
+     * their text (`1` and `'1'`), `null`, `''` and an empty map alike, maps
+     * by key without order.
+     */
+    public static function sameSetting(mixed $a, mixed $b): bool
+    {
+        return self::normalize($a) === self::normalize($b);
+    }
+
+    private static function normalize(mixed $value): mixed
+    {
+        if (is_array($value)) {
+            if ([] === $value) {
+                return '';
+            }
+            $out = [];
+            foreach ($value as $k => $v) {
+                $out[(string) $k] = self::normalize($v);
+            }
+            ksort($out);
+
+            return $out;
+        }
+
+        return null === $value || '' === $value ? '' : (is_bool($value) ? ($value ? '1' : '0') : (string) $value);
+    }
+
+    /** @return list<string> */
+    private static function names(mixed $value): array
+    {
+        return is_array($value) ? array_values(array_map('strval', $value)) : [];
     }
 
     /** True for an entity reference type: `entity_reference` and a storage type listed under the kit type `reference`. */

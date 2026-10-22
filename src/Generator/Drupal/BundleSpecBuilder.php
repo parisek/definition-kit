@@ -309,6 +309,7 @@ final class BundleSpecBuilder
             formatter: is_string($field['drupal']['formatter'] ?? null) ? $field['drupal']['formatter'] : null,
             groups: $groupPath,
             parts: $this->parts($field, $accepted[0]),
+            settings: [] === $this->types->settingsKeys($accepted[0]) ? [] : $this->types->declaredSettings($accepted[0], is_array($field['drupal']['settings'] ?? null) ? $field['drupal']['settings'] : []),
         );
     }
 
@@ -317,7 +318,7 @@ final class BundleSpecBuilder
      * for a new storage and instance: kit type, label, required flag, options.
      *
      * @param array<mixed> $field
-     * @return array<string,array{type: string, label: string, required: bool, options: array<string,string>|null}>|null
+     * @return array<string,array{type: string, label: string, required: bool, options: array<string,string>|null, storage: string|null, settings: array<string,mixed>}>|null
      */
     private function parts(array $field, string $storage): ?array
     {
@@ -344,6 +345,8 @@ final class BundleSpecBuilder
                 'label' => is_string($part['label'] ?? null) && '' !== trim($part['label']) ? $part['label'] : ucfirst($name),
                 'required' => true === ($part['required'] ?? false),
                 'options' => $options,
+                'storage' => is_string($part['drupal']['storage'] ?? null) ? $part['drupal']['storage'] : null,
+                'settings' => $this->types->declaredSettings($storage, is_array($part['drupal']['settings'] ?? null) ? $part['drupal']['settings'] : [], $name),
             ];
         }
 

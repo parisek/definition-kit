@@ -327,7 +327,7 @@ final class DrupalContribTypesTest extends TestCase
         self::assertSame(['reward' => 'Reward', 'map' => 'Map', 'graph' => 'Graph'], \Parisek\DefinitionKit\Drupal\DrupalField::parseAllowedValues($benefits->settings['first']['allowed_values']));
         self::assertFalse($benefits->settings['second']['list']);
         $pair = $generated->fields('pair')['field_pair'];
-        self::assertSame(['float', 'boolean'], [$pair->settings['storage']['first']['type'], $pair->settings['storage']['second']['type']]);
+        self::assertSame(['integer', 'boolean'], [$pair->settings['storage']['first']['type'], $pair->settings['storage']['second']['type']]);
         self::assertFalse($pair->settings['second']['required']);
 
         // Each part gets the sub-widget its type and fixed list call for.
@@ -487,6 +487,212 @@ final class DrupalContribTypesTest extends TestCase
             escapeshellarg("{$project}/component/benefits"),
         ), $lint, $lintCode);
         self::assertSame(0, $lintCode, implode("\n", $lint));
+    }
+
+    // ------------------------------------------------- subfield types, settings
+
+    /**
+     * A copy of the export where field_pair holds the given subfield storage
+     * settings (`first` and `second` are merged over the fixture's).
+     *
+     * @param array<string,array<string,mixed>> $storage subfield => storage settings
+     * @param array<string,array<string,mixed>> $instance subfield => instance settings
+     */
+    private function exportWithPair(array $storage, array $instance = []): string
+    {
+        $dir = $this->copyConfig();
+        $file = "{$dir}/field.storage.paragraph.field_pair.yml";
+        $data = Yaml::parseFile($file);
+        self::assertIsArray($data);
+        foreach ($storage as $part => $settings) {
+            $data['settings']['storage'][$part] = $settings + $data['settings']['storage'][$part];
+        }
+        file_put_contents($file, \Parisek\DefinitionKit\Drupal\DrupalYaml::dump($data));
+        $file = "{$dir}/field.field.paragraph.pair.field_pair.yml";
+        $data = Yaml::parseFile($file);
+        self::assertIsArray($data);
+        foreach ($instance as $part => $settings) {
+            $data['settings'][$part] = $settings + $data['settings'][$part];
+        }
+        file_put_contents($file, \Parisek\DefinitionKit\Drupal\DrupalYaml::dump($data));
+
+        return $dir;
+    }
+
+    /** @return iterable<string, array{string, string}> */
+    public static function subfieldTypes(): iterable
+    {
+        // [subfield storage type, the pin the migration writes, or '' for none]
+        foreach ([
+            'string' => '', 'email' => 'email', 'telephone' => 'telephone', 'uri' => 'uri', 'integer' => 'integer',
+            'float' => '', 'numeric' => 'numeric', 'boolean' => '', 'datetime_iso8601' => '', 'text' => '',
+        ] as $type => $pin) {
+            yield $type => [$type, $pin];
+        }
+    }
+
+    #[Test]
+    #[DataProvider('subfieldTypes')]
+    public function every_double_field_subfield_type_survives_migrate_lint_and_a_fresh_generate(string $type, string $pin): void
+    {
+        $dir = $this->exportWithPair(['first' => ['type' => $type], 'second' => ['type' => $type]]);
+        $config = DrupalConfig::fromDirectory($dir);
+        $fields = (new DrupalParagraphReader($config, new DrupalSettings()))->read('pair');
+
+        foreach (['first', 'second'] as $part) {
+            self::assertSame('' === $pin ? null : $pin, $fields['pair']['fields'][$part]['drupal']['storage'] ?? null, "{$part}: pin");
+        }
+        $definition = ['name' => 'Pair', 'category' => 'Block', 'kind' => 'block', 'drupal' => '/admin/structure/paragraphs_type/pair/fields', 'fields' => $fields];
+        $result = (new DrupalDriftLinter($config, new DrupalSettings()))->lint($definition, 'pair');
+        self::assertSame(DrupalDriftResult::OK, $result->status, implode("\n", $result->findings));
+
+        $target = $this->tempDir();
+        $plan = $this->plan(['pair' => $definition], $target, null);
+        self::assertFalse($plan->refused());
+        (new DrupalConfigWriter())->write($plan, new ConfigStore($target));
+        $made = DrupalConfig::fromDirectory($target)->fields('pair')['field_pair'];
+        self::assertSame([$type, $type], [$made->settings['storage']['first']['type'], $made->settings['storage']['second']['type']]);
+
+        // Into its own export: no change.
+        self::assertSame([], $this->plan(['pair' => $definition], $dir, $config)->changedNames());
+    }
+
+    #[Test]
+    public function a_wrong_subfield_pin_is_drift_and_a_generate_refuses_to_change_the_subfield(): void
+    {
+        $dir = $this->exportWithPair(['first' => ['type' => 'integer']]);
+        $config = DrupalConfig::fromDirectory($dir);
+        $fields = (new DrupalParagraphReader($config, new DrupalSettings()))->read('pair');
+        $fields['pair']['fields']['first']['drupal']['storage'] = 'numeric';
+        $definition = ['name' => 'Pair', 'category' => 'Block', 'kind' => 'block', 'drupal' => '/admin/structure/paragraphs_type/pair/fields', 'fields' => $fields];
+
+        $result = (new DrupalDriftLinter($config, new DrupalSettings()))->lint($definition, 'pair');
+        self::assertSame(DrupalDriftResult::DRIFT, $result->status);
+        self::assertStringContainsString('first is a integer subfield in Drupal; the definition pins numeric', implode("\n", $result->findings));
+        self::assertTrue($this->plan(['pair' => $definition], $dir, $config)->refused());
+    }
+
+    #[Test]
+    public function subfield_storage_settings_and_limits_go_through_migrate_lint_and_generate(): void
+    {
+        $dir = $this->exportWithPair(
+            ['first' => ['type' => 'numeric', 'precision' => 12, 'scale' => 4], 'second' => ['type' => 'string', 'maxlength' => 100]],
+            ['first' => ['min' => 1, 'max' => 9]],
+        );
+        $config = DrupalConfig::fromDirectory($dir);
+        $fields = (new DrupalParagraphReader($config, new DrupalSettings()))->read('pair');
+
+        self::assertSame(['precision' => 12, 'scale' => 4, 'min' => 1, 'max' => 9], $fields['pair']['fields']['first']['drupal']['settings']);
+        self::assertSame(['maxlength' => 100], $fields['pair']['fields']['second']['drupal']['settings']);
+        $definition = ['name' => 'Pair', 'category' => 'Block', 'kind' => 'block', 'drupal' => '/admin/structure/paragraphs_type/pair/fields', 'fields' => $fields];
+        $linter = new DrupalDriftLinter($config, new DrupalSettings());
+        self::assertSame(DrupalDriftResult::OK, $linter->lint($definition, 'pair')->status);
+
+        // Drift: the definition forgets the scale, names an unknown key.
+        $broken = $definition;
+        $broken['fields']['pair']['fields']['first']['drupal']['settings']['scale'] = 2;
+        $broken['fields']['pair']['fields']['second']['drupal']['settings']['colour'] = 'red';
+        $findings = implode("\n", $linter->lint($broken, 'pair')->findings);
+        self::assertStringContainsString('first: setting scale is 4 in Drupal; the definition expects 2', $findings);
+        self::assertStringContainsString('second: drupal.settings.colour is not a setting of double_field', $findings);
+
+        // A fresh generate rebuilds them; into the export the plan has no change.
+        $target = $this->tempDir();
+        $plan = $this->plan(['pair' => $definition], $target, null);
+        (new DrupalConfigWriter())->write($plan, new ConfigStore($target));
+        $made = DrupalConfig::fromDirectory($target)->fields('pair')['field_pair'];
+        self::assertSame(['numeric', 12, 4], [$made->settings['storage']['first']['type'], $made->settings['storage']['first']['precision'], $made->settings['storage']['first']['scale']]);
+        self::assertSame(100, $made->settings['storage']['second']['maxlength']);
+        self::assertSame([1, 9], [$made->settings['first']['min'], $made->settings['first']['max']]);
+        self::assertSame([], $this->plan(['pair' => $definition], $dir, $config)->changedNames());
+
+        // A precision change on existing data is refused, a limit change is an update.
+        $change = $definition;
+        $change['fields']['pair']['fields']['first']['drupal']['settings']['precision'] = 14;
+        self::assertTrue($this->plan(['pair' => $change], $dir, $config)->refused());
+        $limit = $definition;
+        $limit['fields']['pair']['fields']['first']['drupal']['settings']['max'] = 20;
+        $updated = $this->plan(['pair' => $limit], $dir, $config);
+        self::assertFalse($updated->refused());
+        self::assertSame(['field.field.paragraph.pair.field_pair'], $updated->changedNames());
+    }
+
+    #[Test]
+    public function address_and_language_field_settings_go_through_migrate_lint_and_generate(): void
+    {
+        $dir = $this->copyConfig();
+        $edit = static function (string $file, callable $change): void {
+            $data = Yaml::parseFile($file);
+            file_put_contents($file, \Parisek\DefinitionKit\Drupal\DrupalYaml::dump($change($data)));
+        };
+        $edit("{$dir}/field.field.paragraph.company.field_address.yml", static function (array $d): array {
+            $d['settings']['available_countries'] = ['CZ' => 'CZ'];
+            $d['settings']['langcode_override'] = 'cs';
+
+            return $d;
+        });
+        $edit("{$dir}/field.storage.paragraph.field_langcode.yml", static function (array $d): array {
+            $d['settings']['included_languages'] = ['cs' => 'cs', 'en' => 'en'];
+            $d['settings']['groups'] = 'site';
+
+            return $d;
+        });
+        $config = DrupalConfig::fromDirectory($dir);
+        $settings = new DrupalSettings();
+        $company = (new DrupalParagraphReader($config, $settings))->read('company');
+        $content = (new DrupalParagraphReader($config, $settings))->read('content');
+
+        self::assertSame(['available_countries', 'langcode_override', 'field_overrides'], array_keys($company['address']['drupal']['settings']));
+        self::assertSame(['CZ' => 'CZ'], $company['address']['drupal']['settings']['available_countries']);
+        self::assertSame('cs', $company['address']['drupal']['settings']['langcode_override']);
+        self::assertSame(['language_range', 'included_languages', 'groups'], array_keys($content['advanced']['fields']['langcode']['drupal']['settings']));
+        self::assertArrayNotHasKey('settings', $company['branches']['drupal'], 'defaults are not written');
+
+        $definitions = [
+            'company' => ['name' => 'Company', 'category' => 'Block', 'kind' => 'block', 'drupal' => '/admin/structure/paragraphs_type/company/fields', 'fields' => $company],
+            'content' => ['name' => 'Content', 'category' => 'Block', 'kind' => 'block', 'drupal' => '/admin/structure/paragraphs_type/content/fields', 'fields' => $content],
+        ];
+        $linter = new DrupalDriftLinter($config, $settings);
+        foreach ($definitions as $slug => $definition) {
+            self::assertSame(DrupalDriftResult::OK, $linter->lint($definition, $slug)->status, $slug);
+        }
+
+        // Drift in both directions.
+        $drift = $definitions['company'];
+        unset($drift['fields']['address']['drupal']['settings']['available_countries']);
+        self::assertStringContainsString('setting available_countries is {"CZ":"CZ"} in Drupal; the definition expects', implode("\n", $linter->lint($drift, 'company')->findings));
+        $drift = $definitions['content'];
+        $drift['fields']['advanced']['fields']['langcode']['drupal']['settings']['included_languages'] = ['de' => 'de'];
+        self::assertStringContainsString('setting included_languages', implode("\n", $linter->lint($drift, 'content')->findings));
+        $unknown = $definitions['company'];
+        $unknown['fields']['branches']['drupal']['settings'] = ['colour' => 'red'];
+        self::assertStringContainsString('drupal.settings.colour is not a setting of address', implode("\n", $linter->lint($unknown, 'company')->findings));
+
+        // Into its own export: no change. From nothing: the settings are rebuilt.
+        self::assertSame([], $this->plan($definitions, $dir, $config)->changedNames());
+        $target = $this->tempDir();
+        $plan = $this->plan($definitions, $target, null);
+        self::assertFalse($plan->refused());
+        (new DrupalConfigWriter())->write($plan, new ConfigStore($target));
+        $generated = DrupalConfig::fromDirectory($target);
+        $address = $generated->fields('company')['field_address'];
+        self::assertSame(['CZ' => 'CZ'], $address->settings['available_countries']);
+        self::assertSame('cs', $address->settings['langcode_override']);
+        self::assertSame('optional', $address->settings['field_overrides']['locality']['override']);
+        $language = $generated->fields('content')['field_langcode'];
+        self::assertSame(['cs' => 'cs', 'en' => 'en'], $language->settings['included_languages']);
+        self::assertSame('site', $language->settings['groups']);
+        foreach ($definitions as $slug => $definition) {
+            self::assertSame(DrupalDriftResult::OK, (new DrupalDriftLinter($generated, $settings))->lint($definition, $slug)->status, $slug);
+        }
+
+        // The definition is the truth: a changed setting is an UPDATE of the key it owns.
+        $changed = $definitions;
+        $changed['company']['fields']['address']['drupal']['settings']['available_countries'] = ['CZ' => 'CZ', 'SK' => 'SK'];
+        $changed['content']['fields']['advanced']['fields']['langcode']['drupal']['settings']['groups'] = 'all';
+        $updated = $this->plan($changed, $dir, $config);
+        self::assertFalse($updated->refused());
+        self::assertEqualsCanonicalizing(['field.field.paragraph.company.field_address', 'field.storage.paragraph.field_langcode'], $updated->changedNames());
     }
 
     // ----------------------------------------------------------------- overlay

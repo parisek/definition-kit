@@ -12,6 +12,8 @@ fields:
         role: field
         label: Count
         required: true
+        drupal:
+          storage: integer
       second:
         type: boolean
         role: field

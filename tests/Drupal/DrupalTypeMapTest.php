@@ -229,24 +229,61 @@ final class DrupalTypeMapTest extends TestCase
     }
 
     #[Test]
-    public function an_overlay_entry_replaces_the_bundled_entry_of_the_same_name(): void
+    public function an_overlay_entry_merges_into_the_bundled_entry_key_by_key(): void
     {
         $file = $this->overlayFile(<<<'YAML'
             storage_types:
               language_field:
-                module: languagefield
                 storage_settings: {maxlength: 5}
-                instance_settings: {}
-                widget: {type: languagefield_autocomplete, settings: {}}
-                formatter: {type: languagefield_default, label: hidden, settings: {}}
+                widget: {type: languagefield_autocomplete}
+                formatter: {label: hidden}
             YAML);
         $map = new DrupalTypeMap(null, $file);
+        $bundled = $this->bundled()->storageType('language_field');
+        $merged = $map->storageType('language_field');
 
-        self::assertSame(['maxlength' => 5], $map->storageType('language_field')['storage_settings']);
-        self::assertSame('languagefield_autocomplete', $map->widget('language_field')['type']);
-        self::assertSame('hidden', $map->formatter('language_field')['label']);
+        self::assertSame(5, $merged['storage_settings']['maxlength']);
+        self::assertSame($bundled['storage_settings']['language_range'], $merged['storage_settings']['language_range'], 'the other storage settings stay');
+        self::assertSame('languagefield_autocomplete', $merged['widget']['type']);
+        self::assertSame($bundled['widget']['settings'], $merged['widget']['settings']);
+        self::assertSame('hidden', $merged['formatter']['label']);
+        self::assertSame($bundled['formatter']['type'], $merged['formatter']['type']);
+        self::assertSame('languagefield', $merged['module']);
         self::assertSame(12, $this->bundled()->storageType('language_field')['storage_settings']['maxlength'], 'the bundled map is not changed');
-        self::assertSame(['string', 'string_long', 'email', 'telephone', 'language_field'], $map->acceptedFor('text'), 'kit_types untouched without an overlay entry');
+    }
+
+    #[Test]
+    public function an_overlay_can_change_only_a_nested_widget_setting(): void
+    {
+        $file = $this->overlayFile("storage_types:\n  language_field:\n    widget:\n      settings:\n        format:\n          name: name_native\n");
+        $widget = (new DrupalTypeMap(null, $file))->widget('language_field');
+
+        self::assertSame('languagefield_select', $widget['type']);
+        self::assertSame(['icon' => false, 'iso' => false, 'name' => 'name_native', 'name_native' => false], $widget['settings']['format']);
+    }
+
+    #[Test]
+    public function an_overlay_can_change_only_a_formatter_type(): void
+    {
+        $file = $this->overlayFile("storage_types:\n  webform:\n    formatter:\n      type: webform_entity_reference_link\n");
+        $map = new DrupalTypeMap(null, $file);
+        $bundled = $this->bundled()->formatter('webform');
+
+        self::assertSame('webform_entity_reference_link', $map->formatter('webform')['type']);
+        self::assertSame($bundled['label'], $map->formatter('webform')['label']);
+        self::assertSame($bundled['settings'], $map->formatter('webform')['settings']);
+    }
+
+    #[Test]
+    public function a_list_in_the_overlay_replaces_the_bundled_list_and_the_merged_entry_is_checked(): void
+    {
+        $file = $this->overlayFile("storage_types:\n  double_field:\n    parts: [only]\n");
+        self::assertSame(['only'], (new DrupalTypeMap(null, $file))->parts('double_field'));
+
+        $broken = $this->overlayFile("storage_types:\n  double_field:\n    widget: {settings: 5}\n");
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('storage_types.double_field.widget.settings must be a map');
+        new DrupalTypeMap(null, $broken);
     }
 
     #[Test]

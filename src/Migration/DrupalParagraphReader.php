@@ -289,6 +289,10 @@ final class DrupalParagraphReader
         if ($canonical !== $d->type && !('media' === $field['type'] && 'entity_reference' === $d->type)) {
             $field['drupal'] = ['storage' => $d->type] + ($field['drupal'] ?? []);
         }
+        $residue = $this->types->residue($d->type, $d->settings);
+        if ([] !== $residue) {
+            $field['drupal'] = ($field['drupal'] ?? []) + ['settings' => $residue];
+        }
 
         return $field;
     }
@@ -380,7 +384,8 @@ final class DrupalParagraphReader
     {
         $storage = $d->settings['storage'][$part]['type'] ?? 'string';
         $instance = is_array($d->settings[$part] ?? null) ? $d->settings[$part] : [];
-        $kinds = $this->types->partKitTypes($d->type, is_string($storage) ? $storage : 'string');
+        $storage = is_string($storage) ? $storage : 'string';
+        $kinds = $this->types->partKitTypes($d->type, $storage);
         $field = ['type' => $kinds[0] ?? 'text', 'role' => 'field'];
 
         $label = is_string($instance['label'] ?? null) ? trim($instance['label']) : '';
@@ -397,6 +402,15 @@ final class DrupalParagraphReader
                 $field['type'] = 'select';
                 $field['options'] = $options;
             }
+        }
+        // The exact subfield storage type, when the kit type alone would not
+        // create it (integer behind a number, uri behind a text).
+        if ($this->types->partStorageType($d->type, $field['type']) !== $storage) {
+            $field['drupal']['storage'] = $storage;
+        }
+        $residue = $this->types->residue($d->type, $d->settings, $part);
+        if ([] !== $residue) {
+            $field['drupal']['settings'] = $residue;
         }
 
         return $this->orderKeys($field);
@@ -530,7 +544,7 @@ final class DrupalParagraphReader
             }
         }
         if (isset($out['drupal']) && is_array($out['drupal'])) {
-            $drupalOrder = ['field', 'storage', 'target_type', 'target_bundles', 'bundles'];
+            $drupalOrder = ['field', 'storage', 'target_type', 'target_bundles', 'bundles', 'settings'];
             $out['drupal'] = array_merge(array_intersect_key(array_flip($drupalOrder), $out['drupal']), $out['drupal']);
         }
 

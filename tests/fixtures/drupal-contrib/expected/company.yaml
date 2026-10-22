@@ -15,6 +15,16 @@ fields:
     drupal:
       field: field_address
       storage: address
+      settings:
+        field_overrides:
+          givenName:
+            override: hidden
+          organization:
+            override: hidden
+          addressLine1:
+            override: optional
+          locality:
+            override: optional
   branches:
     type: list
     role: field

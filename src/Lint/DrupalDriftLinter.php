@@ -253,6 +253,15 @@ final class DrupalDriftLinter
         if ([] !== $this->types->parts($drupal->type)) {
             $this->compareParts($field, $drupal, $at, $findings);
         }
+        $this->compareSettings(
+            $this->types->settingsKeys($drupal->type),
+            is_array($field['drupal']['settings'] ?? null) ? $field['drupal']['settings'] : [],
+            $this->types->declaredSettings($drupal->type, is_array($field['drupal']['settings'] ?? null) ? $field['drupal']['settings'] : []),
+            $this->types->actualSettings($drupal->type, $drupal->settings),
+            $at,
+            $drupal->type,
+            $findings,
+        );
 
         $expectedTargetType = $this->types->expectedTargetType($field, $drupal->type);
         $actualTargetType = $drupal->targetType();
@@ -317,6 +326,49 @@ final class DrupalDriftLinter
     }
 
     /**
+     * The `drupal.settings` of a field or a part against the Drupal field:
+     * every key the type map lists, with the default for a key the definition
+     * leaves out, and no key the type does not know.
+     *
+     * @param list<string> $keys
+     * @param array<mixed> $declared the definition's `drupal.settings`
+     * @param array<string,mixed> $expected
+     * @param array<string,mixed> $actual
+     * @param list<string> $findings
+     */
+    private function compareSettings(array $keys, array $declared, array $expected, array $actual, string $at, string $type, array &$findings): void
+    {
+        $unknown = array_diff(array_map('strval', array_keys($declared)), $keys);
+        if ([] !== $unknown) {
+            $findings[] = sprintf(
+                '%s: drupal.settings.%s is not a setting of %s%s',
+                $at,
+                implode(', drupal.settings.', $unknown),
+                $type,
+                [] === $keys ? '' : ' (known: ' . implode(', ', $keys) . ')',
+            );
+        }
+        foreach ($keys as $key) {
+            if (!DrupalTypeMap::sameSetting($expected[$key] ?? null, $actual[$key] ?? null)) {
+                $findings[] = sprintf(
+                    '%s: setting %s is %s in Drupal; the definition expects %s',
+                    $at,
+                    $key,
+                    self::show($actual[$key] ?? null),
+                    self::show($expected[$key] ?? null),
+                );
+            }
+        }
+    }
+
+    private static function show(mixed $value): string
+    {
+        $text = json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+        return false === $text ? '?' : (strlen($text) > 80 ? substr($text, 0, 77) . '...' : $text);
+    }
+
+    /**
      * A `list` or `object` stored in a type with named parts (double_field):
      * the definition declares exactly those parts, and each part has a kit
      * type the subfield storage type allows. An `open` field declares none.
@@ -352,6 +404,20 @@ final class DrupalDriftLinter
             if (!is_string($storage)) {
                 continue;
             }
+            $pinned = $definition['drupal']['storage'] ?? null;
+            if (is_string($pinned) && $pinned !== $storage) {
+                $findings[] = "{$at}: {$part} is a {$storage} subfield in Drupal; the definition pins {$pinned}";
+            }
+            $partSettings = is_array($definition['drupal']['settings'] ?? null) ? $definition['drupal']['settings'] : [];
+            $this->compareSettings(
+                $this->types->partSettingsKeys($drupal->type),
+                $partSettings,
+                $this->types->declaredSettings($drupal->type, $partSettings, $part),
+                $this->types->actualSettings($drupal->type, $drupal->settings, $part),
+                "{$at} {$part}",
+                $drupal->type,
+                $findings,
+            );
             $allowed = $this->types->partKitTypes($drupal->type, $storage);
             $kind = StructuralType::canonical((string) ($definition['type'] ?? ''));
             if ([] !== $allowed && !in_array($kind, $allowed, true)) {
