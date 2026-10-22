@@ -295,4 +295,15 @@ final class DrupalBundledContribTypesTest extends TestCase
             $this->assertDrift($this->lint($dir, $bundle, $fields), $key);
         }
     }
+
+    #[Test]
+    public function without_a_storage_file_the_merged_value_stays(): void
+    {
+        $dir = $this->tempDir();
+        $this->field($dir, 'geo', 'field_geo', 'geofield', 'geofield', [], ['backend' => 'geofield_backend_postgis'], 1);
+        unlink("{$dir}/field.storage.paragraph.field_geo.yml");
+
+        // No storage evidence: nothing replaces the instance's value with the default.
+        self::assertSame(['backend' => 'geofield_backend_postgis'], $this->read($dir, 'geo')['geo']['drupal']['settings']);
+    }
 }
