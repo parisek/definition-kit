@@ -92,20 +92,30 @@ final class PostTypesLinter
         ));
     }
 
-    /** The reason after the marker in ONE `dev` item, or null when no item carries the marker. */
+    /**
+     * The reason after the marker, or null when no `dev` item carries the marker.
+     * An empty string means a marker with no reason. A later item with a reason
+     * wins over an earlier empty marker.
+     */
     private function exceptionReason(mixed $dev): ?string
     {
         $items = is_array($dev) ? $dev : [$dev];
+        $found = null;
         foreach ($items as $item) {
             if (!is_string($item)) {
                 continue;
             }
             $text = trim((string) preg_replace('/\s+/u', ' ', $item));
-            if (1 === preg_match(self::MARKER, $text, $match)) {
-                return trim($match['reason'], " \t\n\r\0\x0B'\"");
+            if (1 !== preg_match(self::MARKER, $text, $match)) {
+                continue;
             }
+            $reason = trim($match['reason'], " \t\n\r\0\x0B'\"");
+            if ('' !== $reason) {
+                return $reason;
+            }
+            $found = '';
         }
 
-        return null;
+        return $found;
     }
 }

@@ -76,6 +76,13 @@ final class PostTypesLinterTest extends TestCase
         self::assertStringContainsString('gives no reason', $findings[0]['message']);
     }
 
+    public function test_a_later_reason_wins_over_an_earlier_empty_marker(): void
+    {
+        $definition = $this->block([], ['dev' => ['post-types: open', 'post-types: open, reusable-only']]);
+
+        self::assertSame([], (new PostTypesLinter())->lint('demo.yaml', $definition));
+    }
+
     public function test_an_unrelated_dev_note_does_not_count(): void
     {
         $findings = (new PostTypesLinter())->lint('demo.yaml', $this->block([], ['dev' => ['Deviation from upstream: x']]));
