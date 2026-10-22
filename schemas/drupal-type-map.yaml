@@ -37,6 +37,12 @@
 #                       `drupal.settings`
 #     part_settings_applies  part setting => the subfield storage types it
 #                       applies to (the others apply to every subfield)
+#     checkbox_settings the `settings_keys` that a `checkboxes` form stores: a
+#                       map with `0` for each unchecked option (video_embed_field
+#                       allowed_providers). Only the checked options count, so
+#                       `{youtube: '0'}` and `[]` read the same. A definition
+#                       lists the checked ones (`{youtube: youtube}` or
+#                       `[youtube]`)
 #     legacy_settings   a deprecated setting that the module reads in place of
 #                       another: `<legacy key>: {into, override, universe}`.
 #                       It is normalised to `into` when read, so a definition
@@ -57,7 +63,7 @@
 #   from `core` adds no module dependency.
 
 kit_types:
-  text: [string, string_long, email, telephone, language_field]
+  text: [string, string_long, email, telephone, language_field, color_field_type, video_embed_field]
   text_multiline: [string_long, text_long, text]
   richtext: [text_long, text, text_with_summary]
   number: [integer, decimal, float]
@@ -67,8 +73,8 @@ kit_types:
   link: [link]
   reference: [entity_reference, webform]
   date: [datetime, daterange, timestamp]
-  object: [entity_reference_revisions, double_field, address]
-  list: [entity_reference_revisions, double_field, address]
+  object: [entity_reference_revisions, double_field, address, geofield, office_hours]
+  list: [entity_reference_revisions, double_field, address, geofield, office_hours]
   flexible_content: [entity_reference_revisions]
 
 storage_types:
@@ -333,6 +339,81 @@ storage_types:
     widget: {type: languagefield_select, settings: {format: {icon: false, iso: false, name: name, name_native: false}}}
     formatter: {type: languagefield_default, label: above, settings: {link_to_entity: false, format: {icon: false, iso: false, name: name, name_native: false}}}
 
+  # geofield, office_hours, color_field and video_embed_field: read from the
+  # module sources on local sites (geofield 8.x-1.67, office_hours 8.x-1.29,
+  # color_field 3.0.2, video_embed_field 8.x-2.7): defaultStorageSettings,
+  # defaultFieldSettings, default_widget, default_formatter and the plugins'
+  # defaultSettings. Why each kit type: README, Drupal paragraphs.
+  geofield:
+    module: geofield
+    settings_keys: [backend]
+    storage_settings: {backend: geofield_backend_default}
+    instance_settings: {}
+    widget: {type: geofield_latlon, settings: {html5_geolocation: false}}
+    formatter: {type: geofield_default, label: above, settings: {output_format: wkt, output_escape: true}}
+  office_hours:
+    module: office_hours
+    # What changes the data an item holds. The time format, the step, the
+    # limits and the validation only shape the form.
+    settings_keys: [exceptions, seasons, all_day, comment, cardinality_per_day]
+    storage_settings:
+      time_format: G
+      element_type: office_hours_datetime
+      increment: 30
+      required_start: false
+      required_end: false
+      limit_start: ''
+      limit_end: ''
+      all_day: false
+      exceptions: false
+      seasons: false
+      comment: 1
+      valhrs: false
+      cardinality_per_day: 2
+    instance_settings: {}
+    widget: {type: office_hours_exceptions, settings: {collapsed: false, collapsed_exceptions: true}}
+    formatter:
+      type: office_hours_table
+      label: above
+      settings:
+        day_format: long
+        time_format: G
+        compress: false
+        grouped: false
+        show_closed: all
+        show_empty: false
+        closed_format: Closed
+        all_day_format: 'All day open'
+        separator: {days: '<br />', grouped_days: ' - ', day_hours: ': ', hours_hours: '-', more_hours: ', '}
+        current_status: {position: '', open_text: 'Currently open!', closed_text: 'Currently closed'}
+        exceptions:
+          replace_exceptions: false
+          restrict_exceptions_to_num_days: 7
+          restrict_seasons_to_num_days: 366
+          date_format: long
+          title: 'Exception hours'
+          all_day_format: 'All day open'
+        schema: {enabled: false}
+        timezone_field: ''
+        office_hours_first_day: ''
+  color_field_type:
+    module: color_field
+    # `format` is the stored string (#123ABC, 123abc); `opacity` adds a second
+    # value to each item.
+    settings_keys: [format, opacity]
+    storage_settings: {format: '#HEXHEX'}
+    instance_settings: {opacity: true}
+    widget: {type: color_field_widget_default, settings: {placeholder_color: '', placeholder_opacity: ''}}
+    formatter: {type: color_field_formatter_text, label: above, settings: {format: hex, opacity: true}}
+  video_embed_field:
+    module: video_embed_field
+    settings_keys: [allowed_providers]
+    checkbox_settings: [allowed_providers]
+    storage_settings: {}
+    instance_settings: {allowed_providers: {}}
+    widget: {type: video_embed_field_textfield, settings: {}}
+    formatter: {type: video_embed_field_video, label: above, settings: {responsive: true, width: 854, height: 480, autoplay: true}}
+
 # A media reference is an entity_reference to `media`: the generator uses
 # this widget and formatter instead of the entity_reference ones.
 media_reference:
@@ -378,6 +459,12 @@ widget_modules:
   address_default: address
   webform_entity_reference_select: webform
   languagefield_select: languagefield
+  geofield_latlon: geofield
+  office_hours_exceptions: office_hours
+  office_hours_default: office_hours
+  color_field_widget_default: color_field
+  color_field_widget_box: color_field
+  video_embed_field_textfield: video_embed_field
 
 formatter_modules:
   string: core
@@ -400,3 +487,9 @@ formatter_modules:
   address_default: address
   webform_entity_reference_entity_view: webform
   languagefield_default: languagefield
+  geofield_default: geofield
+  office_hours_table: office_hours
+  office_hours: office_hours
+  color_field_formatter_text: color_field
+  video_embed_field_video: video_embed_field
+  video_embed_field_lazyload: video_embed_field

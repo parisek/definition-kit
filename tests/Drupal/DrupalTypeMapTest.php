@@ -17,7 +17,7 @@ final class DrupalTypeMapTest extends TestCase
      * lint and the migration depend on it.
      */
     private const V016_ACCEPTED = [
-        'text' => ['string', 'string_long', 'email', 'telephone', 'language_field'],
+        'text' => ['string', 'string_long', 'email', 'telephone', 'language_field', 'color_field_type', 'video_embed_field'],
         'text_multiline' => ['string_long', 'text_long', 'text'],
         'richtext' => ['text_long', 'text', 'text_with_summary'],
         'number' => ['integer', 'decimal', 'float'],
@@ -27,8 +27,8 @@ final class DrupalTypeMapTest extends TestCase
         'link' => ['link'],
         'reference' => ['entity_reference', 'webform'],
         'date' => ['datetime', 'daterange', 'timestamp'],
-        'object' => ['entity_reference_revisions', 'double_field', 'address'],
-        'list' => ['entity_reference_revisions', 'double_field', 'address'],
+        'object' => ['entity_reference_revisions', 'double_field', 'address', 'geofield', 'office_hours'],
+        'list' => ['entity_reference_revisions', 'double_field', 'address', 'geofield', 'office_hours'],
         'flexible_content' => ['entity_reference_revisions'],
     ];
 
@@ -142,9 +142,9 @@ final class DrupalTypeMapTest extends TestCase
     public function an_unknown_storage_type_is_refused_by_name(): void
     {
         $this->expectException(\DomainException::class);
-        $this->expectExceptionMessage("no storage type 'geofield'");
+        $this->expectExceptionMessage("no storage type 'my_geo_type'");
 
-        (new DrupalTypeMap())->storageType('geofield');
+        (new DrupalTypeMap())->storageType('my_geo_type');
     }
 
     // ----------------------------------------------------------- the overlay
@@ -216,13 +216,13 @@ final class DrupalTypeMapTest extends TestCase
     {
         $map = new DrupalTypeMap(null, self::OVERLAY);
 
-        self::assertSame(['string', 'string_long', 'email', 'telephone', 'language_field', 'color_field_type'], $map->acceptedFor('text'));
+        self::assertSame(['string', 'string_long', 'email', 'telephone', 'language_field', 'color_field_type', 'video_embed_field', 'my_text_type'], $map->acceptedFor('text'));
         self::assertSame('string', $map->canonical(['type' => 'text']), 'the bundled canonical type stays first');
-        self::assertSame(['text'], $map->kitKeysFor('color_field_type'));
-        self::assertSame('color_field', $map->storageModule('color_field_type'));
-        self::assertSame('color_field_widget_default', $map->widget('color_field_type')['type']);
-        self::assertSame('color_field', $map->widgetModule('color_field_widget_default'));
-        self::assertSame('color_field', $map->formatterModule('color_field_formatter_text'));
+        self::assertSame(['text'], $map->kitKeysFor('my_text_type'));
+        self::assertSame('my_module', $map->storageModule('my_text_type'));
+        self::assertSame('my_text_widget', $map->widget('my_text_type')['type']);
+        self::assertSame('my_module', $map->widgetModule('my_text_widget'));
+        self::assertSame('my_module', $map->formatterModule('my_text_formatter'));
         // The rest of the bundled map is intact.
         self::assertSame($this->bundled()->acceptedFor('number'), $map->acceptedFor('number'));
         self::assertSame($this->bundled()->storageType('string'), $map->storageType('string'));
@@ -300,8 +300,8 @@ final class DrupalTypeMapTest extends TestCase
         $map = DrupalTypeMap::forSettings($settings);
 
         self::assertSame("{$dir}/sub/types.yaml", $settings->typeMap);
-        self::assertContains('color_field_type', $map->storageTypes());
-        self::assertNotContains('color_field_type', DrupalTypeMap::forSettings(new \Parisek\DefinitionKit\Drupal\DrupalSettings())->storageTypes());
+        self::assertContains('my_text_type', $map->storageTypes());
+        self::assertNotContains('my_text_type', DrupalTypeMap::forSettings(new \Parisek\DefinitionKit\Drupal\DrupalSettings())->storageTypes());
         @rmdir("{$dir}/sub");
         @rmdir($dir);
     }
@@ -428,10 +428,10 @@ final class DrupalTypeMapTest extends TestCase
     public function an_unknown_storage_type_names_the_overlay_as_the_fix(): void
     {
         try {
-            (new DrupalTypeMap())->storageType('color_field_type');
+            (new DrupalTypeMap())->storageType('my_text_type');
             self::fail('An unknown storage type was accepted.');
         } catch (\DomainException $e) {
-            self::assertStringContainsString("no storage type 'color_field_type'", $e->getMessage());
+            self::assertStringContainsString("no storage type 'my_text_type'", $e->getMessage());
             self::assertStringContainsString('drupal.type_map', $e->getMessage());
         }
     }

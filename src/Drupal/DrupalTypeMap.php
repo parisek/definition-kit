@@ -171,7 +171,7 @@ final class DrupalTypeMap
             if (isset($entry['part_settings_applies']) && (!is_array($entry['part_settings_applies']) || [] !== array_filter($entry['part_settings_applies'], static fn (mixed $v): bool => !is_array($v) || !array_is_list($v)))) {
                 throw $fail("storage_types.{$type}.part_settings_applies must map a setting to a list of subfield types.");
             }
-            foreach (['settings_keys', 'part_settings_keys'] as $listKey) {
+            foreach (['settings_keys', 'part_settings_keys', 'checkbox_settings'] as $listKey) {
                 if (isset($entry[$listKey]) && (!is_array($entry[$listKey]) || !array_is_list($entry[$listKey]) || [] !== array_filter($entry[$listKey], static fn (mixed $k): bool => !is_string($k) || '' === $k))) {
                     throw $fail("storage_types.{$type}.{$listKey} must be a list of setting names.");
                 }
@@ -601,7 +601,10 @@ final class DrupalTypeMap
         }
         foreach (null === $part ? $this->settingsKeys($storageType) : $this->partSettingsKeys($storageType, $subfield) as $key) {
             $holder = null === $part ? $settings : (array) ('instance' === $this->settingScope($storageType, $key, $part) ? ($settings[$part] ?? []) : ($settings['storage'][$part] ?? []));
-            $values[$key] = $holder[$key] ?? $this->settingDefault($storageType, $key, $part);
+            $default = $this->settingDefault($storageType, $key, $part);
+            $value = $this->selected($storageType, $key, $holder[$key] ?? $default, $part);
+            // A checkbox setting that Drupal saved as 0 or 1 (a color field's `opacity`) is the boolean the module reads.
+            $values[$key] = is_bool($default) && in_array($value, [0, 1, '0', '1'], true) ? (bool) $value : $value;
         }
 
         return $values;
@@ -619,10 +622,36 @@ final class DrupalTypeMap
     {
         $values = [];
         foreach (null === $part ? $this->settingsKeys($storageType) : $this->partSettingsKeys($storageType, $subfield) as $key) {
-            $values[$key] = array_key_exists($key, $declared) ? $declared[$key] : $this->settingDefault($storageType, $key, $part);
+            $values[$key] = $this->selected($storageType, $key, array_key_exists($key, $declared) ? $declared[$key] : $this->settingDefault($storageType, $key, $part), $part);
         }
 
         return $values;
+    }
+
+    /**
+     * A `checkboxes` setting (`checkbox_settings`) keeps an entry for every
+     * option and stores `0` for an unchecked one; the module reads only the
+     * checked ones. This keeps the checked options, each as `option: option`
+     * (the form's own value), so `{youtube: '0'}` and `[]` read the same.
+     * Any other setting passes through.
+     */
+    private function selected(string $storageType, string $key, mixed $value, ?string $part): mixed
+    {
+        if (null !== $part || !is_array($value) || !in_array($key, self::names($this->map['storage_types'][$storageType]['checkbox_settings'] ?? []), true)) {
+            return $value;
+        }
+        $kept = [];
+        if (array_is_list($value)) {
+            // `[youtube, vimeo]`: the options by name.
+            $value = array_fill_keys(array_map('strval', $value), true);
+        }
+        foreach ($value as $option => $checked) {
+            if (null !== $checked && false !== $checked && 0 !== $checked && '' !== $checked && '0' !== $checked) {
+                $kept[(string) $option] = (string) $option;
+            }
+        }
+
+        return $kept;
     }
 
     /**

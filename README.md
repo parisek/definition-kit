@@ -166,7 +166,7 @@ A field the aliased bundles do not all share names the ones that do have it in a
 
 | Kit type | Drupal storage (first is the default) |
 | --- | --- |
-| `text` | `string`, `string_long`, `email`, `telephone`, `language_field` |
+| `text` | `string`, `string_long`, `email`, `telephone`, `language_field`, `color_field_type`, `video_embed_field` |
 | `text` + `multiline: true` | `string_long`, `text_long`, `text` |
 | `richtext` | `text_long`, `text`, `text_with_summary` |
 | `number` | `integer`, `decimal`, `float` |
@@ -176,11 +176,11 @@ A field the aliased bundles do not all share names the ones that do have it in a
 | `link` | `link` |
 | `reference` | `entity_reference`, `webform` |
 | `date` | `datetime`, `daterange`, `timestamp` |
-| `list`, `flexible_content`, pinned `object` | `entity_reference_revisions`; `list` and `object` also `double_field`, `address` |
+| `list`, `flexible_content`, pinned `object` | `entity_reference_revisions`; `list` and `object` also `double_field`, `address`, `geofield`, `office_hours` |
 
 `drupal.storage` pins one exact type. The migration writes it wherever the export uses a type other than the default.
 
-**Contrib field types.** Four contrib storage types are in the bundled map. Each one always carries its `drupal.storage` pin:
+**Contrib field types.** Eight contrib storage types are in the bundled map. Each one always carries its `drupal.storage` pin:
 
 | Storage type (module) | Kit type | Notes |
 | --- | --- | --- |
@@ -188,6 +188,10 @@ A field the aliased bundles do not all share names the ones that do have it in a
 | `address` ([Address](https://www.drupal.org/project/address)) | `object` (one value) or `list` (several), `open: true` | The address properties that are active depend on the instance's country settings, and a display class reshapes them. So the definition does not list them. `available_countries`, `langcode_override` and `field_overrides` decide which countries and fields the editor gets, so they go in `drupal.settings` when they differ from the default. The module's deprecated `fields` setting (the address fields to show) wins over `field_overrides`. The migration reads it as a `hidden` override for each address field it leaves out, so a definition carries only `field_overrides`. The lint treats the two forms as equal, and the generator writes the modern form and empties `fields` when it changes an override. |
 | `webform` ([Webform](https://www.drupal.org/project/webform)) | `reference` with `of: entity:webform` | The target type is compared like a core entity reference. |
 | `language_field` ([Language Field](https://www.drupal.org/project/languagefield)) | `text`, `multiple: true` when the field takes several values | The value is a language code. The list of languages is the site's, not the author's, so a `select` with options would go stale. `language_range`, `included_languages`, `excluded_languages` and `groups` go in `drupal.settings` when they differ from the default. |
+| `geofield` ([Geofield](https://www.drupal.org/project/geofield)) | `object` (one value) or `list` (several), `open: true` | One item holds a geometry with derived columns (`value`, `geo_type`, `lat`, `lon`, bounds, `geohash`), not one scalar, so `text` would claim less than the storage keeps. `backend` (how the geometry is stored) goes in `drupal.settings` when it differs from the default. |
+| `office_hours` ([Office Hours](https://www.drupal.org/project/office_hours)) | `list`, `open: true` (`object` only when a site stores one item) | One item is one time slot of a day, and the field type has a fixed unlimited cardinality in the module, so a real field is a `list`. `exceptions`, `seasons`, `all_day`, `comment` and `cardinality_per_day` change which values an item holds and go in `drupal.settings` when they differ from the default. The time format, step, limits and validation only shape the form, and the lint does not compare them. |
+| `color_field_type` ([Color Field](https://www.drupal.org/project/color_field), module `color_field`) | `text` | The usual value is the color string. `format` (the stored string, for example `#123ABC` or `123abc`) and `opacity` (a second value per item) go in `drupal.settings` when they differ from the default, so a field that records opacity is not read as a plain `text` by accident. |
+| `video_embed_field` ([Video Embed Field](https://www.drupal.org/project/video_embed_field)) | `text` | The value is one URL, as a `link` without a title. `allowed_providers` goes in `drupal.settings` as the checked providers (`{youtube: youtube}` or `[youtube]`). The module stores `0` for each unchecked provider and reads an all-unchecked list as "any provider", so the lint reads `{youtube: '0'}` and `[]` as the same. |
 
 **`drupal.settings`.** A closed map of the settings that change what a field does. Each storage type lists its keys in the type map (`settings_keys`, and `part_settings_keys` for a part). The migration writes the keys that differ from the default. The lint compares every listed key, with the default for a key the definition leaves out, and reports a key the type does not list. The generator writes them into a new field and updates an existing field to the definition's value. A subfield storage setting (`precision`, `scale`, `maxlength`, `datetime_type`) holds data in its shape, so the generator refuses to change it on an existing field.
 
@@ -242,18 +246,18 @@ The file has the sections of the bundled map (read its header for each key). Eve
 
 ```yaml
 kit_types:                       # kit type => storage types it accepts
-  text: [color_field_type]       # appended after the bundled list, so the canonical type stays first
+  text: [my_text_type]       # appended after the bundled list, so the canonical type stays first
 storage_types:                   # what the generator writes when it creates the field
-  color_field_type:
-    module: color_field
+  my_text_type:
+    module: my_module
     storage_settings: {format: '#HEXHEX', opacity: false}
     instance_settings: {opacity: false}
-    widget: {type: color_field_widget_default, settings: {}}
-    formatter: {type: color_field_formatter_text, label: above, settings: {format: hex, opacity: false}}
+    widget: {type: my_text_widget, settings: {}}
+    formatter: {type: my_text_formatter, label: above, settings: {format: hex, opacity: false}}
 widget_modules:                  # plugin id => providing module (a dependency of a new display entry)
-  color_field_widget_default: color_field
+  my_text_widget: my_module
 formatter_modules:
-  color_field_formatter_text: color_field
+  my_text_formatter: my_module
 ```
 
 - **Merge.** `kit_types` lists are appended to the bundled lists. `storage_types`, `target_types` and `media_reference` merge key by key, all the way down: state only what changes (`storage_types.language_field.widget.settings.format.name`, or `storage_types.webform.formatter.type`). A list or a scalar replaces the bundled value, and an empty map changes nothing. `widget_modules` and `formatter_modules` merge by plugin id. A new `storage_types` entry must be complete.

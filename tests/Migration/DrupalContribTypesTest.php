@@ -851,16 +851,16 @@ final class DrupalContribTypesTest extends TestCase
             status: true
             dependencies:
               module:
-                - color_field
+                - my_module
                 - paragraphs
             id: paragraph.field_color
             field_name: field_color
             entity_type: paragraph
-            type: color_field_type
+            type: my_text_type
             settings:
               format: '#HEXHEX'
               opacity: false
-            module: color_field
+            module: my_module
             locked: false
             cardinality: 1
             translatable: true
@@ -876,7 +876,7 @@ final class DrupalContribTypesTest extends TestCase
                 - field.storage.paragraph.field_color
                 - paragraphs.paragraphs_type.banner
               module:
-                - color_field
+                - my_module
             id: paragraph.banner.field_color
             field_name: field_color
             entity_type: paragraph
@@ -889,7 +889,7 @@ final class DrupalContribTypesTest extends TestCase
             default_value_callback: ''
             settings:
               opacity: false
-            field_type: color_field_type
+            field_type: my_text_type
             YAML);
 
         return $dir;
@@ -904,7 +904,7 @@ final class DrupalContribTypesTest extends TestCase
             $reader->read('banner');
             self::fail('The unknown storage type was accepted.');
         } catch (\DomainException $e) {
-            self::assertStringContainsString("storage type 'color_field_type', which the kit has no type for", $e->getMessage());
+            self::assertStringContainsString("storage type 'my_text_type', which the kit has no type for", $e->getMessage());
             self::assertStringContainsString('drupal.type_map', $e->getMessage());
             self::assertStringContainsString('drupal.ignore_fields', $e->getMessage());
         }
@@ -921,7 +921,7 @@ final class DrupalContribTypesTest extends TestCase
         // migrate
         $fields = (new DrupalParagraphReader($config, $settings))->read('banner');
         self::assertSame(
-            ['color' => ['type' => 'text', 'role' => 'field', 'label' => 'Color', 'required' => true, 'drupal' => ['storage' => 'color_field_type']]],
+            ['color' => ['type' => 'text', 'role' => 'field', 'label' => 'Color', 'required' => true, 'drupal' => ['storage' => 'my_text_type']]],
             $fields,
         );
 
@@ -942,12 +942,12 @@ final class DrupalContribTypesTest extends TestCase
         (new DrupalConfigWriter())->write($plan, new ConfigStore($target));
         $storage = Yaml::parseFile("{$target}/field.storage.paragraph.field_color.yml");
         self::assertIsArray($storage);
-        self::assertSame(['color_field_type', 'color_field', ['format' => '#HEXHEX', 'opacity' => false]], [$storage['type'], $storage['module'], $storage['settings']]);
-        self::assertContains('color_field', $storage['dependencies']['module']);
+        self::assertSame(['my_text_type', 'my_module', ['format' => '#HEXHEX', 'opacity' => false]], [$storage['type'], $storage['module'], $storage['settings']]);
+        self::assertContains('my_module', $storage['dependencies']['module']);
         $form = Yaml::parseFile("{$target}/core.entity_form_display.paragraph.banner.default.yml");
         self::assertIsArray($form);
-        self::assertSame('color_field_widget_default', $form['content']['field_color']['type']);
-        self::assertContains('color_field', $form['dependencies']['module']);
+        self::assertSame('my_text_widget', $form['content']['field_color']['type']);
+        self::assertContains('my_module', $form['dependencies']['module']);
     }
 
     #[Test]
@@ -966,7 +966,7 @@ final class DrupalContribTypesTest extends TestCase
         self::assertSame(0, $code, implode("\n", $out));
         $written = Yaml::parseFile("{$project}/component/banner/banner.yaml");
         self::assertIsArray($written);
-        self::assertSame('color_field_type', $written['fields']['color']['drupal']['storage']);
+        self::assertSame('my_text_type', $written['fields']['color']['drupal']['storage']);
 
         exec($lint, $lintOut, $lintCode);
         self::assertSame(0, $lintCode, implode("\n", $lintOut));

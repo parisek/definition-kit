@@ -10,6 +10,16 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Drupal: `geofield`, `office_hours`, `color_field_type` and `video_embed_field` in the bundled type map.**
+  `geofield` and `office_hours` are an `open: true` `object` or `list`.
+  `color_field_type` and `video_embed_field` are a `text`. The defaults come
+  from the module sources (Geofield 8.x-1.67, Office Hours 8.x-1.29, Color Field
+  3.0.2, Video Embed Field 8.x-2.7). `drupal.settings` carries the settings
+  that change the data: `backend`; `exceptions`, `seasons`, `all_day`,
+  `comment`, `cardinality_per_day`; `format`, `opacity`; `allowed_providers`.
+  A new type-map key, `checkbox_settings`, marks a setting that a `checkboxes`
+  form stores with `0` for each unchecked option, so `{youtube: '0'}` and `[]`
+  read the same.
 - **Drupal: the four common contrib paragraph field types (#106).**
   `fields-migrate --drupal-config`, `fields-lint-drupal` and
   `fields-generate --target=drupal` now map `double_field`, `address`,
@@ -60,6 +70,22 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - An unpinned `text`, `reference`, `object` or `list` field now accepts the
   contrib storage types listed under it in the map. The lint finding for a
   storage type mismatch lists them too.
+
+### Fixed
+
+- **Drupal: a stale `field_config_cardinality` override no longer beats the
+  storage.** The module only narrows: it offers "unlimited" on an unlimited
+  storage alone and a limit up to the storage's own. An override outside that
+  range (a storage of 1 with `-1`, seen on a real site) now reads as the
+  storage value, and `0` or a number below `-1` reads as no override. Before,
+  the lint expected a `list` for a single-value field, and the generator
+  refused the "cardinality change".
+- **Drupal: `fields-migrate --drupal-display` no longer stops with "both X and
+  X are taken".** A field the display class never pairs falls back to its
+  natural prop name. When another field's evidence path already used that
+  name, the migration stopped, or put the mapped field on the wrong name. The
+  evidence now keeps its names and the unpaired field gets `<name>_field`,
+  pinned by `drupal.field`.
 
 ## [0.25.0] - 2026-10-22
 

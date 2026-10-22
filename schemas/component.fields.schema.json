@@ -200,7 +200,7 @@
                 "settings": {
                   "type": "object",
                   "minProperties": 1,
-                  "description": "Settings of the Drupal field that change what it does and differ from the module default: an address's `available_countries` and `field_overrides`, a language_field's `language_range`. The type map lists the keys of each storage type (`settings_keys`; `part_settings_keys` for a part of a double_field). The migration writes them, the lint compares them and `fields-generate --target=drupal` applies them."
+                  "description": "Settings of the Drupal field that change what it does and differ from the module default: an address's `available_countries` and `field_overrides`, a language_field's `language_range`, a color_field's `format` and `opacity`, a video_embed_field's `allowed_providers`, an office_hours field's `exceptions` and `seasons`. The type map lists the keys of each storage type (`settings_keys`; `part_settings_keys` for a part of a double_field). The migration writes them, the lint compares them and `fields-generate --target=drupal` applies them."
                 },
                 "bundles": {
                     "type": "array",
