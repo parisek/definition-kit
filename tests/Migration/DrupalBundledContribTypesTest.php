@@ -235,4 +235,27 @@ final class DrupalBundledContribTypesTest extends TestCase
             $read('core.entity_view_display.paragraph.video.default')['content']['field_video']['settings'],
         );
     }
+
+    #[Test]
+    public function the_generator_changes_a_data_setting_but_refuses_one_that_shapes_the_column(): void
+    {
+        $dir = $this->export();
+        $plan = function (string $bundle, string $key, mixed $value) use ($dir): \Parisek\DefinitionKit\Generator\Drupal\Plan {
+            $fields = $this->read($dir, $bundle);
+            $fields[$bundle]['drupal']['settings'][$key] = $value;
+            $definition = ['name' => 'Probe', 'category' => 'Block', 'kind' => 'block', 'drupal' => "/admin/structure/paragraphs_type/{$bundle}/fields", 'fields' => $fields];
+            $settings = new DrupalSettings();
+            $specs = (new BundleSpecBuilder($settings))->build($definition, $bundle, DrupalConfig::fromDirectory($dir));
+
+            return (new DrupalConfigPlanner(new ConfigStore($dir), $settings))->plan($specs);
+        };
+
+        // The color string's length and the geometry's column come from these two.
+        self::assertTrue($plan('color', 'format', 'HEXHEX')->refused());
+        self::assertTrue($plan('geo', 'backend', 'geofield_backend_postgis')->refused());
+        // These only change what an item holds.
+        $hours = $plan('hours', 'exceptions', true);
+        self::assertFalse($hours->refused());
+        self::assertContains('field.storage.paragraph.field_hours', $hours->changedNames());
+    }
 }

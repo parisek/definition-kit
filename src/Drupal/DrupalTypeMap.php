@@ -171,7 +171,7 @@ final class DrupalTypeMap
             if (isset($entry['part_settings_applies']) && (!is_array($entry['part_settings_applies']) || [] !== array_filter($entry['part_settings_applies'], static fn (mixed $v): bool => !is_array($v) || !array_is_list($v)))) {
                 throw $fail("storage_types.{$type}.part_settings_applies must map a setting to a list of subfield types.");
             }
-            foreach (['settings_keys', 'part_settings_keys', 'checkbox_settings'] as $listKey) {
+            foreach (['settings_keys', 'part_settings_keys', 'checkbox_settings', 'schema_settings'] as $listKey) {
                 if (isset($entry[$listKey]) && (!is_array($entry[$listKey]) || !array_is_list($entry[$listKey]) || [] !== array_filter($entry[$listKey], static fn (mixed $k): bool => !is_string($k) || '' === $k))) {
                     throw $fail("storage_types.{$type}.{$listKey} must be a list of setting names.");
                 }
@@ -498,6 +498,19 @@ final class DrupalTypeMap
     public function settingsKeys(string $storageType): array
     {
         return self::names($this->map['storage_types'][$storageType]['settings_keys'] ?? []);
+    }
+
+    /**
+     * The storage settings in `settings_keys` that shape the database column
+     * (color_field `format` sets the column length, geofield `backend` the
+     * column schema). The generator sets them on a new field and refuses to
+     * change them on an existing one.
+     *
+     * @return list<string>
+     */
+    public function schemaSettings(string $storageType): array
+    {
+        return self::names($this->map['storage_types'][$storageType]['schema_settings'] ?? []);
     }
 
     /**

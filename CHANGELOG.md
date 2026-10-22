@@ -19,7 +19,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `comment`, `cardinality_per_day`; `format`, `opacity`; `allowed_providers`.
   A new type-map key, `checkbox_settings`, marks a setting that a `checkboxes`
   form stores with `0` for each unchecked option, so `{youtube: '0'}` and `[]`
-  read the same.
+  read the same. Another, `schema_settings`, marks a setting that shapes the
+  database column (`format`, `backend`): the generator sets it on a new field
+  and refuses to change it on an existing one.
 - **Drupal: the four common contrib paragraph field types (#106).**
   `fields-migrate --drupal-config`, `fields-lint-drupal` and
   `fields-generate --target=drupal` now map `double_field`, `address`,

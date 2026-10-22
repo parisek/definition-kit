@@ -337,6 +337,11 @@ final class DrupalConfigPlanner
         $actual = $this->types->actualSettings($type, is_array($existing['settings'] ?? null) ? $existing['settings'] : []);
         foreach ($wanted['top'] as $key => $value) {
             if (!DrupalTypeMap::sameSetting($value, $actual[$key] ?? null)) {
+                if (in_array($key, $this->types->schemaSettings($type), true)) {
+                    $this->refuse($name, "setting {$key} shapes the database column; a change needs a data migration");
+
+                    return;
+                }
                 $this->working[$name]['settings'][$key] = $value;
                 $this->because($name, $key);
             }

@@ -43,6 +43,10 @@
 #                       `{youtube: '0'}` and `[]` read the same. A definition
 #                       lists the checked ones (`{youtube: youtube}` or
 #                       `[youtube]`)
+#     schema_settings   the `settings_keys` that shape the database column
+#                       (color_field `format` sets its length). The generator
+#                       sets them on a new field and refuses to change them on
+#                       an existing one: that needs a data migration
 #     legacy_settings   a deprecated setting that the module reads in place of
 #                       another: `<legacy key>: {into, override, universe}`.
 #                       It is normalised to `into` when read, so a definition
@@ -347,6 +351,7 @@ storage_types:
   geofield:
     module: geofield
     settings_keys: [backend]
+    schema_settings: [backend]
     storage_settings: {backend: geofield_backend_default}
     instance_settings: {}
     widget: {type: geofield_latlon, settings: {html5_geolocation: false}}
@@ -401,6 +406,7 @@ storage_types:
     # `format` is the stored string (#123ABC, 123abc); `opacity` adds a second
     # value to each item.
     settings_keys: [format, opacity]
+    schema_settings: [format]
     storage_settings: {format: '#HEXHEX'}
     instance_settings: {opacity: true}
     widget: {type: color_field_widget_default, settings: {placeholder_color: '', placeholder_opacity: ''}}
