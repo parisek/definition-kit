@@ -404,15 +404,11 @@ final class DrupalDriftLinter
             if (!is_string($storage)) {
                 continue;
             }
-            $pinned = $definition['drupal']['storage'] ?? null;
-            if (is_string($pinned) && $pinned !== $storage) {
-                $findings[] = "{$at}: {$part} is a {$storage} subfield in Drupal; the definition pins {$pinned}";
-            }
             $partSettings = is_array($definition['drupal']['settings'] ?? null) ? $definition['drupal']['settings'] : [];
             $this->compareSettings(
-                $this->types->partSettingsKeys($drupal->type),
+                $this->types->partSettingsKeys($drupal->type, $storage),
                 $partSettings,
-                $this->types->declaredSettings($drupal->type, $partSettings, $part),
+                $this->types->declaredSettings($drupal->type, $partSettings, $part, $storage),
                 $this->types->actualSettings($drupal->type, $drupal->settings, $part),
                 "{$at} {$part}",
                 $drupal->type,
@@ -429,6 +425,17 @@ final class DrupalDriftLinter
                     $kind,
                     implode('|', $allowed),
                 );
+                continue;
+            }
+            // The subfield the generator would create: the pin, else the one
+            // the kit type implies. The export must have that one, or a fresh
+            // generate would build another storage than this site has.
+            $pinned = $definition['drupal']['storage'] ?? null;
+            $expected = is_string($pinned) ? $pinned : $this->types->partStorageType($drupal->type, $kind);
+            if ($expected !== $storage) {
+                $findings[] = is_string($pinned)
+                    ? "{$at}: {$part} is a {$storage} subfield in Drupal; the definition pins {$pinned}"
+                    : "{$at}: {$part} is a {$storage} subfield in Drupal; the definition type {$kind} creates " . ($expected ?? 'none') . " (pin drupal.storage: {$storage})";
             }
         }
     }

@@ -32,10 +32,13 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `available_countries`, `langcode_override` and `field_overrides`; a
   language_field's `language_range`, `included_languages`,
   `excluded_languages` and `groups`; a double_field part's `maxlength`,
-  `precision`, `scale`, `datetime_type`, `min` and `max`. The migration writes
+  `precision`, `scale`, `datetime_type`, `min`, `max` and, for a boolean part,
+  `on_label` and `off_label`. The deprecated address `fields` setting is read
+  as the equivalent `field_overrides`. The migration writes
   the ones that differ from the default, the lint compares them, the generator
   applies them. A double_field part also pins its exact subfield storage type
-  in `drupal.storage` (`integer`, `uri`, `email`, ...).
+  in `drupal.storage` (`integer`, `uri`, `email`, ...), and the lint always
+  compares that subfield type, so a part without its pin is drift.
 - **`drupal.type_map` in `definition-kit.yaml`.** A project file, relative to
   `definition-kit.yaml`, merged over `schemas/drupal-type-map.yaml`. A project
   can map a contrib storage type the kit does not know without a kit release.

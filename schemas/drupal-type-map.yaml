@@ -35,6 +35,12 @@
 #     part_settings_keys  the same for a part (double_field subfield storage
 #                       settings and instance limits), in the part's
 #                       `drupal.settings`
+#     part_settings_applies  part setting => the subfield storage types it
+#                       applies to (the others apply to every subfield)
+#     legacy_settings   a deprecated setting that the module reads in place of
+#                       another: `<legacy key>: {into, override, universe}`.
+#                       It is normalised to `into` when read, so a definition
+#                       carries only the modern form
 #
 # A storage type that `kit_types` lists under `reference` is an entity
 # reference: its target type (`storage_settings.target_type`) is compared like
@@ -244,7 +250,8 @@ storage_types:
   double_field:
     module: double_field
     parts: [first, second]
-    part_settings_keys: [maxlength, precision, scale, datetime_type, min, max]
+    part_settings_keys: [maxlength, precision, scale, datetime_type, min, max, on_label, off_label]
+    part_settings_applies: {on_label: [boolean], off_label: [boolean]}
     part_types:
       boolean: [boolean]
       string: [text, select]
@@ -280,6 +287,14 @@ storage_types:
   address:
     module: address
     settings_keys: [available_countries, langcode_override, field_overrides]
+    # The deprecated `fields` setting (the address fields to show) wins over
+    # `field_overrides` in the module. It reads as a `hidden` override for
+    # each address field it leaves out.
+    legacy_settings:
+      fields:
+        into: field_overrides
+        override: hidden
+        universe: [administrativeArea, locality, dependentLocality, postalCode, sortingCode, addressLine1, addressLine2, addressLine3, organization, givenName, additionalName, familyName]
     storage_settings: {}
     instance_settings: {available_countries: {}, langcode_override: '', field_overrides: {}, fields: {}}
     widget: {type: address_default, settings: {wrapper_type: fieldset}}

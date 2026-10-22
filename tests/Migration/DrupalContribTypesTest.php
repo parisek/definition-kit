@@ -555,6 +555,16 @@ final class DrupalContribTypesTest extends TestCase
 
         // Into its own export: no change.
         self::assertSame([], $this->plan(['pair' => $definition], $dir, $config)->changedNames());
+
+        // Without its pin a part would be created as the canonical subfield type, so the lint calls it drift.
+        if ('' !== $pin) {
+            $unpinned = $definition;
+            unset($unpinned['fields']['pair']['fields']['first']['drupal']['storage']);
+            $drift = (new DrupalDriftLinter($config, new DrupalSettings()))->lint($unpinned, 'pair');
+            self::assertSame(DrupalDriftResult::DRIFT, $drift->status, 'a missing pin on ' . $type);
+            self::assertStringContainsString("first is a {$type} subfield in Drupal; the definition type", implode("\n", $drift->findings));
+            self::assertStringContainsString("pin drupal.storage: {$type}", implode("\n", $drift->findings));
+        }
     }
 
     #[Test]
@@ -693,6 +703,83 @@ final class DrupalContribTypesTest extends TestCase
         $updated = $this->plan($changed, $dir, $config);
         self::assertFalse($updated->refused());
         self::assertEqualsCanonicalizing(['field.field.paragraph.company.field_address', 'field.storage.paragraph.field_langcode'], $updated->changedNames());
+    }
+
+    #[Test]
+    public function the_legacy_address_fields_setting_reads_as_hidden_overrides(): void
+    {
+        $dir = $this->copyConfig();
+        $file = "{$dir}/field.field.paragraph.company.field_address.yml";
+        $data = Yaml::parseFile($file);
+        self::assertIsArray($data);
+        // The module reads `fields` first and ignores field_overrides when it is set.
+        $data['settings']['fields'] = ['locality', 'postalCode', 'countryCode'];
+        file_put_contents($file, \Parisek\DefinitionKit\Drupal\DrupalYaml::dump($data));
+        $config = DrupalConfig::fromDirectory($dir);
+        $fields = (new DrupalParagraphReader($config, new DrupalSettings()))->read('company');
+
+        $overrides = $fields['address']['drupal']['settings']['field_overrides'];
+        self::assertSame(
+            ['administrativeArea', 'dependentLocality', 'sortingCode', 'addressLine1', 'addressLine2', 'addressLine3', 'organization', 'givenName', 'additionalName', 'familyName'],
+            array_keys($overrides),
+        );
+        self::assertSame(['override' => 'hidden'], $overrides['addressLine1'], 'field_overrides of the export is ignored, as in the module');
+        self::assertArrayNotHasKey('fields', $fields['address']['drupal']['settings']);
+
+        $definition = ['name' => 'Company', 'category' => 'Block', 'kind' => 'block', 'drupal' => '/admin/structure/paragraphs_type/company/fields', 'fields' => $fields];
+        $linter = new DrupalDriftLinter($config, new DrupalSettings());
+        self::assertSame(DrupalDriftResult::OK, $linter->lint($definition, 'company')->status);
+        self::assertSame([], $this->plan(['company' => $definition], $dir, $config)->changedNames(), 'the legacy form is equivalent');
+
+        // Fresh generate writes the modern form.
+        $target = $this->tempDir();
+        (new DrupalConfigWriter())->write($this->plan(['company' => $definition], $target, null), new ConfigStore($target));
+        $made = DrupalConfig::fromDirectory($target)->fields('company')['field_address'];
+        self::assertSame([], $made->settings['fields']);
+        self::assertSame($overrides, $made->settings['field_overrides']);
+        self::assertSame(DrupalDriftResult::OK, (new DrupalDriftLinter(DrupalConfig::fromDirectory($target), new DrupalSettings()))->lint($definition, 'company')->status);
+
+        // A changed definition updates the override and empties the legacy key, which would win otherwise.
+        $changed = $definition;
+        unset($changed['fields']['address']['drupal']['settings']['field_overrides']['addressLine1']);
+        $plan = $this->plan(['company' => $changed], $dir, $config);
+        self::assertSame(['field.field.paragraph.company.field_address'], $plan->changedNames());
+        (new DrupalConfigWriter())->write($plan, new ConfigStore($dir));
+        $after = DrupalConfig::fromDirectory($dir)->fields('company')['field_address'];
+        self::assertSame([], $after->settings['fields']);
+        self::assertArrayNotHasKey('addressLine1', $after->settings['field_overrides']);
+        self::assertSame(DrupalDriftResult::OK, (new DrupalDriftLinter(DrupalConfig::fromDirectory($dir), new DrupalSettings()))->lint($changed, 'company')->status);
+    }
+
+    #[Test]
+    public function boolean_part_labels_are_settings_of_a_boolean_part_only(): void
+    {
+        $dir = $this->exportWithPair([], ['first' => ['on_label' => 'Zapnuto', 'off_label' => 'Vypnuto'], 'second' => ['on_label' => 'Yes', 'off_label' => 'No']]);
+        $config = DrupalConfig::fromDirectory($dir);
+        $fields = (new DrupalParagraphReader($config, new DrupalSettings()))->read('pair');
+
+        self::assertArrayNotHasKey('settings', $fields['pair']['fields']['first']['drupal'] ?? [], 'the labels of an integer part mean nothing');
+        self::assertSame(['on_label' => 'Yes', 'off_label' => 'No'], $fields['pair']['fields']['second']['drupal']['settings']);
+        $definition = ['name' => 'Pair', 'category' => 'Block', 'kind' => 'block', 'drupal' => '/admin/structure/paragraphs_type/pair/fields', 'fields' => $fields];
+        $linter = new DrupalDriftLinter($config, new DrupalSettings());
+        self::assertSame(DrupalDriftResult::OK, $linter->lint($definition, 'pair')->status);
+
+        $drift = $definition;
+        $drift['fields']['pair']['fields']['second']['drupal']['settings']['on_label'] = 'Active';
+        self::assertStringContainsString('second: setting on_label is "Yes" in Drupal; the definition expects "Active"', implode("\n", $linter->lint($drift, 'pair')->findings));
+        $misplaced = $definition;
+        $misplaced['fields']['pair']['fields']['first']['drupal']['settings'] = ['on_label' => 'x'];
+        self::assertStringContainsString('first: drupal.settings.on_label is not a setting of double_field', implode("\n", $linter->lint($misplaced, 'pair')->findings));
+
+        $target = $this->tempDir();
+        (new DrupalConfigWriter())->write($this->plan(['pair' => $definition], $target, null), new ConfigStore($target));
+        $made = DrupalConfig::fromDirectory($target)->fields('pair')['field_pair'];
+        self::assertSame(['Yes', 'No'], [$made->settings['second']['on_label'], $made->settings['second']['off_label']]);
+        self::assertSame(['On', 'Off'], [$made->settings['first']['on_label'], $made->settings['first']['off_label']], 'the module default');
+        self::assertSame([], $this->plan(['pair' => $definition], $dir, $config)->changedNames());
+
+        $plan = $this->plan(['pair' => $drift], $dir, $config);
+        self::assertSame(['field.field.paragraph.pair.field_pair'], $plan->changedNames());
     }
 
     // ----------------------------------------------------------------- overlay

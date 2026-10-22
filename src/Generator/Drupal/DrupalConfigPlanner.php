@@ -536,9 +536,16 @@ final class DrupalConfigPlanner
 
         $wanted = $this->settingsFor($type, [$field], 'instance');
         $current = self::map($entity['settings'] ?? []);
+        $actual = $this->types->actualSettings($type, $current);
         foreach ($wanted['top'] as $key => $value) {
-            if (!DrupalTypeMap::sameSetting($value, $current[$key] ?? $this->types->settingDefault($type, $key))) {
+            if (!DrupalTypeMap::sameSetting($value, $actual[$key] ?? null)) {
                 $this->working[$name]['settings'][$key] = $value;
+                // A deprecated setting that the module reads first would hide the new value.
+                foreach ($this->types->legacySettingKeys($type) as $legacy) {
+                    if (isset($this->working[$name]['settings'][$legacy])) {
+                        $this->working[$name]['settings'][$legacy] = [];
+                    }
+                }
                 $this->because($name, $key);
             }
         }

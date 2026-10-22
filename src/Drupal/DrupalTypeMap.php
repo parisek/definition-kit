@@ -163,6 +163,14 @@ final class DrupalTypeMap
                     throw $fail("storage_types.{$type} needs a {$plugin} with a `type`.");
                 }
             }
+            foreach ((array) ($entry['legacy_settings'] ?? []) as $legacyKey => $rule) {
+                if (!is_array($rule) || !is_string($rule['into'] ?? null) || !is_string($rule['override'] ?? null) || !is_array($rule['universe'] ?? null) || !array_is_list($rule['universe'])) {
+                    throw $fail("storage_types.{$type}.legacy_settings.{$legacyKey} needs `into`, `override` and a `universe` list.");
+                }
+            }
+            if (isset($entry['part_settings_applies']) && (!is_array($entry['part_settings_applies']) || [] !== array_filter($entry['part_settings_applies'], static fn (mixed $v): bool => !is_array($v) || !array_is_list($v)))) {
+                throw $fail("storage_types.{$type}.part_settings_applies must map a setting to a list of subfield types.");
+            }
             foreach (['settings_keys', 'part_settings_keys'] as $listKey) {
                 if (isset($entry[$listKey]) && (!is_array($entry[$listKey]) || !array_is_list($entry[$listKey]) || [] !== array_filter($entry[$listKey], static fn (mixed $k): bool => !is_string($k) || '' === $k))) {
                     throw $fail("storage_types.{$type}.{$listKey} must be a list of setting names.");
@@ -499,9 +507,56 @@ final class DrupalTypeMap
      *
      * @return list<string>
      */
-    public function partSettingsKeys(string $storageType): array
+    public function partSettingsKeys(string $storageType, ?string $subfield = null): array
     {
-        return self::names($this->map['storage_types'][$storageType]['part_settings_keys'] ?? []);
+        $keys = self::names($this->map['storage_types'][$storageType]['part_settings_keys'] ?? []);
+        if (null === $subfield) {
+            return $keys;
+        }
+        $applies = $this->map['storage_types'][$storageType]['part_settings_applies'] ?? [];
+
+        return array_values(array_filter(
+            $keys,
+            static fn (string $key): bool => !is_array($applies[$key] ?? null) || in_array($subfield, $applies[$key], true),
+        ));
+    }
+
+    /**
+     * Reads a deprecated setting as the modern one the module would use
+     * (address: `fields` becomes a `hidden` override for each address field
+     * it leaves out), and empties the deprecated key.
+     *
+     * @param array<string,mixed> $settings
+     * @return array<string,mixed>
+     */
+    public function normalizeSettings(string $storageType, array $settings): array
+    {
+        $rules = $this->map['storage_types'][$storageType]['legacy_settings'] ?? [];
+        foreach (is_array($rules) ? $rules : [] as $legacyKey => $rule) {
+            $legacy = $settings[$legacyKey] ?? null;
+            if (!is_array($rule) || !is_array($legacy) || [] === $legacy) {
+                continue;
+            }
+            $kept = array_map('strval', array_values($legacy));
+            $into = [];
+            foreach ((array) $rule['universe'] as $name) {
+                if (!in_array((string) $name, $kept, true)) {
+                    $into[(string) $name] = ['override' => (string) $rule['override']];
+                }
+            }
+            $settings[(string) $rule['into']] = $into;
+            $settings[(string) $legacyKey] = [];
+        }
+
+        return $settings;
+    }
+
+    /** @return list<string> the deprecated keys that `normalizeSettings()` empties */
+    public function legacySettingKeys(string $storageType): array
+    {
+        $rules = $this->map['storage_types'][$storageType]['legacy_settings'] ?? [];
+
+        return is_array($rules) ? array_map('strval', array_keys($rules)) : [];
     }
 
     /** @return 'storage'|'instance'|null where the generator writes a setting */
@@ -540,7 +595,11 @@ final class DrupalTypeMap
     public function actualSettings(string $storageType, array $settings, ?string $part = null): array
     {
         $values = [];
-        foreach (null === $part ? $this->settingsKeys($storageType) : $this->partSettingsKeys($storageType) as $key) {
+        $subfield = null !== $part && is_string($settings['storage'][$part]['type'] ?? null) ? $settings['storage'][$part]['type'] : null;
+        if (null === $part) {
+            $settings = $this->normalizeSettings($storageType, $settings);
+        }
+        foreach (null === $part ? $this->settingsKeys($storageType) : $this->partSettingsKeys($storageType, $subfield) as $key) {
             $holder = null === $part ? $settings : (array) ('instance' === $this->settingScope($storageType, $key, $part) ? ($settings[$part] ?? []) : ($settings['storage'][$part] ?? []));
             $values[$key] = $holder[$key] ?? $this->settingDefault($storageType, $key, $part);
         }
@@ -553,12 +612,13 @@ final class DrupalTypeMap
      * value, the default for a key it leaves out.
      *
      * @param array<mixed> $declared `drupal.settings` of the field or the part
+     * @param string|null $subfield the part's subfield storage type, to leave out the keys that do not apply to it
      * @return array<string,mixed>
      */
-    public function declaredSettings(string $storageType, array $declared, ?string $part = null): array
+    public function declaredSettings(string $storageType, array $declared, ?string $part = null, ?string $subfield = null): array
     {
         $values = [];
-        foreach (null === $part ? $this->settingsKeys($storageType) : $this->partSettingsKeys($storageType) as $key) {
+        foreach (null === $part ? $this->settingsKeys($storageType) : $this->partSettingsKeys($storageType, $subfield) as $key) {
             $values[$key] = array_key_exists($key, $declared) ? $declared[$key] : $this->settingDefault($storageType, $key, $part);
         }
 

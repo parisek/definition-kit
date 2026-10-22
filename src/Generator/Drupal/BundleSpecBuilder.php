@@ -340,13 +340,15 @@ final class BundleSpecBuilder
                     $options[(string) $value] = is_scalar($optionLabel) ? (string) $optionLabel : (string) $value;
                 }
             }
+            $kind = StructuralType::canonical((string) ($part['type'] ?? 'text'));
+            $pin = is_string($part['drupal']['storage'] ?? null) ? $part['drupal']['storage'] : null;
             $parts[$name] = [
-                'type' => StructuralType::canonical((string) ($part['type'] ?? 'text')),
+                'type' => $kind,
                 'label' => is_string($part['label'] ?? null) && '' !== trim($part['label']) ? $part['label'] : ucfirst($name),
                 'required' => true === ($part['required'] ?? false),
                 'options' => $options,
-                'storage' => is_string($part['drupal']['storage'] ?? null) ? $part['drupal']['storage'] : null,
-                'settings' => $this->types->declaredSettings($storage, is_array($part['drupal']['settings'] ?? null) ? $part['drupal']['settings'] : [], $name),
+                'storage' => $pin,
+                'settings' => $this->types->declaredSettings($storage, is_array($part['drupal']['settings'] ?? null) ? $part['drupal']['settings'] : [], $name, $pin ?? $this->types->partStorageType($storage, $kind)),
             ];
         }
 
