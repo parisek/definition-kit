@@ -279,4 +279,20 @@ final class DrupalBundledContribTypesTest extends TestCase
         $color['color']['drupal']['settings']['format'] = '#HEXHEX';
         $this->assertDrift($this->lint($dir, 'color', $color), 'format');
     }
+
+    #[Test]
+    public function a_schema_setting_the_storage_omits_is_the_default_not_the_instance_copy(): void
+    {
+        $dir = $this->tempDir();
+        $this->field($dir, 'geo', 'field_geo', 'geofield', 'geofield', [], ['backend' => 'geofield_backend_postgis'], 1);
+        $this->field($dir, 'color', 'field_color', 'color_field_type', 'color_field', [], ['opacity' => true, 'format' => 'HEXHEX'], 1);
+
+        foreach ([['geo', 'backend', 'geofield_backend_postgis'], ['color', 'format', 'HEXHEX']] as [$bundle, $key, $instanceValue]) {
+            $fields = $this->read($dir, $bundle);
+            self::assertArrayNotHasKey($key, $fields[$bundle]['drupal']['settings'] ?? [], $bundle);
+            self::assertSame(DrupalDriftResult::OK, $this->lint($dir, $bundle, $fields)->status, $bundle);
+            $fields[$bundle]['drupal']['settings'][$key] = $instanceValue;
+            $this->assertDrift($this->lint($dir, $bundle, $fields), $key);
+        }
+    }
 }

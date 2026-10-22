@@ -537,7 +537,8 @@ final class DrupalTypeMap
     /**
      * The settings of a field as the lint and the migration read them: the
      * storage settings with the instance settings merged over them, except
-     * the type's `schema_settings`. Those shape the column, and Drupal builds
+     * the type's `schema_settings`, which come from the storage (its value, else
+     * the default). Those shape the column, and Drupal builds
      * the column from the storage, so an instance copy of the key (the config
      * can carry one) must not hide the storage's value.
      *
@@ -547,8 +548,9 @@ final class DrupalTypeMap
     {
         $settings = $field->settings;
         foreach ($this->schemaSettings($field->type) as $key) {
-            if (is_array($field->storageSettings) && array_key_exists($key, $field->storageSettings)) {
-                $settings[$key] = $field->storageSettings[$key];
+            if (is_array($field->storageSettings)) {
+                // The storage's value, else the type's default; never the instance copy.
+                $settings[$key] = array_key_exists($key, $field->storageSettings) ? $field->storageSettings[$key] : $this->settingDefault($field->type, $key);
             }
         }
 
