@@ -198,6 +198,27 @@ final class DrupalTypeMap
                 throw $fail("storage_types.{$type}.parts must be a list of names.");
             }
         }
+        if ($complete) {
+            // Only a merged (or bundled) entry has all the keys the lists point at.
+            foreach ((array) ($map['storage_types'] ?? []) as $type => $entry) {
+                $keys = self::names($entry['settings_keys'] ?? []);
+                foreach (self::names($entry['checkbox_settings'] ?? []) as $name) {
+                    if (!in_array($name, $keys, true)) {
+                        throw $fail("storage_types.{$type}.checkbox_settings names '{$name}', which is not in its settings_keys.");
+                    }
+                }
+                foreach (self::names($entry['schema_settings'] ?? []) as $name) {
+                    if (!in_array($name, $keys, true)) {
+                        throw $fail("storage_types.{$type}.schema_settings names '{$name}', which is not in its settings_keys.");
+                    }
+                    $inInstance = is_array($entry['instance_settings'] ?? null) && array_key_exists($name, $entry['instance_settings']);
+                    $inStorage = is_array($entry['storage_settings'] ?? null) && array_key_exists($name, $entry['storage_settings']);
+                    if ($inInstance || !$inStorage) {
+                        throw $fail("storage_types.{$type}.schema_settings names '{$name}', which is not a storage setting (it shapes a database column, so it lives in storage_settings).");
+                    }
+                }
+            }
+        }
         foreach (['widget_modules', 'formatter_modules'] as $section) {
             foreach ((array) ($map[$section] ?? []) as $plugin => $module) {
                 if (!is_string($module) || '' === $module) {

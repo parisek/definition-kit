@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Parisek\DefinitionKit\Tests\Drupal;
 
 use Parisek\DefinitionKit\Drupal\DrupalTypeMap;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
@@ -434,6 +435,40 @@ final class DrupalTypeMapTest extends TestCase
             self::assertStringContainsString("no storage type 'my_text_type'", $e->getMessage());
             self::assertStringContainsString('drupal.type_map', $e->getMessage());
         }
+    }
+
+    /** @return iterable<string,array{string,string,string}> */
+    public static function badSettingLists(): iterable
+    {
+        yield 'misspelled schema setting' => ['color_field_type', 'schema_settings: [formatt]', "schema_settings names 'formatt', which is not in its settings_keys"];
+        yield 'instance-scoped schema setting' => ['color_field_type', 'schema_settings: [opacity]', "schema_settings names 'opacity', which is not a storage setting"];
+        yield 'misspelled checkbox setting' => ['video_embed_field', 'checkbox_settings: [allowed_provider]', "checkbox_settings names 'allowed_provider', which is not in its settings_keys"];
+    }
+
+    #[Test]
+    #[DataProvider('badSettingLists')]
+    public function an_overlay_cannot_point_schema_or_checkbox_settings_at_a_setting_that_does_not_fit(string $type, string $line, string $message): void
+    {
+        $file = sys_get_temp_dir() . '/dk-typemap-' . uniqid('', true) . '.yaml';
+        file_put_contents($file, "storage_types:\n  {$type}:\n    {$line}\n");
+        try {
+            new DrupalTypeMap(null, $file);
+            self::fail('The overlay was accepted.');
+        } catch (\RuntimeException $e) {
+            self::assertStringContainsString($message, $e->getMessage());
+            self::assertStringContainsString($file, $e->getMessage());
+        } finally {
+            unlink($file);
+        }
+    }
+
+    #[Test]
+    public function the_bundled_schema_and_checkbox_settings_fit_their_settings_keys(): void
+    {
+        foreach (['geofield' => ['backend'], 'color_field_type' => ['format']] as $type => $names) {
+            self::assertSame($names, $this->bundled()->schemaSettings($type));
+        }
+        self::assertSame([], $this->bundled()->schemaSettings('office_hours'));
     }
 
     private function bundled(): DrupalTypeMap
