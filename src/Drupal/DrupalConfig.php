@@ -140,6 +140,13 @@ final class DrupalConfig
      * The cardinality an instance really has: the storage value, unless the
      * `field_config_cardinality` contrib module narrows it on the instance.
      *
+     * The module only narrows. Its instance form offers "unlimited" on an
+     * unlimited storage alone, and a limit up to the storage's own. Drupal
+     * builds a multiple-value form for a storage of 1 never, so the module's
+     * form hooks do not run there. An override outside that range is a
+     * leftover (the storage was changed after it was saved): the storage
+     * rules.
+     *
      * @param array<mixed> $storage field.storage.* config
      * @param array<mixed> $instance field.field.* config
      */
@@ -147,13 +154,20 @@ final class DrupalConfig
     {
         $cardinality = (int) ($storage['cardinality'] ?? 1);
         $override = self::cardinalityOverride($instance);
+        if (null === $override) {
+            return $cardinality;
+        }
+        if (DrupalField::UNLIMITED === $cardinality) {
+            return $override;
+        }
 
-        return $override ?? $cardinality;
+        return $override >= 1 && $override <= $cardinality ? $override : $cardinality;
     }
 
     /**
      * The `field_config_cardinality` override on an instance, or null when
-     * it has none.
+     * it has none. The module reads an empty value (0, '') as none, and its
+     * form saves a count from 1 or -1; any other number is no override.
      *
      * @param array<mixed> $instance
      */
@@ -161,7 +175,9 @@ final class DrupalConfig
     {
         $override = $instance['third_party_settings']['field_config_cardinality']['cardinality_config'] ?? null;
         if (is_scalar($override) && '' !== (string) $override && is_numeric((string) $override)) {
-            return (int) $override;
+            $count = (int) $override;
+
+            return $count >= 1 || DrupalField::UNLIMITED === $count ? $count : null;
         }
 
         return null;

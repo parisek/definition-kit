@@ -1,0 +1,6 @@
+id: paragraph.field_items
+field_name: field_items
+entity_type: paragraph
+type: string
+settings: {  }
+cardinality: 3

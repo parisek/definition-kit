@@ -1,0 +1,13 @@
+id: paragraph.valid_narrow.field_media
+field_name: field_media
+entity_type: paragraph
+bundle: valid_narrow
+label: field_media
+required: false
+settings: {  }
+field_type: entity_reference
+third_party_settings:
+  field_config_cardinality:
+    cardinality_config: '1'
+    cardinality_label_config: false
+    unlimited_not_required: ''
