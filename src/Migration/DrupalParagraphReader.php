@@ -146,6 +146,18 @@ final class DrupalParagraphReader
             }
         }
 
+        // Evidence wins its prop name. A field without evidence may have the
+        // same natural name (a `video` field next to a `$content['video']`
+        // array built from other fields), so the names the evidence uses are
+        // known before any field is placed, whatever the order of the fields.
+        $claimed = [];
+        foreach (array_keys($this->config->fields($bundle)) as $machine) {
+            $path = $this->settings->ignores($machine) ? [] : ($byField[$machine]['path'] ?? []);
+            foreach (array_keys($path) as $depth) {
+                $claimed[implode('.', array_slice($path, 0, $depth + 1))] = true;
+            }
+        }
+
         $tree = [];
         foreach ($this->config->fields($bundle) as $machine => $drupalField) {
             if ($this->settings->ignores($machine)) {
@@ -155,10 +167,9 @@ final class DrupalParagraphReader
             $entry = $byField[$machine] ?? null;
             if (null !== $entry && [] !== $entry['path']) {
                 $path = $entry['path'];
-            } elseif (isset($groupOf[$machine])) {
-                $path = [$groupOf[$machine], $leaf];
             } else {
-                $path = [$leaf];
+                $path = isset($groupOf[$machine]) ? [$groupOf[$machine], $leaf] : [$leaf];
+                $path = $this->unclaimed($path, $claimed);
             }
 
             $field = $this->mapField($drupalField, $bundle, $entry['children'] ?? [], $stack);
@@ -198,6 +209,30 @@ final class DrupalParagraphReader
         }
 
         return $tree;
+    }
+
+    /**
+     * The path for a field without evidence: its own when no evidence path
+     * claims it, else the same with `_field` added to the last name (`video`
+     * becomes `video_field`), then `_field_2` and on. The definition pins the
+     * Drupal field either way, so the name is free to differ.
+     *
+     * @param non-empty-list<string> $path
+     * @param array<string,true> $claimed dotted evidence paths and their prefixes
+     * @return non-empty-list<string>
+     */
+    private function unclaimed(array $path, array $claimed): array
+    {
+        if (!isset($claimed[implode('.', $path)])) {
+            return $path;
+        }
+        $last = array_pop($path);
+        for ($n = 1;; $n++) {
+            $name = $last . '_field' . ($n > 1 ? "_{$n}" : '');
+            if (!isset($claimed[implode('.', [...$path, $name])])) {
+                return [...$path, $name];
+            }
+        }
     }
 
     /**
