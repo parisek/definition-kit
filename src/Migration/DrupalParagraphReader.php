@@ -158,6 +158,28 @@ final class DrupalParagraphReader
             }
         }
 
+        // Every field without evidence has a natural path. Those that evidence
+        // claims move to a free name; all names are picked before insertion,
+        // in the order of the machine names, so the field order does not matter.
+        $natural = [];
+        foreach (array_keys($this->config->fields($bundle)) as $machine) {
+            if ($this->settings->ignores($machine) || [] !== ($byField[$machine]['path'] ?? [])) {
+                continue;
+            }
+            $leaf = $this->settings->leafName($machine, $bundle);
+            $natural[$machine] = isset($groupOf[$machine]) ? [$groupOf[$machine], $leaf] : [$leaf];
+        }
+        $taken = $claimed;
+        foreach ($natural as $path) {
+            $taken[implode('.', $path)] = true;
+        }
+        $moved = array_keys(array_filter($natural, static fn (array $path): bool => isset($claimed[implode('.', $path)])));
+        sort($moved);
+        foreach ($moved as $machine) {
+            $natural[$machine] = $this->freeName($natural[$machine], $taken);
+            $taken[implode('.', $natural[$machine])] = true;
+        }
+
         $tree = [];
         foreach ($this->config->fields($bundle) as $machine => $drupalField) {
             if ($this->settings->ignores($machine)) {
@@ -165,12 +187,7 @@ final class DrupalParagraphReader
             }
             $leaf = $this->settings->leafName($machine, $bundle);
             $entry = $byField[$machine] ?? null;
-            if (null !== $entry && [] !== $entry['path']) {
-                $path = $entry['path'];
-            } else {
-                $path = isset($groupOf[$machine]) ? [$groupOf[$machine], $leaf] : [$leaf];
-                $path = $this->unclaimed($path, $claimed);
-            }
+            $path = null !== $entry && [] !== $entry['path'] ? $entry['path'] : $natural[$machine];
 
             $field = $this->mapField($drupalField, $bundle, $entry['children'] ?? [], $stack);
             // Every field read off a real Drupal bundle field is, by
@@ -212,24 +229,22 @@ final class DrupalParagraphReader
     }
 
     /**
-     * The path for a field without evidence: its own when no evidence path
-     * claims it, else the same with `_field` added to the last name (`video`
-     * becomes `video_field`), then `_field_2` and on. The definition pins the
-     * Drupal field either way, so the name is free to differ.
+     * A free path for a field without evidence whose natural name evidence
+     * claims: the same with `_field` added to the last name (`video` becomes
+     * `video_field`), then `_field_2` and on. A name is free when no evidence
+     * path, no other field's natural path and no earlier pick has it. The
+     * definition pins the Drupal field either way, so the name may differ.
      *
      * @param non-empty-list<string> $path
-     * @param array<string,true> $claimed dotted evidence paths and their prefixes
+     * @param array<string,true> $taken dotted paths in use
      * @return non-empty-list<string>
      */
-    private function unclaimed(array $path, array $claimed): array
+    private function freeName(array $path, array $taken): array
     {
-        if (!isset($claimed[implode('.', $path)])) {
-            return $path;
-        }
         $last = array_pop($path);
         for ($n = 1;; $n++) {
             $name = $last . '_field' . ($n > 1 ? "_{$n}" : '');
-            if (!isset($claimed[implode('.', [...$path, $name])])) {
+            if (!isset($taken[implode('.', [...$path, $name])])) {
                 return [...$path, $name];
             }
         }

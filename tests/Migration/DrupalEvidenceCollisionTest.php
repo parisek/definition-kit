@@ -101,6 +101,53 @@ final class DrupalEvidenceCollisionTest extends TestCase
         self::assertSame('field_date', $item['date_field']['drupal']['field']);
     }
 
+    #[Test]
+    public function a_new_name_does_not_take_the_natural_name_of_another_field(): void
+    {
+        // `field_video` is claimed by evidence; `video_field` is the natural name of `field_video_field`.
+        foreach ([['field_video', 'field_video_field'], ['field_video_field', 'field_video']] as $order) {
+            $tree = $this->readVideo([...$order, 'field_media']);
+
+            self::assertSame('field_video_field', $tree['video_field']['label'] ?? null, implode(',', $order));
+            self::assertSame('field_video', $tree['video_field_2']['drupal']['field'] ?? null, implode(',', $order));
+            self::assertArrayHasKey('posterUrl', $tree['video']['fields']);
+        }
+    }
+
+    #[Test]
+    public function the_pick_goes_on_past_every_name_in_use(): void
+    {
+        // `video_field_2` is also the natural name of a field (`field_video_field_2`).
+        foreach ([['field_video', 'field_video_field', 'field_video_field_2'], ['field_video_field_2', 'field_video_field', 'field_video']] as $order) {
+            $tree = $this->readVideo([...$order, 'field_media']);
+
+            self::assertSame('field_video_field', $tree['video_field']['label'] ?? null, implode(',', $order));
+            self::assertSame('field_video_field_2', $tree['video_field_2']['label'] ?? null, implode(',', $order));
+            self::assertSame('field_video', $tree['video_field_3']['drupal']['field'] ?? null, implode(',', $order));
+        }
+    }
+
+    /**
+     * @param list<string> $fields
+     * @return array<string,array<string,mixed>>
+     */
+    private function readVideo(array $fields): array
+    {
+        foreach (glob($this->dir . '/*') ?: [] as $file) {
+            unlink($file);
+        }
+        $this->bundle('video', $fields);
+
+        return $this->read('video', <<<'PHP'
+            <?php
+            if ($bundle === 'video') {
+              $content['video'] = [
+                'posterUrl' => $this->getMediaField($entity, 'media'),
+              ];
+            }
+            PHP);
+    }
+
     private function itemSource(string $prop, string $field): string
     {
         return <<<PHP
