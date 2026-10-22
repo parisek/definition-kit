@@ -87,7 +87,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   natural prop name. When another field's evidence path already used that
   name, the migration stopped, or put the mapped field on the wrong name. The
   evidence now keeps its names and the unpaired field gets `<name>_field`,
-  pinned by `drupal.field`.
+  pinned by `drupal.field`. A new name is also free of every other field's natural name.
 
 ## [0.25.0] - 2026-10-22
 
