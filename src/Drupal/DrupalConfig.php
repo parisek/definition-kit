@@ -130,6 +130,7 @@ final class DrupalConfig
                 onForm: $onForm,
                 formWeight: $weight,
                 widget: $widget,
+                storageSettings: is_array($storage['settings'] ?? null) ? $storage['settings'] : [],
             );
         }
 

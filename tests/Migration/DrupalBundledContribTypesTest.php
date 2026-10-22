@@ -258,4 +258,25 @@ final class DrupalBundledContribTypesTest extends TestCase
         self::assertFalse($hours->refused());
         self::assertContains('field.storage.paragraph.field_hours', $hours->changedNames());
     }
+
+    #[Test]
+    public function the_storage_value_of_a_schema_setting_is_read_when_the_instance_copies_the_key(): void
+    {
+        $dir = $this->tempDir();
+        // The column comes from the storage, whatever the instance says.
+        $this->field($dir, 'geo', 'field_geo', 'geofield', 'geofield', ['backend' => 'geofield_backend_postgis'], ['backend' => 'geofield_backend_default'], 1);
+        $this->field($dir, 'color', 'field_color', 'color_field_type', 'color_field', ['format' => 'HEXHEX'], ['opacity' => true, 'format' => '#HEXHEX'], 1);
+
+        $geo = $this->read($dir, 'geo');
+        self::assertSame(['backend' => 'geofield_backend_postgis'], $geo['geo']['drupal']['settings']);
+        self::assertSame(DrupalDriftResult::OK, $this->lint($dir, 'geo', $geo)->status);
+        $geo['geo']['drupal']['settings'] = ['backend' => 'geofield_backend_default'];
+        $this->assertDrift($this->lint($dir, 'geo', $geo), 'backend');
+
+        $color = $this->read($dir, 'color');
+        self::assertSame('HEXHEX', $color['color']['drupal']['settings']['format']);
+        self::assertSame(DrupalDriftResult::OK, $this->lint($dir, 'color', $color)->status);
+        $color['color']['drupal']['settings']['format'] = '#HEXHEX';
+        $this->assertDrift($this->lint($dir, 'color', $color), 'format');
+    }
 }

@@ -257,7 +257,7 @@ final class DrupalDriftLinter
             $this->types->settingsKeys($drupal->type),
             is_array($field['drupal']['settings'] ?? null) ? $field['drupal']['settings'] : [],
             $this->types->declaredSettings($drupal->type, is_array($field['drupal']['settings'] ?? null) ? $field['drupal']['settings'] : []),
-            $this->types->actualSettings($drupal->type, $drupal->settings),
+            $this->types->actualSettings($drupal->type, $this->types->settingsOf($drupal)),
             $at,
             $drupal->type,
             $findings,

@@ -535,6 +535,27 @@ final class DrupalTypeMap
     }
 
     /**
+     * The settings of a field as the lint and the migration read them: the
+     * storage settings with the instance settings merged over them, except
+     * the type's `schema_settings`. Those shape the column, and Drupal builds
+     * the column from the storage, so an instance copy of the key (the config
+     * can carry one) must not hide the storage's value.
+     *
+     * @return array<string,mixed>
+     */
+    public function settingsOf(DrupalField $field): array
+    {
+        $settings = $field->settings;
+        foreach ($this->schemaSettings($field->type) as $key) {
+            if (is_array($field->storageSettings) && array_key_exists($key, $field->storageSettings)) {
+                $settings[$key] = $field->storageSettings[$key];
+            }
+        }
+
+        return $settings;
+    }
+
+    /**
      * The same for the parts of a field item (double_field: the subfield
      * storage settings and the instance limits), kept in the part's
      * `drupal.settings`.

@@ -359,7 +359,7 @@ final class DrupalParagraphReader
         if ($canonical !== $d->type && !('media' === $field['type'] && 'entity_reference' === $d->type)) {
             $field['drupal'] = ['storage' => $d->type] + ($field['drupal'] ?? []);
         }
-        $residue = $this->types->residue($d->type, $d->settings);
+        $residue = $this->types->residue($d->type, $this->types->settingsOf($d));
         if ([] !== $residue) {
             $field['drupal'] = ($field['drupal'] ?? []) + ['settings' => $residue];
         }
