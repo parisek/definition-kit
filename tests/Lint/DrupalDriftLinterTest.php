@@ -252,7 +252,7 @@ final class DrupalDriftLinterTest extends TestCase
         $definition['fields']['body']['fields']['content']['type'] = 'text';
 
         self::assertSame(
-            ['promo_body: body.content (field_content): storage type text_long; the definition type text expects string|string_long|email|telephone'],
+            ['promo_body: body.content (field_content): storage type text_long; the definition type text expects string|string_long|email|telephone|language_field|color_field_type|video_embed_field'],
             $this->findings($definition, 'promo'),
         );
     }

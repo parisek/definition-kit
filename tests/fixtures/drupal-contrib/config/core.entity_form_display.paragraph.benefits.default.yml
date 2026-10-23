@@ -1,0 +1,34 @@
+langcode: en
+status: true
+dependencies: {  }
+id: paragraph.benefits.default
+targetEntityType: paragraph
+bundle: benefits
+mode: default
+content:
+  field_benefits:
+    type: double_field
+    weight: 0
+    region: content
+    settings:
+      first:
+        type: select
+        label_display: hidden
+        size: 30
+        placeholder: ''
+        label: Ok
+        cols: 10
+        rows: 5
+      second:
+        type: textfield
+        label_display: hidden
+        size: 50
+        placeholder: ''
+        label: Ok
+        cols: 10
+        rows: 5
+      inline: true
+    third_party_settings: {  }
+hidden:
+  created: true
+  status: true

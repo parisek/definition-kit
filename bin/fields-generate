@@ -13,6 +13,7 @@ use Parisek\DefinitionKit\Support\EntryDefinition;
 use Parisek\DefinitionKit\Schema\FieldsSchemaValidator;
 use Parisek\DefinitionKit\Drupal\ConfigStore;
 use Parisek\DefinitionKit\Drupal\DrupalSettings;
+use Parisek\DefinitionKit\Drupal\DrupalTypeMap;
 use Parisek\DefinitionKit\Generator\Drupal\DrupalConfigWriter;
 use Parisek\DefinitionKit\Generator\Drupal\DrupalGenerator;
 use Parisek\DefinitionKit\Generator\Drupal\PlanEntry;
@@ -172,7 +173,7 @@ function fields_generate_drupal(array $dirs, string $settingsRoot, string $confi
     try {
         $store = new ConfigStore($configDir);
         $settings = DrupalSettings::discoverFor($settingsRoot);
-        $generator = new DrupalGenerator($store, $settings);
+        $generator = new DrupalGenerator($store, $settings, null, DrupalTypeMap::forSettings($settings));
     } catch (\RuntimeException $e) {
         fwrite(STDERR, $e->getMessage() . "\n");
 

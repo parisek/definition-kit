@@ -39,16 +39,25 @@ use Parisek\DefinitionKit\Drupal\DrupalTypeMap;
  * bundles, one layout per bundle). Media and other references pin
  * `drupal.target_bundles` unless `of:` already says it.
  *
+ * Contrib storage types come from the type map ({@see contrib()}): double_field
+ * is a `list` or `object` with the parts `first` and `second`, address an
+ * `open` object, webform a `reference` to `entity:webform`, language_field a
+ * `text`. A project overlay (`drupal.type_map`) adds more.
+ *
  * @phpstan-import-type Entry from DisplayEvidence
  */
 final class DrupalParagraphReader
 {
+    private readonly DrupalTypeMap $types;
+
+    /** @param DrupalTypeMap|null $types default: the bundled map plus the overlay the settings name */
     public function __construct(
         private readonly DrupalConfig $config,
         private readonly DrupalSettings $settings = new DrupalSettings(),
         private readonly ?DisplayEvidence $evidence = null,
-        private readonly DrupalTypeMap $types = new DrupalTypeMap(),
+        ?DrupalTypeMap $types = null,
     ) {
+        $this->types = $types ?? DrupalTypeMap::forSettings($settings);
     }
 
     /**
@@ -137,6 +146,62 @@ final class DrupalParagraphReader
             }
         }
 
+        // Evidence wins its prop name. A field without evidence has a natural
+        // path (its leaf name, under its field group), and two paths conflict
+        // when one is the other or a segment-wise prefix of it (`card` and
+        // `card.title`, not `card` and `cards`). The natural path that
+        // conflicts with evidence moves at the conflicting segment to a free
+        // name (`card` becomes `card_field`). All names are picked before any
+        // field is placed, in the order of the machine names, so the order of
+        // the fields does not change the result.
+        $claimed = []; // every evidence path and its prefixes
+        $leaves = [];  // the evidence paths themselves
+        foreach (array_keys($this->config->fields($bundle)) as $machine) {
+            $path = $this->settings->ignores($machine) ? [] : ($byField[$machine]['path'] ?? []);
+            if ([] !== $path) {
+                $leaves[implode('.', $path)] = true;
+            }
+            foreach (array_keys($path) as $depth) {
+                $claimed[implode('.', array_slice($path, 0, $depth + 1))] = true;
+            }
+        }
+
+        $natural = [];
+        foreach (array_keys($this->config->fields($bundle)) as $machine) {
+            if ($this->settings->ignores($machine) || [] !== ($byField[$machine]['path'] ?? [])) {
+                continue;
+            }
+            $leaf = $this->settings->leafName($machine, $bundle);
+            $natural[$machine] = isset($groupOf[$machine]) ? [$groupOf[$machine], $leaf] : [$leaf];
+        }
+        $taken = $claimed;
+        foreach ($natural as $path) {
+            foreach (array_keys($path) as $depth) {
+                $taken[implode('.', array_slice($path, 0, $depth + 1))] = true;
+            }
+        }
+        $renamed = []; // dotted prefix => its new last segment
+        $machines = array_keys($natural);
+        sort($machines);
+        foreach ($machines as $machine) {
+            $path = $natural[$machine];
+            foreach (array_keys($path) as $depth) {
+                $prefix = implode('.', array_slice($path, 0, $depth + 1));
+                $last = count($path) - 1 === $depth;
+                if (!($last ? isset($claimed[$prefix]) : isset($leaves[$prefix]))) {
+                    continue;
+                }
+                $renamed[$prefix] ??= $this->freeSegment(array_slice($path, 0, $depth), $path[$depth], $taken);
+                $taken[implode('.', [...array_slice($path, 0, $depth), $renamed[$prefix]])] = true;
+                if (0 === $depth && isset($groupLabels[$path[0]])) {
+                    $groupLabels[$renamed[$prefix]] ??= $groupLabels[$path[0]];
+                }
+                $path[$depth] = $renamed[$prefix];
+                break;
+            }
+            $natural[$machine] = $path;
+        }
+
         $tree = [];
         foreach ($this->config->fields($bundle) as $machine => $drupalField) {
             if ($this->settings->ignores($machine)) {
@@ -144,13 +209,7 @@ final class DrupalParagraphReader
             }
             $leaf = $this->settings->leafName($machine, $bundle);
             $entry = $byField[$machine] ?? null;
-            if (null !== $entry && [] !== $entry['path']) {
-                $path = $entry['path'];
-            } elseif (isset($groupOf[$machine])) {
-                $path = [$groupOf[$machine], $leaf];
-            } else {
-                $path = [$leaf];
-            }
+            $path = null !== $entry && [] !== $entry['path'] ? $entry['path'] : $natural[$machine];
 
             $field = $this->mapField($drupalField, $bundle, $entry['children'] ?? [], $stack);
             // Every field read off a real Drupal bundle field is, by
@@ -189,6 +248,26 @@ final class DrupalParagraphReader
         }
 
         return $tree;
+    }
+
+    /**
+     * A free name for one segment of a path whose segment evidence claims:
+     * the segment with `_field` added (`video` becomes `video_field`), then
+     * `_field_2` and on. A name is free when no evidence path, no field's
+     * natural path and no earlier pick has it. The definition pins the Drupal
+     * field either way, so the name may differ.
+     *
+     * @param list<string> $parent the segments above it
+     * @param array<string,true> $taken dotted paths in use
+     */
+    private function freeSegment(array $parent, string $segment, array $taken): string
+    {
+        for ($n = 1;; $n++) {
+            $name = $segment . '_field' . ($n > 1 ? "_{$n}" : '');
+            if (!isset($taken[implode('.', [...$parent, $name])])) {
+                return $name;
+            }
+        }
     }
 
     /**
@@ -255,12 +334,7 @@ final class DrupalParagraphReader
             'file' => ['type' => 'media', 'kind' => 'file'],
             'entity_reference' => $this->reference($d),
             'entity_reference_revisions' => $this->nested($d, $bundle, $childEvidence, $stack),
-            default => throw new \DomainException(sprintf(
-                "Drupal field %s on '%s' has storage type '%s', which the kit has no type for.",
-                $d->name,
-                $bundle,
-                $d->type,
-            )),
+            default => $this->contrib($d, $bundle),
         };
 
         $field['label'] = '' !== trim($d->label) ? $d->label : $d->name;
@@ -285,8 +359,131 @@ final class DrupalParagraphReader
         if ($canonical !== $d->type && !('media' === $field['type'] && 'entity_reference' === $d->type)) {
             $field['drupal'] = ['storage' => $d->type] + ($field['drupal'] ?? []);
         }
+        $residue = $this->types->residue($d->type, $this->types->settingsOf($d));
+        if ([] !== $residue) {
+            $field['drupal'] = ($field['drupal'] ?? []) + ['settings' => $residue];
+        }
 
         return $field;
+    }
+
+    /**
+     * A storage type outside the core table, read through the type map: the
+     * bundled contrib entries (double_field, address, webform, language_field)
+     * and a project overlay (`drupal.type_map`) alike. The kit types that
+     * `kit_types` lists the storage type under decide the field.
+     *
+     * @return array<string,mixed>
+     */
+    private function contrib(DrupalField $d, string $bundle): array
+    {
+        $keys = $this->types->kitKeysFor($d->type);
+        if ([] === $keys) {
+            throw new \DomainException(sprintf(
+                "Drupal field %s on '%s' has storage type '%s', which the kit has no type for. "
+                . 'Map it in a type map overlay (set drupal.type_map in definition-kit.yaml, see README, Drupal paragraphs), '
+                . 'or leave the field out with drupal.ignore_fields.',
+                $d->name,
+                $bundle,
+                $d->type,
+            ));
+        }
+
+        if (array_intersect($keys, ['list', 'object']) !== []) {
+            return $this->structured($d, $keys);
+        }
+
+        return match ($keys[0]) {
+            'text' => ['type' => 'text'],
+            'text_multiline' => ['type' => 'text', 'multiline' => true],
+            'richtext' => ['type' => 'richtext'],
+            'number' => ['type' => 'number'],
+            'boolean' => ['type' => 'boolean'],
+            'date' => ['type' => 'date'],
+            'select' => $this->select($d),
+            'reference' => $this->reference($d),
+            default => throw new \DomainException(sprintf(
+                "Drupal field %s on '%s': storage type '%s' is mapped to the kit type '%s', which the migration cannot read from a contrib type. "
+                . 'Map it to text, text_multiline, richtext, number, boolean, date, select, reference, object or list.',
+                $d->name,
+                $bundle,
+                $d->type,
+                $keys[0],
+            )),
+        };
+    }
+
+    /**
+     * A value that holds its parts in the field itself: `object` for one
+     * item, `list` for several. A type with named parts (double_field) gets
+     * one sub-field per part; any other (address) is an `open` map.
+     *
+     * @param list<string> $keys
+     * @return array<string,mixed>
+     */
+    private function structured(DrupalField $d, array $keys): array
+    {
+        $kind = $d->isMultiple() ? 'list' : 'object';
+        if (!in_array($kind, $keys, true)) {
+            $kind = in_array('object', $keys, true) ? 'object' : 'list';
+        }
+        $field = ['type' => $kind];
+        $parts = $this->types->parts($d->type);
+        if ([] === $parts) {
+            $field['open'] = true;
+
+            return $field;
+        }
+        $field['fields'] = [];
+        foreach ($parts as $part) {
+            $field['fields'][$part] = $this->part($d, $part);
+        }
+
+        return $field;
+    }
+
+    /**
+     * One named part of a field item (double_field `first` or `second`): its
+     * type follows the subfield storage type, its label and required flag the
+     * instance settings. A subfield with a fixed list of values becomes a
+     * `select`.
+     *
+     * @return array<string,mixed>
+     */
+    private function part(DrupalField $d, string $part): array
+    {
+        $storage = $d->settings['storage'][$part]['type'] ?? 'string';
+        $instance = is_array($d->settings[$part] ?? null) ? $d->settings[$part] : [];
+        $storage = is_string($storage) ? $storage : 'string';
+        $kinds = $this->types->partKitTypes($d->type, $storage);
+        $field = ['type' => $kinds[0] ?? 'text', 'role' => 'field'];
+
+        $label = is_string($instance['label'] ?? null) ? trim($instance['label']) : '';
+        $field['label'] = '' !== $label ? $label : ucfirst($part);
+        if (true === ($instance['required'] ?? false)) {
+            $field['required'] = true;
+        }
+        if (true === ($instance['list'] ?? false) && in_array('select', $kinds, true)) {
+            $options = DrupalField::parseAllowedValues($instance['allowed_values'] ?? null);
+            // Options keyed 0, 1, 2 read back as a list, which a definition
+            // cannot keep as a map (same limit as select()): the part stays
+            // a plain value.
+            if ([] !== $options && !array_is_list($options)) {
+                $field['type'] = 'select';
+                $field['options'] = $options;
+            }
+        }
+        // The exact subfield storage type, when the kit type alone would not
+        // create it (integer behind a number, uri behind a text).
+        if ($this->types->partStorageType($d->type, $field['type']) !== $storage) {
+            $field['drupal']['storage'] = $storage;
+        }
+        $residue = $this->types->residue($d->type, $d->settings, $part);
+        if ([] !== $residue) {
+            $field['drupal']['settings'] = $residue;
+        }
+
+        return $this->orderKeys($field);
     }
 
     /** @return array<string,mixed> */
@@ -417,7 +614,7 @@ final class DrupalParagraphReader
             }
         }
         if (isset($out['drupal']) && is_array($out['drupal'])) {
-            $drupalOrder = ['field', 'storage', 'target_type', 'target_bundles', 'bundles'];
+            $drupalOrder = ['field', 'storage', 'target_type', 'target_bundles', 'bundles', 'settings'];
             $out['drupal'] = array_merge(array_intersect_key(array_flip($drupalOrder), $out['drupal']), $out['drupal']);
         }
 

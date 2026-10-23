@@ -166,7 +166,7 @@ A field the aliased bundles do not all share names the ones that do have it in a
 
 | Kit type | Drupal storage (first is the default) |
 | --- | --- |
-| `text` | `string`, `string_long`, `email`, `telephone` |
+| `text` | `string`, `string_long`, `email`, `telephone`, `language_field`, `color_field_type`, `video_embed_field` |
 | `text` + `multiline: true` | `string_long`, `text_long`, `text` |
 | `richtext` | `text_long`, `text`, `text_with_summary` |
 | `number` | `integer`, `decimal`, `float` |
@@ -174,11 +174,28 @@ A field the aliased bundles do not all share names the ones that do have it in a
 | `select` | `list_string`, `list_integer`, `list_float` |
 | `media` | `entity_reference` to media, `image`, `file` |
 | `link` | `link` |
-| `reference` | `entity_reference` |
+| `reference` | `entity_reference`, `webform` |
 | `date` | `datetime`, `daterange`, `timestamp` |
-| `list`, `flexible_content`, pinned `object` | `entity_reference_revisions` |
+| `list`, `flexible_content`, pinned `object` | `entity_reference_revisions`; `list` and `object` also `double_field`, `address`, `geofield`, `office_hours` |
 
 `drupal.storage` pins one exact type. The migration writes it wherever the export uses a type other than the default.
+
+**Contrib field types.** Eight contrib storage types are in the bundled map. Each one always carries its `drupal.storage` pin:
+
+| Storage type (module) | Kit type | Notes |
+| --- | --- | --- |
+| `double_field` ([Double Field](https://www.drupal.org/project/double_field)) | `list` (several values) or `object` (one value, pinned by `drupal.field`) | `fields:` holds the two parts, `first` and `second`. A part is `text`, `richtext`, `number`, `boolean` or `date` after its subfield type, or `select` when the instance gives it a fixed list of values. `label` and `required` come from the instance. A part pins the exact subfield storage type in its own `drupal.storage` when the kit type alone would not create it (`integer` behind a `number`, `uri` or `email` behind a `text`). The lint always compares the subfield type: the pin, else the type the kit type creates, so a part without its pin is drift when the export has another subfield type. Subfield settings that differ from the module default (`maxlength`, `precision`, `scale`, `datetime_type`, `min`, `max`, and `on_label` and `off_label` for a boolean part) go in the part's `drupal.settings`. Each applies only to the subfield types that use it, as in the module (`maxlength` to `string` and `telephone`; `precision` and `scale` to `numeric`; `datetime_type` to `datetime_iso8601`; `min` and `max` to `integer`, `float` and `numeric`; the labels to `boolean`). Drupal keeps stale values when a subfield type changes. The migration drops them, the lint ignores them and the generator leaves them alone. The lint checks the two part names and each part's type against its subfield type. `max:` is the cardinality limit. |
+| `address` ([Address](https://www.drupal.org/project/address)) | `object` (one value) or `list` (several), `open: true` | The address properties that are active depend on the instance's country settings, and a display class reshapes them. So the definition does not list them. `available_countries`, `langcode_override` and `field_overrides` decide which countries and fields the editor gets, so they go in `drupal.settings` when they differ from the default. The module's deprecated `fields` setting (the address fields to show) wins over `field_overrides`. The migration reads it as a `hidden` override for each address field it leaves out, so a definition carries only `field_overrides`. The lint treats the two forms as equal, and the generator writes the modern form and empties `fields` when it changes an override. |
+| `webform` ([Webform](https://www.drupal.org/project/webform)) | `reference` with `of: entity:webform` | The target type is compared like a core entity reference. |
+| `language_field` ([Language Field](https://www.drupal.org/project/languagefield)) | `text`, `multiple: true` when the field takes several values | The value is a language code. The list of languages is the site's, not the author's, so a `select` with options would go stale. `language_range`, `included_languages`, `excluded_languages` and `groups` go in `drupal.settings` when they differ from the default. |
+| `geofield` ([Geofield](https://www.drupal.org/project/geofield)) | `object` (one value) or `list` (several), `open: true` | One item holds a geometry with derived columns (`value`, `geo_type`, `lat`, `lon`, bounds, `geohash`), not one scalar, so `text` would claim less than the storage keeps. `backend` (how the geometry is stored) goes in `drupal.settings` when it differs from the default. It shapes the database column, so the generator sets it on a new field and refuses to change it on an existing one. |
+| `office_hours` ([Office Hours](https://www.drupal.org/project/office_hours)) | `list`, `open: true` (`object` only when a site stores one item) | One item is one time slot of a day. The module fixes the field type to unlimited cardinality, so a real field is a `list`; `object` is listed only because the type map needs a structured type under both keys, and a generated `object` would get cardinality 1. `exceptions`, `seasons`, `all_day`, `comment` and `cardinality_per_day` change which values an item holds and go in `drupal.settings` when they differ from the default. The time format, step, limits and validation only shape the form, and the lint does not compare them. |
+| `color_field_type` ([Color Field](https://www.drupal.org/project/color_field), module `color_field`) | `text` | The usual value is the color string. `format` (the stored string, for example `#123ABC` or `123abc`) and `opacity` (a second value per item) go in `drupal.settings` when they differ from the default, so a field that records opacity is not read as a plain `text` by accident. `format` sets the column length, so the generator refuses to change it on an existing field. |
+| `video_embed_field` ([Video Embed Field](https://www.drupal.org/project/video_embed_field)) | `text` | The value is one URL, as a `link` without a title. `allowed_providers` goes in `drupal.settings` as the checked providers (`{youtube: youtube}` or `[youtube]`). The module stores `0` for each unchecked provider and reads an all-unchecked list as "any provider", so the lint reads `{youtube: '0'}` and `[]` as the same. |
+
+**`drupal.settings`.** A closed map of the settings that change what a field does. Each storage type lists its keys in the type map (`settings_keys`, and `part_settings_keys` for a part). The migration writes the keys that differ from the default. The lint compares every listed key, with the default for a key the definition leaves out, and reports a key the type does not list. The generator writes them into a new field and updates an existing field to the definition's value. A subfield storage setting (`precision`, `scale`, `maxlength`, `datetime_type`) holds data in its shape, so the generator refuses to change it on an existing field.
+
+The generator creates these types from the map. For a `double_field` it takes the subfield storage types, sub-widgets (select for a fixed list, checkbox, textarea, datetime, number, else textfield), labels, required flags and options from the parts. Fields that share one `double_field` storage must agree on the subfield types, or the plan refuses. It never changes the subfield storage types of an existing field: a part its subfield cannot hold is a `REFUSE`.
 
 A `reference` targeting an entity type outside `term:`/`post:`/media (a config entity such as `webform`, or a content entity Drupal-side only) uses `of: entity:<target_type>[:<bundle>,…]` — omitting the bundle list means no restriction, Drupal's own `target_bundles: null`. See [ADR 0009](docs/adr/0009-generic-drupal-entity-reference-target-vocabulary.md).
 
@@ -187,7 +204,7 @@ A `reference` targeting an entity type outside `term:`/`post:`/media (a config e
 **`fields-generate --target=drupal`.** It plans the whole export in one pass, because components share field storage, and prints one line per config entity:
 
 - `REUSE`: the entity exists and every key the definition owns already matches.
-- `CREATE`: the entity does not exist. The generator writes it whole, from the type map (`schemas/drupal-type-map.yaml`) and the defaults baseline (`schemas/drupal-defaults-baseline.yaml`). A new file has no `uuid`.
+- `CREATE`: the entity does not exist. The generator writes it whole, from the type map (`schemas/drupal-type-map.yaml`, plus the project's `drupal.type_map`) and the defaults baseline (`schemas/drupal-defaults-baseline.yaml`). A new file has no `uuid`.
 - `UPDATE`: an owned key differs. Only that key changes; the rest of the file stays byte for byte.
 - `REFUSE`: the change needs a data migration, or two definitions contradict each other. Then nothing is written and the exit code is 1.
 
@@ -220,7 +237,32 @@ drupal:
   view_display: hidden        # a new field on the view display: content (default) | hidden
   field_config_cardinality: true  # an instance may narrow its storage's cardinality (contrib module)
   baseline: drupal-baseline.yaml  # deep-merged over schemas/drupal-defaults-baseline.yaml, relative to this file
+  type_map: drupal-types.yaml     # merged over schemas/drupal-type-map.yaml, relative to this file
 ```
+
+**A project type map.** A paragraph field whose storage type is not in `schemas/drupal-type-map.yaml` stops `fields-migrate`, and `fields-generate` cannot create it. To map a contrib type without a kit release, set `drupal.type_map` to a YAML file. The path is relative to `definition-kit.yaml`. All three commands read it: `fields-migrate --drupal-config`, `fields-lint-drupal` and `fields-generate --target=drupal`. The error for an unknown storage type names this setting. The other way out is `drupal.ignore_fields`, which hides the field name on every bundle.
+
+The file has the sections of the bundled map (read its header for each key). Every section is optional:
+
+```yaml
+kit_types:                       # kit type => storage types it accepts
+  text: [my_text_type]       # appended after the bundled list, so the canonical type stays first
+storage_types:                   # what the generator writes when it creates the field
+  my_text_type:
+    module: my_module
+    storage_settings: {format: '#HEXHEX', opacity: false}
+    instance_settings: {opacity: false}
+    widget: {type: my_text_widget, settings: {}}
+    formatter: {type: my_text_formatter, label: above, settings: {format: hex, opacity: false}}
+widget_modules:                  # plugin id => providing module (a dependency of a new display entry)
+  my_text_widget: my_module
+formatter_modules:
+  my_text_formatter: my_module
+```
+
+- **Merge.** `kit_types` lists are appended to the bundled lists. `storage_types`, `target_types` and `media_reference` merge key by key, all the way down: state only what changes (`storage_types.language_field.widget.settings.format.name`, or `storage_types.webform.formatter.type`). A list or a scalar replaces the bundled value, and an empty map changes nothing. `widget_modules` and `formatter_modules` merge by plugin id. A new `storage_types` entry must be complete.
+- **Checks.** The overlay passes the same checks as the bundled map. After the merge, each `storage_types` entry needs a `module`, a `widget.type` and a `formatter.type`. Each storage type that a `kit_types` list names needs a `storage_types` entry. A `kit_types` key must be a bundled kit type, and a storage type under `object` or `list` must be listed under both, because the migration picks one by cardinality. A storage type under `reference` is an entity reference. An empty file is valid and changes nothing. A violation stops the command (exit 2) and names the file and the entry.
+- **What the migration writes.** It reads the kit type from the `kit_types` list that names the storage type: `text`, `text_multiline`, `richtext`, `number`, `boolean`, `date`, `select` and `reference` give a field of that type. `object` and `list` give an `open` field, or the named parts when the entry has `parts` and `part_types` as `double_field` does. The migration pins the storage type with `drupal.storage`. A storage type under `media`, `link`, `flexible_content` or the paragraph types is not readable from an overlay.
 
 The project baseline carries what a new entity needs beyond the kit's defaults, typically contrib third-party settings. A module named as a `third_party_settings` key becomes a module dependency:
 

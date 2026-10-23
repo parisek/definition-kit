@@ -8,6 +8,87 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 <!-- New entries go directly under this line. It is the anchor that keeps a branch's
      changelog edit from merging into a version that shipped without it. -->
 
+### Added
+
+- **Drupal: `geofield`, `office_hours`, `color_field_type` and `video_embed_field` in the bundled type map.**
+  `geofield` and `office_hours` are an `open: true` `object` or `list`.
+  `color_field_type` and `video_embed_field` are a `text`. The defaults come
+  from the module sources (Geofield 8.x-1.67, Office Hours 8.x-1.29, Color Field
+  3.0.2, Video Embed Field 8.x-2.7). `drupal.settings` carries the settings
+  that change the data: `backend`; `exceptions`, `seasons`, `all_day`,
+  `comment`, `cardinality_per_day`; `format`, `opacity`; `allowed_providers`.
+  A new type-map key, `checkbox_settings`, marks a setting that a `checkboxes`
+  form stores with `0` for each unchecked option, so `{youtube: '0'}` and `[]`
+  read the same. Another, `schema_settings`, marks a setting that shapes the
+  database column (`format`, `backend`): the generator sets it on a new field
+  and refuses to change it on an existing one.
+- **Drupal: the four common contrib paragraph field types (#106).**
+  `fields-migrate --drupal-config`, `fields-lint-drupal` and
+  `fields-generate --target=drupal` now map `double_field`, `address`,
+  `webform` and `language_field`. Before, each stopped the migration, so a
+  site put the field names in `drupal.ignore_fields`, and the definitions
+  lost those fields on every bundle. Each type pins its storage in
+  `drupal.storage`:
+  - `double_field` is a `list` (several values, `max:` is the cardinality
+    limit) or an `object` (one value) with the parts `first` and `second`.
+    A part is typed after its subfield storage type, or is a `select` when
+    the instance gives it a fixed list. The lint checks the part names and
+    types. The generator builds the subfield types, labels, required flags
+    and options of a new field from the parts, and refuses a part that the
+    subfield of an existing field cannot hold.
+  - `address` is an `open: true` `object` (or `list`).
+  - `webform` is a `reference` with `of: entity:webform`.
+  - `language_field` is a `text`, `multiple: true` for several values.
+- **`drupal.settings` on a field and on a `double_field` part.** A closed map of
+  the settings that change what the field does: an address's
+  `available_countries`, `langcode_override` and `field_overrides`; a
+  language_field's `language_range`, `included_languages`,
+  `excluded_languages` and `groups`; a double_field part's `maxlength`,
+  `precision`, `scale`, `datetime_type`, `min`, `max` and, for a boolean part,
+  `on_label` and `off_label`, each only for the subfield types that use it. The deprecated address `fields` setting is read
+  as the equivalent `field_overrides`. The migration writes
+  the ones that differ from the default, the lint compares them, the generator
+  applies them. A double_field part also pins its exact subfield storage type
+  in `drupal.storage` (`integer`, `uri`, `email`, ...), and the lint always
+  compares that subfield type, so a part without its pin is drift.
+- **`drupal.type_map` in `definition-kit.yaml`.** A project file, relative to
+  `definition-kit.yaml`, merged over `schemas/drupal-type-map.yaml`. A project
+  can map a contrib storage type the kit does not know without a kit release.
+  The overlay passes the same checks as the bundled map, and a malformed one
+  stops the command (exit 2) with the file and the entry. `kit_types` lists
+  append to the bundled lists, other sections replace entries by name. See
+  README, Drupal paragraphs. `storage_types` entries merge key by key, so an
+  overlay can change one nested setting. A `kit_types` key must be a known kit type, and
+  a structured type must be listed under both `object` and `list`.
+
+### Changed
+
+- The error for an unknown Drupal storage type names `drupal.type_map` as the
+  fix, next to `drupal.ignore_fields`.
+- `DrupalTypeMap::forSettings()` builds the map with the project overlay. The
+  reader, the linter, the spec builder and the planner build it from their
+  `DrupalSettings` when no map is passed. `DrupalSettings` has a `typeMap`
+  property.
+- An unpinned `text`, `reference`, `object` or `list` field now accepts the
+  contrib storage types listed under it in the map. The lint finding for a
+  storage type mismatch lists them too.
+
+### Fixed
+
+- **Drupal: a stale `field_config_cardinality` override no longer beats the
+  storage.** The module only narrows: it offers "unlimited" on an unlimited
+  storage alone and a limit up to the storage's own. An override outside that
+  range (a storage of 1 with `-1`, seen on a real site) now reads as the
+  storage value, and `0` or a number below `-1` reads as no override. Before,
+  the lint expected a `list` for a single-value field, and the generator
+  refused the "cardinality change".
+- **Drupal: `fields-migrate --drupal-display` no longer stops with "both X and
+  X are taken".** A field the display class never pairs falls back to its
+  natural prop name. When another field's evidence path already used that
+  name, the migration stopped, or put the mapped field on the wrong name. The
+  evidence now keeps its names and the unpaired field gets `<name>_field`,
+  pinned by `drupal.field`. A new name is also free of every other field's natural name.
+
 ## [0.25.0] - 2026-10-22
 
 ### Added

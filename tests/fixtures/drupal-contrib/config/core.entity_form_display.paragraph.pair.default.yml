@@ -1,0 +1,17 @@
+langcode: en
+status: true
+dependencies: {  }
+id: paragraph.pair.default
+targetEntityType: paragraph
+bundle: pair
+mode: default
+content:
+  field_pair:
+    type: double_field
+    weight: 0
+    region: content
+    settings: {  }
+    third_party_settings: {  }
+hidden:
+  created: true
+  status: true

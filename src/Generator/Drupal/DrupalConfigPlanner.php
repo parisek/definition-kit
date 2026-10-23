@@ -55,13 +55,17 @@ final class DrupalConfigPlanner
 
     private readonly DrupalBaseline $baseline;
 
+    private readonly DrupalTypeMap $types;
+
+    /** @param DrupalTypeMap|null $types default: the bundled map plus the overlay the settings name */
     public function __construct(
         private readonly ConfigStore $store,
         private readonly DrupalSettings $settings = new DrupalSettings(),
         ?DrupalBaseline $baseline = null,
-        private readonly DrupalTypeMap $types = new DrupalTypeMap(),
+        ?DrupalTypeMap $types = null,
     ) {
         $this->baseline = $baseline ?? DrupalBaseline::load($settings->baseline);
+        $this->types = $types ?? DrupalTypeMap::forSettings($settings);
     }
 
     /** @param list<BundleSpec> $specs */
@@ -150,6 +154,72 @@ final class DrupalConfigPlanner
         return $signatures;
     }
 
+    /**
+     * @param array<string,array{type: string, label: string, required: bool, options: array<string,string>|null, storage: string|null, settings: array<string,mixed>}> $parts
+     * @param array<string,mixed> $existing
+     */
+    private function partsFit(string $type, array $parts, array $existing): bool
+    {
+        foreach ($parts as $part => $info) {
+            $subfield = $existing['settings']['storage'][$part]['type'] ?? null;
+            if (!is_string($subfield)) {
+                continue;
+            }
+            if (null !== $info['storage'] ? $info['storage'] !== $subfield : !in_array($info['type'], $this->types->partKitTypes($type, $subfield), true)) {
+                return false;
+            }
+            // A subfield storage setting (precision, scale, maxlength) holds data in its shape.
+            $actual = $this->types->actualSettings($type, is_array($existing['settings'] ?? null) ? $existing['settings'] : [], $part);
+            foreach ($info['settings'] as $key => $value) {
+                if ('storage' === $this->types->settingScope($type, $key, $part) && !DrupalTypeMap::sameSetting($value, $actual[$key] ?? null)) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * The settings a set of fields asks of a storage or of an instance, by
+     * scope: the type's `settings_keys` and, for each part, its
+     * `part_settings_keys`. Fields that share a storage must agree.
+     *
+     * @param list<FieldSpec> $fields
+     * @param 'storage'|'instance' $scope
+     * @return array{top: array<string,mixed>, parts: array<string,array<string,mixed>>}
+     * @throws \DomainException when two fields ask for different values
+     */
+    private function settingsFor(string $type, array $fields, string $scope): array
+    {
+        $top = [];
+        $parts = [];
+        foreach ($fields as $field) {
+            foreach ($field->settings as $key => $value) {
+                if ($scope !== $this->types->settingScope($type, $key)) {
+                    continue;
+                }
+                if (array_key_exists($key, $top) && !DrupalTypeMap::sameSetting($top[$key], $value)) {
+                    throw new \DomainException("fields that share it need different {$key} settings");
+                }
+                $top[$key] = $value;
+            }
+            foreach ($field->parts ?? [] as $part => $info) {
+                foreach ($info['settings'] as $key => $value) {
+                    if ($scope !== $this->types->settingScope($type, $key, $part)) {
+                        continue;
+                    }
+                    if (array_key_exists($key, $parts[$part] ?? []) && !DrupalTypeMap::sameSetting($parts[$part][$key], $value)) {
+                        throw new \DomainException("fields that share it need different {$key} settings for part {$part}");
+                    }
+                    $parts[$part][$key] = $value;
+                }
+            }
+        }
+
+        return ['top' => $top, 'parts' => $parts];
+    }
+
     private function paragraphType(BundleSpec $spec): void
     {
         $name = "paragraphs.paragraphs_type.{$spec->bundle}";
@@ -226,6 +296,15 @@ final class DrupalConfigPlanner
                 $refused = true;
                 continue;
             }
+            if (null !== $field->parts && !$this->partsFit($type, $field->parts, $existing)) {
+                $this->refuse($name, sprintf(
+                    '`%s` on %s declares parts the existing subfield storage types do not hold — a subfield type change needs a data migration',
+                    $field->path,
+                    $field->bundle,
+                ));
+                $refused = true;
+                continue;
+            }
             $targetType = $existing['settings']['target_type'] ?? null;
             if (null !== $field->targetType && is_string($targetType) && $targetType !== $field->targetType) {
                 $this->refuse($name, "references {$targetType}; `{$field->path}` on {$field->bundle} needs {$field->targetType} — a target type change needs a data migration");
@@ -247,6 +326,26 @@ final class DrupalConfigPlanner
             return;
         }
         $this->storages[$machine] = ['type' => $type, 'cardinality' => $cardinality];
+
+        try {
+            $wanted = $this->settingsFor($type, $fields, 'storage');
+        } catch (\DomainException $e) {
+            $this->refuse($name, $e->getMessage());
+
+            return;
+        }
+        $actual = $this->types->actualSettings($type, is_array($existing['settings'] ?? null) ? $existing['settings'] : []);
+        foreach ($wanted['top'] as $key => $value) {
+            if (!DrupalTypeMap::sameSetting($value, $actual[$key] ?? null)) {
+                if (in_array($key, $this->types->schemaSettings($type), true)) {
+                    $this->refuse($name, "setting {$key} shapes the database column; a change needs a data migration");
+
+                    return;
+                }
+                $this->working[$name]['settings'][$key] = $value;
+                $this->because($name, $key);
+            }
+        }
 
         if (null !== $allowed) {
             $current = self::allowedValues($existing['settings']['allowed_values'] ?? []);
@@ -315,6 +414,56 @@ final class DrupalConfigPlanner
         }
         if (null !== $allowed) {
             $settings['allowed_values'] = self::allowedValuesList($allowed, $type);
+        }
+        $chosen = [];
+        foreach ($fields as $field) {
+            foreach ($field->parts ?? [] as $part => $partInfo) {
+                $subfield = $partInfo['storage'] ?? $this->types->partStorageType($type, $partInfo['type']);
+                if (null !== $partInfo['storage'] && [] === $this->types->partKitTypes($type, $partInfo['storage'])) {
+                    $this->refuse($name, "`{$field->path}` on {$field->bundle}: part {$part} pins {$partInfo['storage']}, which {$type} does not know");
+
+                    return;
+                }
+                if (null === $subfield) {
+                    $this->refuse($name, "`{$field->path}` on {$field->bundle}: part {$part} has kit type {$partInfo['type']}, which {$type} cannot store");
+
+                    return;
+                }
+                if (isset($chosen[$part]) && $chosen[$part][0] !== $subfield) {
+                    $this->refuse($name, sprintf(
+                        'fields that share it need different %s subfield types for part %s (`%s` on %s: %s, `%s` on %s: %s)',
+                        $type,
+                        $part,
+                        $chosen[$part][1]->path,
+                        $chosen[$part][1]->bundle,
+                        $chosen[$part][0],
+                        $field->path,
+                        $field->bundle,
+                        $subfield,
+                    ));
+
+                    return;
+                }
+                $chosen[$part] = [$subfield, $field];
+            }
+        }
+        foreach ($chosen as $part => [$subfield]) {
+            $settings['storage'][$part]['type'] = $subfield;
+        }
+        try {
+            $wanted = $this->settingsFor($type, $fields, 'storage');
+        } catch (\DomainException $e) {
+            $this->refuse($name, $e->getMessage());
+
+            return;
+        }
+        foreach ($wanted['top'] as $key => $value) {
+            $settings[$key] = $value;
+        }
+        foreach ($wanted['parts'] as $part => $values) {
+            foreach ($values as $key => $value) {
+                $settings['storage'][$part][$key] = $value;
+            }
         }
         $modules = [$this->types->storageModule($type), $this->types->targetTypeModule('paragraph')];
         if (is_string($settings['target_type'] ?? null)) {
@@ -390,6 +539,30 @@ final class DrupalConfigPlanner
             $this->ownTargets($name, $field->targetType, $field->targetBundles);
         }
 
+        $wanted = $this->settingsFor($type, [$field], 'instance');
+        $current = self::map($entity['settings'] ?? []);
+        $actual = $this->types->actualSettings($type, $current);
+        foreach ($wanted['top'] as $key => $value) {
+            if (!DrupalTypeMap::sameSetting($value, $actual[$key] ?? null)) {
+                $this->working[$name]['settings'][$key] = $value;
+                // A deprecated setting that the module reads first would hide the new value.
+                foreach ($this->types->legacySettingKeys($type) as $legacy) {
+                    if (isset($this->working[$name]['settings'][$legacy])) {
+                        $this->working[$name]['settings'][$legacy] = [];
+                    }
+                }
+                $this->because($name, $key);
+            }
+        }
+        foreach ($wanted['parts'] as $part => $values) {
+            foreach ($values as $key => $value) {
+                if (!DrupalTypeMap::sameSetting($value, $current[$part][$key] ?? $this->types->settingDefault($type, $key, $part))) {
+                    $this->working[$name]['settings'][$part][$key] = $value;
+                    $this->because($name, "{$part} {$key}");
+                }
+            }
+        }
+
         if (null !== $field->linkUrlOnly) {
             $title = (int) ($entity['settings']['title'] ?? 1);
             if ($field->linkUrlOnly && 0 !== $title) {
@@ -442,6 +615,23 @@ final class DrupalConfigPlanner
         }
         if (null !== $field->linkUrlOnly && $field->linkUrlOnly) {
             $settings['title'] = 0;
+        }
+        $wanted = $this->settingsFor($type, [$field], 'instance');
+        foreach ($wanted['top'] as $key => $value) {
+            $settings[$key] = $value;
+        }
+        foreach ($wanted['parts'] as $part => $values) {
+            foreach ($values as $key => $value) {
+                $settings[$part][$key] = $value;
+            }
+        }
+        foreach ($field->parts ?? [] as $part => $info) {
+            $settings[$part]['label'] = $info['label'];
+            $settings[$part]['required'] = $info['required'];
+            if (null !== $info['options']) {
+                $settings[$part]['list'] = true;
+                $settings[$part]['allowed_values'] = self::allowedValuesList($info['options'], 'list_string');
+            }
         }
 
         $base = $this->baseline->section('field_instance');
@@ -755,14 +945,40 @@ final class DrupalConfigPlanner
         $type = $this->storages[$field->machine]['type'];
         $default = $this->types->widget($type, $this->storageTargetType($field->machine));
         $widget = $field->widget ?? $default['type'];
+        $settings = $widget === $default['type'] ? $default['settings'] : [];
+        if ($widget === $default['type']) {
+            $settings = $this->subwidgets($field, $type, $settings);
+        }
 
         return [[
             'type' => $widget,
             'weight' => $weight,
             'region' => 'content',
-            'settings' => $widget === $default['type'] ? $default['settings'] : [],
+            'settings' => $settings,
             'third_party_settings' => $this->baseline->widgetThirdPartySettings($widget),
         ], $this->types->widgetModule($widget)];
+    }
+
+    /**
+     * The sub-widget of each part of a new double_field-like widget follows
+     * the part (a fixed list, a boolean, a date) and its subfield storage
+     * type, as the module's own widget offers them.
+     *
+     * @param array<string,mixed> $settings the default widget settings
+     * @return array<string,mixed>
+     */
+    private function subwidgets(FieldSpec $field, string $type, array $settings): array
+    {
+        $subfields = $this->working["field.storage.paragraph.{$field->machine}"]['settings']['storage'] ?? null;
+        foreach ($field->parts ?? [] as $part => $info) {
+            $subfield = is_array($subfields) ? ($subfields[$part]['type'] ?? null) : null;
+            if (!is_string($subfield) || !is_array($settings[$part] ?? null)) {
+                continue;
+            }
+            $settings[$part]['type'] = $this->types->partWidget($type, $subfield, null !== $info['options']);
+        }
+
+        return $settings;
     }
 
     /** @return array{0: array<string,mixed>, 1: ?string} */

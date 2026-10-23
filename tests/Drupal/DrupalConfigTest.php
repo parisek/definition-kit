@@ -6,6 +6,7 @@ namespace Parisek\DefinitionKit\Tests\Drupal;
 
 use Parisek\DefinitionKit\Drupal\DrupalConfig;
 use Parisek\DefinitionKit\Drupal\DrupalField;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
@@ -47,6 +48,49 @@ final class DrupalConfigTest extends TestCase
         // field_media storage is unlimited; image_full limits it to one.
         self::assertSame(1, $config->fields('image_full')['field_media']->cardinality);
         self::assertTrue($config->fields('quote_image')['field_media']->isMultiple());
+    }
+
+    #[Test]
+    public function a_stale_cardinality_override_does_not_beat_the_storage(): void
+    {
+        $config = DrupalConfig::fromDirectory(__DIR__ . '/../fixtures/drupal-cardinality/config');
+
+        // The module offers "unlimited" only on an unlimited storage, and a limit only up to the storage's.
+        // A storage of 1 with an override of -1 (seen on a real site) is a leftover: the storage rules.
+        self::assertSame(1, $config->fields('stale_link')['field_link']->cardinality);
+        self::assertFalse($config->fields('stale_link')['field_link']->isMultiple());
+        self::assertSame(3, $config->fields('stale_link')['field_items']->cardinality);
+        self::assertSame(3, $config->fields('too_wide')['field_items']->cardinality);
+        // A real narrowing still wins.
+        self::assertSame(1, $config->fields('valid_narrow')['field_media']->cardinality);
+        self::assertSame(2, $config->fields('valid_narrow')['field_items']->cardinality);
+    }
+
+    #[Test]
+    #[DataProvider('overrides')]
+    public function it_applies_an_override_only_inside_what_the_storage_allows(int $storage, mixed $override, int $expected): void
+    {
+        $instance = ['third_party_settings' => ['field_config_cardinality' => ['cardinality_config' => $override]]];
+
+        self::assertSame($expected, DrupalConfig::effectiveCardinality(['cardinality' => $storage], $instance));
+    }
+
+    /** @return iterable<string,array{int,mixed,int}> */
+    public static function overrides(): iterable
+    {
+        yield 'unlimited storage, limit' => [-1, '5', 5];
+        yield 'unlimited storage, unlimited' => [-1, '-1', -1];
+        yield 'limited storage, narrower' => [4, '2', 2];
+        yield 'limited storage, same' => [4, '4', 4];
+        yield 'limited storage, wider' => [4, '9', 4];
+        yield 'limited storage, unlimited' => [4, '-1', 4];
+        yield 'single storage, unlimited' => [1, '-1', 1];
+        yield 'single storage, wider' => [1, '3', 1];
+        yield 'zero is no override' => [-1, '0', -1];
+        yield 'below -1 is no override' => [3, '-2', 3];
+        yield 'empty is no override' => [3, '', 3];
+        yield 'not a number is no override' => [3, 'many', 3];
+        yield 'no override' => [3, null, 3];
     }
 
     #[Test]

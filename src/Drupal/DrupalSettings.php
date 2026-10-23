@@ -31,7 +31,12 @@ use Symfony\Component\Yaml\Yaml;
  *   view_display: hidden           # where a new field goes on the view display: content (default) | hidden
  *   field_config_cardinality: true # an instance may narrow its storage's cardinality (contrib module)
  *   baseline: drupal-baseline.yaml # merged over schemas/drupal-defaults-baseline.yaml, relative to this file
+ *   type_map: drupal-types.yaml    # merged over schemas/drupal-type-map.yaml, relative to this file
  * ```
+ *
+ * `type_map` serves the migration, the lint and the generator alike: a
+ * project maps a contrib field type the kit does not know without a kit
+ * release.
  *
  * Discovery matches {@see KeyStyle::discoverFor()}: next to the components
  * root, then one directory up. A file without a `drupal:` key is skipped, so a
@@ -60,6 +65,7 @@ final class DrupalSettings
         'view_display',
         'field_config_cardinality',
         'baseline',
+        'type_map',
     ];
 
     /**
@@ -69,6 +75,7 @@ final class DrupalSettings
      * @param array<string,list<string>> $mediaBundles media kind => media types
      * @param list<string> $hostFields config names of fields that host top-level paragraph types
      * @param string|null $baseline absolute path of the project baseline file
+     * @param string|null $typeMap absolute path of the project type map overlay
      */
     public function __construct(
         public readonly string $fieldNaming = self::NAMING_GENERIC,
@@ -84,6 +91,7 @@ final class DrupalSettings
         public readonly string $viewDisplay = self::VIEW_CONTENT,
         public readonly bool $fieldConfigCardinality = false,
         public readonly ?string $baseline = null,
+        public readonly ?string $typeMap = null,
     ) {
         $where = null !== $path ? " in {$path}" : '';
         if (!in_array($fieldNaming, [self::NAMING_GENERIC, self::NAMING_PREFIXED], true)) {
@@ -167,10 +175,8 @@ final class DrupalSettings
             $mediaBundles[(string) $kind] = self::stringList($media, (string) $kind, $where, 'media_bundles.');
         }
 
-        $baseline = self::optionalString($section, 'baseline', $where);
-        if (null !== $baseline && !str_starts_with($baseline, '/')) {
-            $baseline = (null !== $path ? \dirname($path) : (string) getcwd()) . '/' . $baseline;
-        }
+        $baseline = self::relativeToFile(self::optionalString($section, 'baseline', $where), $path);
+        $typeMap = self::relativeToFile(self::optionalString($section, 'type_map', $where), $path);
 
         return new self(
             fieldNaming: $naming,
@@ -186,7 +192,17 @@ final class DrupalSettings
             viewDisplay: self::optionalString($section, 'view_display', $where) ?? self::VIEW_CONTENT,
             fieldConfigCardinality: self::optionalBool($section, 'field_config_cardinality', $where) ?? false,
             baseline: $baseline,
+            typeMap: $typeMap,
         );
+    }
+
+    private static function relativeToFile(?string $file, ?string $settingsPath): ?string
+    {
+        if (null === $file || str_starts_with($file, '/')) {
+            return $file;
+        }
+
+        return (null !== $settingsPath ? \dirname($settingsPath) : (string) getcwd()) . '/' . $file;
     }
 
     /** @param array<mixed> $section */

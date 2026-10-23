@@ -1,0 +1,25 @@
+name: Benefits
+category: Block
+kind: block
+fields:
+  benefits:
+    type: list
+    role: field
+    label: Items
+    fields:
+      first:
+        type: select
+        role: field
+        label: Icon
+        required: true
+        options:
+          reward: Reward
+          map: Map
+          graph: Graph
+      second:
+        type: text
+        role: field
+        label: Text
+        required: true
+    drupal:
+      storage: double_field

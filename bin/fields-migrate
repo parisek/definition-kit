@@ -7,6 +7,7 @@ use Parisek\DefinitionKit\Drupal\BundleResolver;
 use Parisek\DefinitionKit\Drupal\DisplayEvidence;
 use Parisek\DefinitionKit\Drupal\DrupalConfig;
 use Parisek\DefinitionKit\Drupal\DrupalSettings;
+use Parisek\DefinitionKit\Drupal\DrupalTypeMap;
 use Parisek\DefinitionKit\Migration\AcfJsonReader;
 use Parisek\DefinitionKit\Migration\DrupalParagraphReader;
 use Parisek\DefinitionKit\Migration\TwigMetadataReader;
@@ -80,7 +81,7 @@ function fields_migrate_insert_after(array $tree, array $after, string $key, mix
 }
 
 /**
- * @param array{config: ?DrupalConfig, settings: DrupalSettings, evidence: ?DisplayEvidence} $drupal
+ * @param array{config: ?DrupalConfig, settings: DrupalSettings, evidence: ?DisplayEvidence, types?: ?DrupalTypeMap} $drupal
  * @return array{ok: bool, component: string, out?: string, error?: string, skipped?: string, note?: string}
  */
 function fields_migrate_one(string $componentDir, bool $dryRun, bool $force, KeyStyle $keyStyle, ?string $assumeRole, array $drupal = ['config' => null, 'settings' => new DrupalSettings(), 'evidence' => null], ?string $defaultCategory = null): array
@@ -230,7 +231,7 @@ function fields_migrate_one(string $componentDir, bool $dryRun, bool $force, Key
             // `drupal.bundles` (readMerged()) instead of forcing one bundle's
             // shape onto every alias.
             $aliasedBundles = array_values(array_filter(array_keys($bundles), fn (string $b): bool => $drupal['config']->hasBundle($b)));
-            $tree['fields'] = (new DrupalParagraphReader($drupal['config'], $drupal['settings'], $drupal['evidence']))
+            $tree['fields'] = (new DrupalParagraphReader($drupal['config'], $drupal['settings'], $drupal['evidence'], $drupal['types'] ?? null))
                 ->readMerged([] !== $aliasedBundles ? $aliasedBundles : [$bundle]);
             $note = count($aliasedBundles) > 1
                 ? 'fields from Drupal paragraph types ' . implode(', ', $aliasedBundles)
@@ -600,10 +601,13 @@ if (null !== $drupalDisplay && null === $drupalConfigDir) {
     exit(2);
 }
 try {
+    $drupalSettings = DrupalSettings::discoverFor($root ?? dirname(rtrim((string) $single, '/')));
     $drupal = [
         'config' => null !== $drupalConfigDir ? DrupalConfig::fromDirectory($drupalConfigDir) : null,
-        'settings' => DrupalSettings::discoverFor($root ?? dirname(rtrim((string) $single, '/'))),
+        'settings' => $drupalSettings,
         'evidence' => null !== $drupalDisplay ? DisplayEvidence::fromFile($drupalDisplay) : null,
+        // Built here so a malformed drupal.type_map stops the run before any file is written.
+        'types' => null !== $drupalConfigDir ? DrupalTypeMap::forSettings($drupalSettings) : null,
     ];
 } catch (\RuntimeException $e) {
     fwrite(STDERR, $e->getMessage() . "\n");

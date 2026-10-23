@@ -43,17 +43,24 @@ use Parisek\DefinitionKit\Support\StructuralType;
  *     field is a single nested paragraph.
  *   - A `list` expects the child bundle `<bundle>_item` unless
  *     `drupal.target_bundles` pins another.
+ *   - A `list` or `object` pinned to a contrib storage type (double_field,
+ *     address) holds its values in the field itself: no nested paragraph
+ *     type. A type with named parts (double_field) must declare exactly them.
  */
 final class DrupalDriftLinter
 {
     /** @var array<string,true> bundle => compared by some lint() call */
     private array $claimed = [];
 
+    private readonly DrupalTypeMap $types;
+
+    /** @param DrupalTypeMap|null $types default: the bundled map plus the overlay the settings name */
     public function __construct(
         private readonly DrupalConfig $config,
         private readonly DrupalSettings $settings = new DrupalSettings(),
-        private readonly DrupalTypeMap $types = new DrupalTypeMap(),
+        ?DrupalTypeMap $types = null,
     ) {
+        $this->types = $types ?? DrupalTypeMap::forSettings($settings);
     }
 
     /** @param array<mixed> $definition */
@@ -243,6 +250,19 @@ final class DrupalDriftLinter
 
         $this->compareCardinality($field, $type, $drupal, $at, $findings);
 
+        if ([] !== $this->types->parts($drupal->type)) {
+            $this->compareParts($field, $drupal, $at, $findings);
+        }
+        $this->compareSettings(
+            $this->types->settingsKeys($drupal->type),
+            is_array($field['drupal']['settings'] ?? null) ? $field['drupal']['settings'] : [],
+            $this->types->declaredSettings($drupal->type, is_array($field['drupal']['settings'] ?? null) ? $field['drupal']['settings'] : []),
+            $this->types->actualSettings($drupal->type, $this->types->settingsOf($drupal)),
+            $at,
+            $drupal->type,
+            $findings,
+        );
+
         $expectedTargetType = $this->types->expectedTargetType($field, $drupal->type);
         $actualTargetType = $drupal->targetType();
         if (null !== $expectedTargetType && null !== $actualTargetType && $expectedTargetType !== $actualTargetType) {
@@ -302,6 +322,121 @@ final class DrupalDriftLinter
             );
         } elseif (DrupalField::UNLIMITED === $drupal->cardinality && null !== $max && $max > 0) {
             $findings[] = "{$at}: Drupal allows unlimited values; the definition sets max: {$max}";
+        }
+    }
+
+    /**
+     * The `drupal.settings` of a field or a part against the Drupal field:
+     * every key the type map lists, with the default for a key the definition
+     * leaves out, and no key the type does not know.
+     *
+     * @param list<string> $keys
+     * @param array<mixed> $declared the definition's `drupal.settings`
+     * @param array<string,mixed> $expected
+     * @param array<string,mixed> $actual
+     * @param list<string> $findings
+     */
+    private function compareSettings(array $keys, array $declared, array $expected, array $actual, string $at, string $type, array &$findings): void
+    {
+        $unknown = array_diff(array_map('strval', array_keys($declared)), $keys);
+        if ([] !== $unknown) {
+            $findings[] = sprintf(
+                '%s: drupal.settings.%s is not a setting of %s%s',
+                $at,
+                implode(', drupal.settings.', $unknown),
+                $type,
+                [] === $keys ? '' : ' (known: ' . implode(', ', $keys) . ')',
+            );
+        }
+        foreach ($keys as $key) {
+            if (!DrupalTypeMap::sameSetting($expected[$key] ?? null, $actual[$key] ?? null)) {
+                $findings[] = sprintf(
+                    '%s: setting %s is %s in Drupal; the definition expects %s',
+                    $at,
+                    $key,
+                    self::show($actual[$key] ?? null),
+                    self::show($expected[$key] ?? null),
+                );
+            }
+        }
+    }
+
+    private static function show(mixed $value): string
+    {
+        $text = json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+        return false === $text ? '?' : (strlen($text) > 80 ? substr($text, 0, 77) . '...' : $text);
+    }
+
+    /**
+     * A `list` or `object` stored in a type with named parts (double_field):
+     * the definition declares exactly those parts, and each part has a kit
+     * type the subfield storage type allows. An `open` field declares none.
+     *
+     * @param array<mixed> $field
+     * @param list<string> $findings
+     */
+    private function compareParts(array $field, DrupalField $drupal, string $at, array &$findings): void
+    {
+        if (true === ($field['open'] ?? false)) {
+            return;
+        }
+        $parts = $this->types->parts($drupal->type);
+        $declared = is_array($field['fields'] ?? null) ? $field['fields'] : [];
+        $names = array_map('strval', array_keys($declared));
+        if ([] !== array_diff($names, $parts) || [] !== array_diff($parts, $names)) {
+            $findings[] = sprintf(
+                '%s: %s stores the values %s; the definition declares %s',
+                $at,
+                $drupal->type,
+                implode(', ', $parts),
+                [] === $names ? 'none' : implode(', ', $names),
+            );
+
+            return;
+        }
+        foreach ($parts as $part) {
+            $definition = $declared[$part] ?? null;
+            if (!is_array($definition)) {
+                continue;
+            }
+            $storage = $drupal->settings['storage'][$part]['type'] ?? null;
+            if (!is_string($storage)) {
+                continue;
+            }
+            $partSettings = is_array($definition['drupal']['settings'] ?? null) ? $definition['drupal']['settings'] : [];
+            $this->compareSettings(
+                $this->types->partSettingsKeys($drupal->type, $storage),
+                $partSettings,
+                $this->types->declaredSettings($drupal->type, $partSettings, $part, $storage),
+                $this->types->actualSettings($drupal->type, $drupal->settings, $part),
+                "{$at} {$part}",
+                $drupal->type,
+                $findings,
+            );
+            $allowed = $this->types->partKitTypes($drupal->type, $storage);
+            $kind = StructuralType::canonical((string) ($definition['type'] ?? ''));
+            if ([] !== $allowed && !in_array($kind, $allowed, true)) {
+                $findings[] = sprintf(
+                    '%s: %s is a %s subfield in Drupal; the definition type %s expects %s',
+                    $at,
+                    $part,
+                    $storage,
+                    $kind,
+                    implode('|', $allowed),
+                );
+                continue;
+            }
+            // The subfield the generator would create: the pin, else the one
+            // the kit type implies. The export must have that one, or a fresh
+            // generate would build another storage than this site has.
+            $pinned = $definition['drupal']['storage'] ?? null;
+            $expected = is_string($pinned) ? $pinned : $this->types->partStorageType($drupal->type, $kind);
+            if ($expected !== $storage) {
+                $findings[] = is_string($pinned)
+                    ? "{$at}: {$part} is a {$storage} subfield in Drupal; the definition pins {$pinned}"
+                    : "{$at}: {$part} is a {$storage} subfield in Drupal; the definition type {$kind} creates " . ($expected ?? 'none') . " (pin drupal.storage: {$storage})";
+            }
         }
     }
 

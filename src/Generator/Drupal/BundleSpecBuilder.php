@@ -31,10 +31,14 @@ use Parisek\DefinitionKit\Support\StructuralType;
  */
 final class BundleSpecBuilder
 {
+    private readonly DrupalTypeMap $types;
+
+    /** @param DrupalTypeMap|null $types default: the bundled map plus the overlay the settings name */
     public function __construct(
         private readonly DrupalSettings $settings = new DrupalSettings(),
-        private readonly DrupalTypeMap $types = new DrupalTypeMap(),
+        ?DrupalTypeMap $types = null,
     ) {
+        $this->types = $types ?? DrupalTypeMap::forSettings($settings);
     }
 
     /**
@@ -184,7 +188,7 @@ final class BundleSpecBuilder
             }
 
             $targets = null;
-            if (in_array($type, [StructuralType::LIST, StructuralType::OBJECT, 'flexible_content'], true)) {
+            if ($this->types->nestsParagraphs($field)) {
                 $targets = $this->nested($field, $type, $bundle, $component, $path, $nested, $stack);
             }
             $fieldSpecs[] = $this->field($field, $type, $bundle, $machine, $component, $path, $targets, $groupPath);
@@ -304,7 +308,51 @@ final class BundleSpecBuilder
             widget: is_string($field['drupal']['widget'] ?? null) ? $field['drupal']['widget'] : null,
             formatter: is_string($field['drupal']['formatter'] ?? null) ? $field['drupal']['formatter'] : null,
             groups: $groupPath,
+            parts: $this->parts($field, $accepted[0]),
+            settings: [] === $this->types->settingsKeys($accepted[0]) ? [] : $this->types->declaredSettings($accepted[0], is_array($field['drupal']['settings'] ?? null) ? $field['drupal']['settings'] : []),
         );
+    }
+
+    /**
+     * The named parts of a field stored in a type that has them (double_field),
+     * for a new storage and instance: kit type, label, required flag, options.
+     *
+     * @param array<mixed> $field
+     * @return array<string,array{type: string, label: string, required: bool, options: array<string,string>|null, storage: string|null, settings: array<string,mixed>}>|null
+     */
+    private function parts(array $field, string $storage): ?array
+    {
+        $names = $this->types->parts($storage);
+        $declared = is_array($field['fields'] ?? null) ? $field['fields'] : [];
+        if ([] === $names || [] === $declared || true === ($field['open'] ?? false)) {
+            return null;
+        }
+        $parts = [];
+        foreach ($names as $name) {
+            $part = $declared[$name] ?? null;
+            if (!is_array($part)) {
+                continue;
+            }
+            $options = null;
+            if (is_array($part['options'] ?? null)) {
+                $options = [];
+                foreach ($part['options'] as $value => $optionLabel) {
+                    $options[(string) $value] = is_scalar($optionLabel) ? (string) $optionLabel : (string) $value;
+                }
+            }
+            $kind = StructuralType::canonical((string) ($part['type'] ?? 'text'));
+            $pin = is_string($part['drupal']['storage'] ?? null) ? $part['drupal']['storage'] : null;
+            $parts[$name] = [
+                'type' => $kind,
+                'label' => is_string($part['label'] ?? null) && '' !== trim($part['label']) ? $part['label'] : ucfirst($name),
+                'required' => true === ($part['required'] ?? false),
+                'options' => $options,
+                'storage' => $pin,
+                'settings' => $this->types->declaredSettings($storage, is_array($part['drupal']['settings'] ?? null) ? $part['drupal']['settings'] : [], $name, $pin ?? $this->types->partStorageType($storage, $kind)),
+            ];
+        }
+
+        return [] === $parts ? null : $parts;
     }
 
     /**

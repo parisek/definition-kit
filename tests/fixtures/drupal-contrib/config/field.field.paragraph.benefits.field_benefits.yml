@@ -1,0 +1,47 @@
+langcode: en
+status: true
+dependencies:
+  config:
+    - field.storage.paragraph.field_benefits
+    - paragraphs.paragraphs_type.benefits
+  module:
+    - double_field
+id: paragraph.benefits.field_benefits
+field_name: field_benefits
+entity_type: paragraph
+bundle: benefits
+label: Items
+description: ''
+required: false
+translatable: true
+default_value: {  }
+default_value_callback: ''
+settings:
+  first:
+    label: Icon
+    list: true
+    allowed_values:
+      -
+        label: Reward
+        value: reward
+      -
+        label: Map
+        value: map
+      -
+        label: Graph
+        value: graph
+    max: null
+    min: null
+    required: true
+    on_label: 'On'
+    off_label: 'Off'
+  second:
+    label: Text
+    list: false
+    allowed_values: {  }
+    max: null
+    min: null
+    required: true
+    on_label: 'On'
+    off_label: 'Off'
+field_type: double_field

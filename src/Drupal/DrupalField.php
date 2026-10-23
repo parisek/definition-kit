@@ -19,6 +19,7 @@ final class DrupalField
 
     /**
      * @param array<string,mixed> $settings storage settings with the instance settings merged over them
+     * @param array<string,mixed>|null $storageSettings the storage's own settings; null when the field was built without them
      * @param bool|null $onForm true when the default form display shows the field, false when it hides it,
      *                          null when the bundle has no exported form display
      */
@@ -34,6 +35,7 @@ final class DrupalField
         public readonly ?bool $onForm = null,
         public readonly ?int $formWeight = null,
         public readonly ?string $widget = null,
+        public readonly ?array $storageSettings = null,
     ) {
     }
 
@@ -82,7 +84,17 @@ final class DrupalField
      */
     public function allowedValues(): array
     {
-        $raw = $this->settings['allowed_values'] ?? null;
+        return self::parseAllowedValues($this->settings['allowed_values'] ?? null);
+    }
+
+    /**
+     * The same reading for any `allowed_values` setting, such as one subfield
+     * of a double_field.
+     *
+     * @return array<int|string,string>
+     */
+    public static function parseAllowedValues(mixed $raw): array
+    {
         if (!is_array($raw)) {
             return [];
         }

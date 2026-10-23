@@ -34,6 +34,7 @@ final class DrupalGenerateRoundTripTest extends TestCase
 {
     private const DRUPAL = __DIR__ . '/../../fixtures/drupal';
     private const MERGE = __DIR__ . '/../../fixtures/drupal-merge';
+    private const CONTRIB = __DIR__ . '/../../fixtures/drupal-contrib';
 
     /** @return iterable<string, array{string, string, list<string>, bool}> */
     public static function exports(): iterable
@@ -46,6 +47,8 @@ final class DrupalGenerateRoundTripTest extends TestCase
         yield 'fixture export, by convention' => [self::DRUPAL, '/config', $bundles, false];
         yield 'fixture export, with display evidence' => [self::DRUPAL, '/config', $bundles, true];
         yield 'real-shaped export' => [self::MERGE, '/config', ['quote_image', 'numbers'], false];
+        // #106: double_field, address, webform and language_field.
+        yield 'contrib field types' => [self::CONTRIB, '/config', ['benefits', 'portfolio', 'pair', 'company', 'contact_form', 'workshop_form', 'content', 'category'], false];
     }
 
     private static function settings(string $project, bool $fieldConfigCardinality = false): DrupalSettings
@@ -69,6 +72,7 @@ final class DrupalGenerateRoundTripTest extends TestCase
             viewDisplay: $settings->viewDisplay,
             fieldConfigCardinality: true,
             baseline: $settings->baseline,
+            typeMap: $settings->typeMap,
         );
     }
 

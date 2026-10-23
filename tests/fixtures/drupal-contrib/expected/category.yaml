@@ -1,0 +1,21 @@
+name: Category
+category: Block
+kind: block
+fields:
+  title:
+    type: text
+    role: field
+    label: Title
+  langcode:
+    type: text
+    role: field
+    label: 'Hide for languages'
+    multiple: true
+    drupal:
+      storage: language_field
+      settings:
+        language_range:
+          1: '1'
+          11: 0
+          site_default: 0
+          und: 0

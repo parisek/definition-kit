@@ -1,0 +1,16 @@
+name: 'Workshop form'
+category: Block
+kind: block
+fields:
+  title:
+    type: text
+    role: field
+    label: Title
+  webform:
+    type: reference
+    role: field
+    label: Webform
+    required: true
+    of: 'entity:webform'
+    drupal:
+      storage: webform

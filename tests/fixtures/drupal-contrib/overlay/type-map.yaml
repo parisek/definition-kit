@@ -1,0 +1,18 @@
+# A project overlay for tests: a made-up module's `my_text_type`,
+# a contrib storage type the kit does not know, stored as a text value.
+kit_types:
+  text: [my_text_type]
+
+storage_types:
+  my_text_type:
+    module: my_module
+    storage_settings: {format: '#HEXHEX', opacity: false}
+    instance_settings: {opacity: false}
+    widget: {type: my_text_widget, settings: {}}
+    formatter: {type: my_text_formatter, label: above, settings: {format: hex, opacity: false}}
+
+widget_modules:
+  my_text_widget: my_module
+
+formatter_modules:
+  my_text_formatter: my_module

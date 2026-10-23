@@ -35,8 +35,9 @@ final class DrupalGenerator
         private readonly ConfigStore $store,
         DrupalSettings $settings = new DrupalSettings(),
         ?DrupalBaseline $baseline = null,
-        DrupalTypeMap $types = new DrupalTypeMap(),
+        ?DrupalTypeMap $types = null,
     ) {
+        $types ??= DrupalTypeMap::forSettings($settings);
         $this->builder = new BundleSpecBuilder($settings, $types);
         $this->planner = new DrupalConfigPlanner($store, $settings, $baseline, $types);
         $this->config = [] === $store->names('paragraphs.paragraphs_type.') ? null : DrupalConfig::fromDirectory($store->directory());

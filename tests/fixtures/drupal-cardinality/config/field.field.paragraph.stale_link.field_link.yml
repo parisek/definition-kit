@@ -1,0 +1,13 @@
+id: paragraph.stale_link.field_link
+field_name: field_link
+entity_type: paragraph
+bundle: stale_link
+label: field_link
+required: false
+settings: {  }
+field_type: link
+third_party_settings:
+  field_config_cardinality:
+    cardinality_config: '-1'
+    cardinality_label_config: false
+    unlimited_not_required: ''
