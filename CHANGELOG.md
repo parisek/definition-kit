@@ -8,6 +8,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 <!-- New entries go directly under this line. It is the anchor that keeps a branch's
      changelog edit from merging into a version that shipped without it. -->
 
+## [0.26.0] - 2026-10-23
+
 ### Added
 
 - **Drupal: `geofield`, `office_hours`, `color_field_type` and `video_embed_field` in the bundled type map.**
