@@ -35,6 +35,8 @@ Five executables land in `vendor/bin/`:
 
 Each accepts a single component directory or `--root=<components-root>` to sweep every `component/*/` under it (`--dry-run` on `fields-migrate` writes nothing).
 
+`--root` regenerates every sibling component under the root. Authors who share a root pass the single component directory instead.
+
 ```bash
 # one component
 vendor/bin/fields-migrate path/to/component/service-feature
@@ -136,6 +138,24 @@ The last line reads `N component(s), N failed`. When a component was skipped it 
 - A per-field **`drupal:` block** does the same for Drupal (`field`, `storage`, `widget`, `formatter`, `target_type`, `target_bundles`, `bundles`). It is closed: the Drupal lint reads every key. The root `drupal:` key is something else, the admin link, and stays a string.
 
 The round-trip contract: `generate(migrate(acf.json)) == acf.json`, modulo documented ACF-export-era residuals.
+
+### A form field
+
+A form plugin stores each form as a post. A form field is therefore a `reference` to that post type: `of: post:wpforms` for WPForms, `of: post:wpcf7_contact_form` for Contact Form 7. The `of:` value is required on a `reference`.
+
+```yaml
+form:
+  label: Form
+  type: reference
+  of: post:wpforms        # or post:wpcf7_contact_form
+  wp:
+    return_format: object
+    allow_null: 0
+```
+
+The generator writes an ACF `post_object` field with `post_type: [wpforms]`. A test builds a component from this snippet on every run, so the example cannot drift from the generator.
+
+With the `object` return format, `parisek/timber-kit` renders the form itself: `Helpers::formatFields()` returns the form's HTML, and the template prints it. See [timber-kit](https://github.com/parisek/timber-kit#helpers) for the rules.
 
 ## Drupal paragraphs
 

@@ -8,6 +8,14 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 <!-- New entries go directly under this line. It is the anchor that keeps a branch's
      changelog edit from merging into a version that shipped without it. -->
 
+### Documentation
+
+- README: a "A form field" subsection shows `type: reference` with `of: post:wpforms` (or
+  `post:wpcf7_contact_form`). A test reads the snippet from the README and checks that
+  `fields-validate` accepts it and `fields-generate` writes a `post_object` with
+  `post_type: [wpforms]`. A sentence under the CLI table says `--root` regenerates every
+  sibling component (#109).
+
 ## [0.26.0] - 2026-10-23
 
 ### Added
