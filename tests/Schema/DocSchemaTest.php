@@ -78,6 +78,7 @@ final class DocSchemaTest extends TestCase
         yield 'asana' => ["name: Doc\nasana: https://app.asana.com/0/1\n"];
         yield 'figma' => ["name: Doc\nfigma: https://figma.com/design/x\n"];
         yield 'drupal' => ["name: Doc\ndrupal: https://example.com/node/1\n"];
+        yield 'design' => ["name: Doc\ndesign:\n  - part: root\n    sources: { canvas: { desktop-1280: { ref: Example.dc.html } } }\n"];
     }
 
     #[Test]

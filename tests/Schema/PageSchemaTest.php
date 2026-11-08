@@ -110,7 +110,7 @@ final class PageSchemaTest extends TestCase
         foreach (['name', 'category', 'web', 'asana', 'figma', 'drupal', 'weight', 'responsive'] as $key) {
             self::assertSame($component['properties'][$key], $page['properties'][$key], "`{$key}` drifted between the two schemas");
         }
-        foreach (['usage', 'render', 'description', 'dev', 'aliases', 'variants_order'] as $key) {
+        foreach (['usage', 'render', 'description', 'dev', 'aliases', 'variants_order', 'design'] as $key) {
             $c = $component['properties'][$key];
             $p = $page['properties'][$key];
             unset($c['description'], $p['description']);
@@ -119,6 +119,9 @@ final class PageSchemaTest extends TestCase
         self::assertSame($component['$defs']['multivalueAnnotation'], $page['$defs']['multivalueAnnotation']);
         self::assertSame($component['$defs']['aliases'], $page['$defs']['aliases']);
         self::assertSame($component['$defs']['variantsOrder'], $page['$defs']['variantsOrder']);
+        foreach (['design', 'designPart', 'designViewports', 'designReference', 'designRevealStep'] as $def) {
+            self::assertSame($component['$defs'][$def], $page['$defs'][$def], "`\$defs/{$def}` drifted between the two schemas");
+        }
         self::assertSame(ComponentParser::RENDER_MODES, $page['properties']['render']['enum']);
     }
 

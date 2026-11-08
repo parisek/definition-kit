@@ -8,6 +8,24 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 <!-- New entries go directly under this line. It is the anchor that keeps a branch's
      changelog edit from merging into a version that shipped without it. -->
 
+### Added
+
+- **`design:` on a component or page (#111).** One tool-agnostic key links the
+  parts of an entry to elements of a design source, per viewport: a Figma node,
+  a Claude Design canvas, an HTML export, a screenshot or an existing website.
+  An entry has `part` (required, unique), `site`, `target`, `repeat` and
+  `sources: { <source id>: { <viewport id>: { ref, select, region, scale,
+  state, reveal } } }`. Source and viewport ids are free strings. The project
+  declares the kind of each source (`render`, `structured`, `raster`) in the
+  consumer, never in the definition, so definition-kit validates the key set
+  only: an unknown key, a missing `part` or `ref`, a duplicate `part`, `select`
+  with `region`, a `region` without four numbers and a `scale` that is not
+  positive are errors. A `reveal` step is a test-kit `settle.reveal` step,
+  `{ action: click|hover|focus, selector }`. The key has no CMS projection:
+  `acf.json` and `block.json` stay byte-identical, and a test proves it. A doc
+  refuses the key. The README documents the source kinds and the consumers
+  (test-kit `targetSource`, parisek/test-kit#342, and the design-sync tooling).
+
 ## [0.26.1] - 2026-11-06
 
 ### Documentation
