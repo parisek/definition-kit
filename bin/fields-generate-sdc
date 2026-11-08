@@ -1,0 +1,65 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+// Prototype: definitions to Single Directory Component files.
+//   fields-generate-sdc --root=<components-root> --out=<dir> [--namespace=component]
+// For every <root>/<name>/<name>.yaml it writes <out>/<name>/<name>.component.yml
+// and a <name>.twig that includes the existing template.
+
+use Parisek\DefinitionKit\Generator\Sdc\SdcComponentGenerator;
+use Parisek\DefinitionKit\Support\StructuralType;
+use Symfony\Component\Yaml\Yaml;
+
+foreach ([__DIR__ . '/../vendor/autoload.php', __DIR__ . '/../../../autoload.php'] as $autoload) {
+    if (is_file($autoload)) {
+        require $autoload;
+        break;
+    }
+}
+
+$opts = getopt('', ['root:', 'out:', 'namespace::', 'only::']);
+$root = rtrim((string) ($opts['root'] ?? ''), '/');
+$out = rtrim((string) ($opts['out'] ?? ''), '/');
+$namespace = (string) ($opts['namespace'] ?? 'component');
+$only = isset($opts['only']) ? explode(',', (string) $opts['only']) : null;
+if ('' === $root || '' === $out || !is_dir($root)) {
+    fwrite(STDERR, "usage: fields-generate-sdc --root=<components-root> --out=<dir> [--namespace=component] [--only=a,b]\n");
+    exit(2);
+}
+
+$generator = new SdcComponentGenerator();
+$done = 0;
+$failed = 0;
+$loose = 0;
+foreach (glob($root . '/*', GLOB_ONLYDIR) ?: [] as $dir) {
+    $name = basename($dir);
+    $yaml = "{$dir}/{$name}.yaml";
+    if (!is_file($yaml) || (null !== $only && !in_array($name, $only, true))) {
+        continue;
+    }
+    try {
+        $tree = StructuralType::parseFile($yaml);
+        if (!is_array($tree)) {
+            throw new RuntimeException('malformed YAML');
+        }
+        $meta = $generator->generate($tree, $name);
+        $target = "{$out}/{$name}";
+        if (!is_dir($target)) {
+            mkdir($target, 0777, true);
+        }
+        file_put_contents("{$target}/{$name}.component.yml", Yaml::dump($meta, 8, 2, Yaml::DUMP_OBJECT_AS_MAP | Yaml::DUMP_MULTI_LINE_LITERAL_BLOCK));
+        file_put_contents("{$target}/{$name}.twig", $generator->wrapperTwig($meta, $name, $namespace));
+        ++$done;
+        foreach ($generator->notes as $note) {
+            ++$loose;
+            echo "NOTE {$name}.{$note}\n";
+        }
+    } catch (Throwable $e) {
+        ++$failed;
+        echo "FAIL {$name}: {$e->getMessage()}\n";
+    }
+}
+echo "{$done} component(s), {$failed} failed, {$loose} loose note(s)\n";
+exit($failed > 0 ? 1 : 0);
