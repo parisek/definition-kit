@@ -8,6 +8,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 <!-- New entries go directly under this line. It is the anchor that keeps a branch's
      changelog edit from merging into a version that shipped without it. -->
 
+## [0.27.0] - 2026-11-08
+
 ### Added
 
 - **`design:` on a component or page (#111).** One tool-agnostic key links the
