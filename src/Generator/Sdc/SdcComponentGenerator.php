@@ -135,7 +135,10 @@ final class SdcComponentGenerator
         $multiple = ($field['multiple'] ?? false) === true;
 
         $schema = match ($type) {
-            'text' => $this->text($field),
+            // Older definitions use `textarea`, `email`, `phone` and `url` as types.
+            'text', 'textarea', 'phone' => $this->text($field),
+            'email' => $this->text($field) + ['format' => 'email'],
+            'url' => ['type' => 'string', 'format' => 'uri-reference'],
             'number' => $this->number($field),
             'boolean' => ['type' => 'boolean'],
             'select' => $this->select($field),
