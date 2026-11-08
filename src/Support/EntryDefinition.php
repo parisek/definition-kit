@@ -30,8 +30,9 @@ final class EntryDefinition
      * forces `responsive: false` for a doc and forwards `render` only for a
      * component. The SPA hides the usage panel and the link bar on a doc
      * route, and files docs in one flat sidebar group without `category`.
+     * A doc is prose, so it has no parts to link to a design (`design`).
      */
-    private const DOC_ONLY_REFUSED_KEYS = ['render', 'responsive', 'usage', 'category', 'web', 'asana', 'figma', 'drupal'];
+    private const DOC_ONLY_REFUSED_KEYS = ['render', 'responsive', 'usage', 'category', 'web', 'asana', 'figma', 'drupal', 'design'];
 
     /** @return 'page'|'doc'|null */
     public static function typeOfDirectory(string $dir): ?string

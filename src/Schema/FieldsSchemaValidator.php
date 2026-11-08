@@ -94,9 +94,10 @@ final class FieldsSchemaValidator
         }
         $resolver->registerRaw($this->schemaJson);
         $result = $validator->validate($jsonData, json_decode($this->schemaJson)->{'$id'});
+        $designErrors = self::designErrors($jsonData);
 
         if ($result->isValid()) {
-            return new ValidationResult(true, []);
+            return new ValidationResult([] === $designErrors, $designErrors);
         }
 
         $error = $result->error();
@@ -104,7 +105,7 @@ final class FieldsSchemaValidator
             // isValid() is false but error() is null — treat as "no specific
             // violation to report" rather than crash; keeps the same
             // ValidationResult(false, [...]) contract callers rely on.
-            return new ValidationResult(false, []);
+            return new ValidationResult(false, $designErrors);
         }
 
         $errors = [];
@@ -122,6 +123,66 @@ final class FieldsSchemaValidator
                 $errors[] = ['pointer' => $pointer, 'message' => $message];
             }
         }
-        return new ValidationResult(false, $errors);
+        return new ValidationResult(false, [...$errors, ...$designErrors]);
+    }
+
+    /**
+     * The `design:` rules JSON Schema cannot state, or states without a
+     * readable message.
+     *
+     * `uniqueItems` compares whole items, so a duplicate `part` needs this
+     * check. The schema also refuses `select` together with `region`, but
+     * opis reports that only as "The data must not match schema", so the
+     * check names both keys. It runs on every document that has the key,
+     * valid or not, and skips any value whose shape the schema already
+     * refuses.
+     *
+     * @param object|array<mixed> $jsonData
+     * @return list<array{pointer:string,message:string}>
+     */
+    private static function designErrors(object|array $jsonData): array
+    {
+        $design = is_object($jsonData) ? ($jsonData->design ?? null) : null;
+        if (!is_array($design)) {
+            return [];
+        }
+
+        $errors = [];
+        $seen = [];
+        foreach ($design as $index => $entry) {
+            if (!is_object($entry)) {
+                continue;
+            }
+            $part = $entry->part ?? null;
+            if (is_string($part) && '' !== $part) {
+                if (isset($seen[$part])) {
+                    $errors[] = [
+                        'pointer' => "/design/{$index}/part",
+                        'message' => "Part '{$part}' is already declared at /design/{$seen[$part]}; each part is unique in a definition.",
+                    ];
+                } else {
+                    $seen[$part] = $index;
+                }
+            }
+            $sources = $entry->sources ?? null;
+            if (!is_object($sources)) {
+                continue;
+            }
+            foreach (get_object_vars($sources) as $sourceId => $viewports) {
+                if (!is_object($viewports)) {
+                    continue;
+                }
+                foreach (get_object_vars($viewports) as $viewportId => $reference) {
+                    if (is_object($reference) && property_exists($reference, 'select') && property_exists($reference, 'region')) {
+                        $errors[] = [
+                            'pointer' => "/design/{$index}/sources/{$sourceId}/{$viewportId}",
+                            'message' => "Part '" . (is_string($part) ? $part : '?') . "', source '{$sourceId}', viewport '{$viewportId}': `select` and `region` exclude each other. `select` picks an element of a render or a node tree, `region` an area of an image.",
+                        ];
+                    }
+                }
+            }
+        }
+
+        return $errors;
     }
 }

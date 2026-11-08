@@ -72,7 +72,7 @@ usage:
 weight: 1
 ```
 
-- **Required:** `name`. **Allowed:** `usage`, `category`, `render`, `web`, `asana`, `figma`, `drupal`, `description`, `dev`, `aliases`, `variants_order`, `weight`, `responsive`, `body_class`, `variants` (legacy). **Refused:** `fields`, `kind`, `wp`, `key`, `mcp`.
+- **Required:** `name`. **Allowed:** `usage`, `category`, `render`, `web`, `asana`, `figma`, `drupal`, `description`, `dev`, `aliases`, `variants_order`, `weight`, `responsive`, `body_class`, `variants` (legacy), `design` (see [Design references](#design-references)). **Refused:** `fields`, `kind`, `wp`, `key`, `mcp`.
 - **A file is a page when it is `<id>.yaml` in a directory below `page/`** (nearest `page` or `component` ancestor decides; nested `page/_partials/` and `page/<group>/<id>/` count) — the same rule `parisek/styleguide` types an entry by. The `$schema` comment is an editor hint, not the rule.
 - `fields-validate` checks a page against `page.schema.json`. `fields-lint`, `fields-generate` and `fields-roles` report it as `SKIP`.
 - `fields-migrate page/<id>` (or `--root=path/to/page`, which also finds nested `page/<group>/<id>/` and skips `_`-prefixed partial directories) moves the twig front-comment into `<id>.yaml` and removes the comment from the twig. It refuses a comment with a component-only key and never overwrites an existing `<id>.yaml` (unless `--force`).
@@ -88,9 +88,101 @@ description: 'Škála a próza na jednom místě.'
 weight: 98
 ```
 
-- **Required:** `name`. **Allowed:** `description`, `dev`, `aliases`, `variants_order`, `weight`, `body_class`, `variants` (legacy). **Refused:** `fields`, `kind`, `wp`, `key`, `mcp`, and the keys `parisek/styleguide` gives no effect on a doc: `render` (forwarded only for a component), `responsive` (forced to `false` for every doc), `usage`, `category`, `web`, `asana`, `figma`, `drupal` (the SPA shows none of them on a doc route).
+- **Required:** `name`. **Allowed:** `description`, `dev`, `aliases`, `variants_order`, `weight`, `body_class`, `variants` (legacy). **Refused:** `fields`, `kind`, `wp`, `key`, `mcp`, and the keys `parisek/styleguide` gives no effect on a doc: `render` (forwarded only for a component), `responsive` (forced to `false` for every doc), `usage`, `category`, `web`, `asana`, `figma`, `drupal` (the SPA shows none of them on a doc route), and `design` (a doc has no parts to compare).
 - **A file is a doc when it is `<id>.yaml` in a directory below `doc/`.** The nearest `page`, `doc` or `component` ancestor decides, as for pages.
 - The CLI treats a doc like a page: `fields-validate` checks it against `doc.schema.json` and names a refused key; `fields-lint`, `fields-generate` and `fields-roles` report it as `SKIP`; `fields-migrate doc/<id>` (or `--root=path/to/doc`) moves the twig front-comment into `<id>.yaml`.
+
+## Design references
+
+`design:` links the parts of a component or a page to elements of a design, per viewport. It is one key for every design tool: a Figma file, a Claude Design canvas, an HTML or Webflow export, a screenshot, or an existing website. It lives in `<name>.yaml` and in `page/<id>/<id>.yaml`. A doc refuses it.
+
+```yaml
+design:
+  - part: root                          # unique per definition; `root` is the component element
+    sources:
+      canvas:                           # a source id that the project declares once
+        desktop-1280: { ref: Example.dc.html, select: 'a.card' }
+        mobile-390: { ref: ExampleMobile.dc.html, select: 'a.row-card' }
+      figma:
+        desktop-1280: { ref: '123:456' }
+      screenshots:
+        mobile-390: { ref: example-card-mobile@2x.png, scale: 2, region: { x: 0, y: 120, width: 390, height: 640 } }
+  - part: title
+    site: '.example-card__title'        # default: the component root
+    sources:
+      canvas:
+        desktop-1280:
+          ref: Example.dc.html
+          select: 'a.card h3'
+          state: hover
+          reveal:
+            - { action: hover, selector: '.example-card' }
+  - part: item
+    site: '.example-card__item'
+    target: page/example-full           # default: this entry's own styleguide render
+    repeat: true                        # the selectors match a list, compared by index
+    sources:
+      legacy:
+        desktop-1280: { ref: /integrations/example/, select: '.card li' }
+```
+
+An entry has these keys. Any other key is an error.
+
+| Key | Required | Meaning |
+| --- | --- | --- |
+| `part` | yes | Name of the part. Unique in the definition. `root` is the component element. |
+| `site` | no | CSS selector of the part inside the render. Default: the component root. |
+| `target` | no | Render that shows the part, for example `page/example-full`. Default: the entry's own styleguide render. |
+| `repeat` | no | `true` when the selectors match a list. The consumer compares the matches by index. |
+| `sources` | yes | `<source id>: { <viewport id>: <reference> }`. Both ids are the project's own strings: a source id names a source the project declares once, a viewport id is the one the project's test tools use. |
+
+A reference has these keys. Any other key is an error.
+
+| Key | Applies to | Meaning |
+| --- | --- | --- |
+| `ref` | all, required | What the source's provider resolves: a file, a path against the source's origin, or a node id. |
+| `select` | `render`, `structured` | The element inside the ref: a CSS selector, or a node path in the tree. |
+| `region` | `raster` | `{ x, y, width, height }` of the image area in CSS px at `scale`. All four are numbers; `width` and `height` are above 0. |
+| `scale` | `raster` | Device scale of the image, a number above 0. The consumer defaults it to 1. |
+| `state` | `render`, `structured` | Name of the state the ref shows: `hover`, `open`, `error`. |
+| `reveal` | `render` | Steps that bring the render into that state. See below. |
+
+### Source kinds
+
+The definition does not say which tool a source is. **The project declares the kind of each source once**, in the consumer's configuration (in test-kit, the side declaration). The kind decides which reference keys apply.
+
+| Kind | Examples | `ref` | Part selection | Compared |
+| --- | --- | --- | --- | --- |
+| `render` (has a DOM) | Claude Design canvas, HTML export, Webflow export, an existing website, another styleguide | file, or path against the source's origin | `select` (CSS) | structure (box, layout, type, paint, tokens) and pixels |
+| `structured` (node tree, no DOM) | Figma | node id | node id, optional `select` as a path in the tree | structure and pixels |
+| `raster` | screenshot, PNG export, PDF page | file | `region` and `scale` | pixels only |
+
+definition-kit cannot see a source's kind, so it validates the key set only:
+
+- `select` together with `region` in one reference is an error.
+- `region` needs numeric `x`, `y`, `width` and `height`.
+- `scale` is a positive number.
+- Each `part` is unique in the definition.
+
+The consumer validates against the declared kind: `select` on a `raster` source and `region` on a `render` source are its errors, and they name the source and the part. A consumer that captures an existing website compares against a stored snapshot of each import, never against the live page.
+
+### `reveal` and test-kit
+
+A `reveal` step has the shape of a test-kit [`settle.reveal`](https://github.com/parisek/test-kit/blob/main/docs/specification.md) step (R5.10), key for key, so a consumer passes the list on unchanged:
+
+| `design:` reveal step | test-kit `settle.reveal` step |
+| --- | --- |
+| `action: click` \| `hover` \| `focus` | `action`, the same three values |
+| `selector: <CSS>` | `selector`, the same string |
+
+The list keeps its order. The steps run on the render that is compared with the ref, so the render shows the same state as the ref. definition-kit checks the shape only. Limits such as the step count and the selector length belong to the consumer.
+
+### Consumers
+
+- **test-kit** is to read the key through `targetSource` ([parisek/test-kit#342](https://github.com/parisek/test-kit/issues/342)). A source id names a test-kit side.
+- **Design-sync tooling** reads it to know which element of a design is which part of a component.
+
+The key has no CMS projection. `fields-generate` writes the same `acf.json` and `block.json` with and without it, and `fields-lint` does not compare it.
 
 ## Wire the drift-lint into CI
 
