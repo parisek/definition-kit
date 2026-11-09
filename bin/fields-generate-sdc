@@ -9,6 +9,7 @@ declare(strict_types=1);
 // and a <name>.twig that includes the existing template.
 
 use Parisek\DefinitionKit\Generator\Sdc\SdcComponentGenerator;
+use Parisek\DefinitionKit\Schema\FieldsSchemaValidator;
 use Parisek\DefinitionKit\Support\StructuralType;
 use Symfony\Component\Yaml\Yaml;
 
@@ -40,6 +41,11 @@ foreach (glob($root . '/*', GLOB_ONLYDIR) ?: [] as $dir) {
         continue;
     }
     try {
+        $validation = (new FieldsSchemaValidator())->validateFile($yaml);
+        if (!$validation->valid) {
+            $messages = array_map(static fn (array $e): string => "{$e['pointer']}: {$e['message']}", $validation->errors);
+            throw new RuntimeException('schema: ' . implode('; ', $messages));
+        }
         $tree = StructuralType::parseFile($yaml);
         if (!is_array($tree)) {
             throw new RuntimeException('malformed YAML');

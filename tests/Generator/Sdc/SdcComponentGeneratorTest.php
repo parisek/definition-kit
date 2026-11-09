@@ -113,4 +113,36 @@ final class SdcComponentGeneratorTest extends TestCase
         $this->assertStringContainsString("'text': text is empty ? null : text|render,", $twig);
         $this->assertStringContainsString("{% include '@component/demo/demo.twig' with { content: content } %}", $twig);
     }
+
+    public function testSelectOptionsAsListOfItems(): void
+    {
+        $meta = $this->generate([
+            'size' => ['type' => 'select', 'options' => [['value' => 'a', 'label' => 'A'], ['value' => 'b']]],
+            'plain' => ['type' => 'select', 'options' => ['x', 'y']],
+            'map' => ['type' => 'select', 'options' => ['k' => 'Label']],
+        ]);
+        $props = $meta['props']['properties'];
+        $this->assertSame(['a', 'b'], $props['size']['enum']);
+        $this->assertSame(['a' => 'A', 'b' => 'b'], $props['size']['meta:enum']);
+        $this->assertSame(['x', 'y'], $props['plain']['enum']);
+        $this->assertSame(['k'], $props['map']['enum']);
+    }
+
+    public function testInvalidFieldKeyIsRefused(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->generate(['my-field' => ['type' => 'text']]);
+    }
+
+    public function testInvalidNestedKeyIsRefused(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->generate(['box' => ['type' => 'object', 'fields' => ["bad'key" => ['type' => 'text']]]]);
+    }
+
+    public function testScalarDefaultIsKept(): void
+    {
+        $meta = $this->generate(['on' => ['type' => 'boolean', 'default' => false]]);
+        $this->assertFalse($meta['props']['properties']['on']['default']);
+    }
 }

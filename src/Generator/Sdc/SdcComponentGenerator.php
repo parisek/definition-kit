@@ -62,6 +62,7 @@ final class SdcComponentGenerator
             if (!is_string($key) || !is_array($field)) {
                 continue;
             }
+            self::assertKey($key);
             if (($field['role'] ?? 'field') === 'inherited') {
                 continue;
             }
@@ -126,6 +127,18 @@ final class SdcComponentGenerator
     }
 
     /**
+     * A key becomes a Twig variable name and a prop name. Refuse any other
+     * shape: `my-field` reads as a subtraction in Twig and a quote breaks the
+     * template.
+     */
+    private static function assertKey(string $key): void
+    {
+        if (1 !== preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $key)) {
+            throw new \InvalidArgumentException("field key '{$key}' is not a valid Twig variable name");
+        }
+    }
+
+    /**
      * @param array<string,mixed> $field
      * @return array<string,mixed>
      */
@@ -154,6 +167,8 @@ final class SdcComponentGenerator
 
         if ($multiple && !in_array($type, ['media', 'list', 'flexible_content'], true)) {
             $schema = ['type' => 'array', 'items' => $schema];
+        } elseif (is_scalar($field['default'] ?? null) && in_array($type, ['text', 'textarea', 'number', 'boolean', 'select'], true)) {
+            $schema['default'] = $field['default'];
         }
 
         return $this->described($schema, $field);
@@ -199,8 +214,27 @@ final class SdcComponentGenerator
         if ([] === $options) {
             return ['type' => 'string'];
         }
-        $schema = ['type' => 'string', 'enum' => array_map('strval', array_keys($options))];
-        $schema['meta:enum'] = array_map('strval', $options);
+        // Options are a map (value => label) or a list of {value, label} items
+        // or of plain values.
+        $labels = [];
+        foreach ($options as $key => $option) {
+            if (is_array($option)) {
+                $value = $option['value'] ?? $option['key'] ?? null;
+                if (!is_scalar($value)) {
+                    continue;
+                }
+                $labels[(string) $value] = (string) (is_scalar($option['label'] ?? null) ? $option['label'] : $value);
+            } elseif (is_int($key) && array_is_list($options)) {
+                $labels[(string) $option] = (string) $option;
+            } else {
+                $labels[(string) $key] = (string) $option;
+            }
+        }
+        if ([] === $labels) {
+            return ['type' => 'string'];
+        }
+        $schema = ['type' => 'string', 'enum' => array_map('strval', array_keys($labels))];
+        $schema['meta:enum'] = $labels;
 
         return $schema;
     }
@@ -238,6 +272,7 @@ final class SdcComponentGenerator
             if (!is_string($key) || !is_array($child)) {
                 continue;
             }
+            self::assertKey($key);
             if (($child['type'] ?? '') === 'richtext') {
                 // A slot cannot sit inside an object. It stays a string.
                 $properties[$key] = $this->described(['type' => 'string'], $child);
