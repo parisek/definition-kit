@@ -90,6 +90,9 @@
             "$ref": "#/$defs/multivalueAnnotation",
             "description": "Notes for the DEVELOPER working on this component — implementation constraints, gotchas, why something is the way it is. Stays in the YAML: it reaches neither the editor's UI nor the agent's catalog."
         },
+        "third_party_settings": {
+            "$ref": "#/$defs/thirdPartySettings"
+        },
         "weight": {
             "type": "integer"
         },
@@ -324,6 +327,17 @@
                 "$ref": "#/$defs/field"
             }
         },
+        "thirdPartySettings": {
+            "type": "object",
+            "description": "Data owned by a tool or project outside this package, as a map from the owner to that owner's object, the way Drupal keys `third_party_settings` by module name. The kit checks the shape only: an owner key matches `^[a-z][a-z0-9_]*$` and its value is an object. It never reads the content, never merges it into generated output (Drupal config, ACF, block.json) and never lets it override a generated property, so there is no precedence to get wrong. Tools that rewrite a definition in place keep it. `fields-migrate --force` derives a definition from generated output and does not restore it, as it does not restore `mcp` or `dev`.",
+            "propertyNames": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]*$"
+            },
+            "additionalProperties": {
+                "type": "object"
+            }
+        },
         "multivalueAnnotation": {
             "oneOf": [
                 {
@@ -445,6 +459,9 @@
                 },
                 "dev": {
                     "$ref": "#/$defs/multivalueAnnotation"
+                },
+                "third_party_settings": {
+                    "$ref": "#/$defs/thirdPartySettings"
                 },
                 "translatable": {
                     "type": "boolean"
@@ -803,6 +820,9 @@
                 "dev": {
                     "$ref": "#/$defs/multivalueAnnotation",
                     "description": "Notes for the DEVELOPER about this layout variant. Stays in the YAML."
+                },
+                "third_party_settings": {
+                    "$ref": "#/$defs/thirdPartySettings"
                 }
             }
         },

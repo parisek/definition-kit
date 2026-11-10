@@ -249,6 +249,18 @@ The generator writes an ACF `post_object` field with `post_type: [wpforms]`. A t
 
 With the `object` return format, `parisek/timber-kit` renders the form itself: `Helpers::formatFields()` returns the form's HTML, and the template prints it. See [timber-kit](https://github.com/parisek/timber-kit#helpers) for the rules.
 
+### Project-owned data — `third_party_settings`
+
+A component, a field and a flexible-content layout take an optional `third_party_settings` key. It holds data that your project or a tool outside this package owns, for example which sites a component is for. It follows Drupal, where `third_party_settings` is keyed by module name:
+
+```yaml
+third_party_settings:
+  my_theme:
+    sites: [site-a]
+```
+
+The package checks the shape only. Each key is an owner (`^[a-z][a-z0-9_]*$`) and each value is an object. It never reads what is inside, never merges it into the Drupal, ACF or `block.json` output and never lets it override a generated property. Your own tools read their key. A typo inside it goes unnoticed here, so check the content in your CI. Pages and docs do not take the key. `parisek/styleguide` copies a field's `third_party_settings` into its `fields` API output, so do not keep anything private there. `fields-migrate --force` derives a definition from generated output and does not restore the key.
+
 ## Drupal paragraphs
 
 A Drupal component is built from a paragraph type. `drush config:export` writes the paragraph types and fields to YAML. definition-kit reads that export, lints definitions against it, and merges generated config back into it. [ADR 0001](docs/adr/0001-lint-drupal-paragraphs-against-a-config-export.md) records the lint and the migration; [ADR 0002](docs/adr/0002-generate-drupal-paragraph-config-by-merge.md) records the generator.
