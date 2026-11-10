@@ -251,7 +251,7 @@ With the `object` return format, `parisek/timber-kit` renders the form itself: `
 
 ### Project-owned data — `third_party_settings`
 
-A component and a field take an optional `third_party_settings` key. It holds data that your project or a tool outside this package owns, for example which sites a component is for. It follows Drupal, where `third_party_settings` is keyed by module name:
+A component, a field and a flexible-content layout take an optional `third_party_settings` key. It holds data that your project or a tool outside this package owns, for example which sites a component is for. It follows Drupal, where `third_party_settings` is keyed by module name:
 
 ```yaml
 third_party_settings:
@@ -259,7 +259,7 @@ third_party_settings:
     sites: [site-a]
 ```
 
-The package checks the shape only. Each key is an owner (`^[a-z][a-z0-9_]*$`) and each value is an object. It never reads what is inside, never merges it into the Drupal, ACF or `block.json` output and never lets it override a generated property. Your own tools read their key. A typo inside it goes unnoticed here, so check the content in your CI. Pages and docs do not take the key.
+The package checks the shape only. Each key is an owner (`^[a-z][a-z0-9_]*$`) and each value is an object. It never reads what is inside, never merges it into the Drupal, ACF or `block.json` output and never lets it override a generated property. Your own tools read their key. A typo inside it goes unnoticed here, so check the content in your CI. Pages and docs do not take the key. `parisek/styleguide` copies a field's `third_party_settings` into its `fields` API output, so do not keep anything private there. `fields-migrate --force` derives a definition from generated output and does not restore the key.
 
 ## Drupal paragraphs
 

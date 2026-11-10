@@ -10,7 +10,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- **`third_party_settings` on a component and on a field (#115).** An optional map from an owner
+- **`third_party_settings` on a component, a field and a layout (#115).** An optional map from an owner
   to that owner's object, for data that a project or a tool outside this package owns, for example
   which sites a component is for. It follows Drupal's `third_party_settings`, which is keyed by
   module name. The schema checks the shape only: an owner key matches `^[a-z][a-z0-9_]*$` and its

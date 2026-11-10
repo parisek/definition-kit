@@ -65,6 +65,8 @@ final class ThirdPartySettingsSchemaTest extends TestCase
         yield 'owner key with a capital' => [['MyTheme' => ['a' => 1]]];
         yield 'owner key with a hyphen' => [['my-theme' => ['a' => 1]]];
         yield 'owner key that starts with a digit' => [['1theme' => ['a' => 1]]];
+        yield 'owner key of digits only' => [[123 => ['a' => 1]]];
+        yield 'owner key of one digit' => [['1' => []]];
         yield 'owner value is a scalar' => [['my_theme' => 'brands']];
         yield 'owner value is a list' => [['my_theme' => ['site-a', 'site-b']]];
         yield 'the whole value is a list' => [['sites']];
@@ -77,6 +79,31 @@ final class ThirdPartySettingsSchemaTest extends TestCase
     {
         self::assertFalse($this->validate(['type' => 'text', 'label' => 'T'], ['third_party_settings' => $value])->valid);
         self::assertFalse($this->validate(['type' => 'text', 'label' => 'T', 'third_party_settings' => $value])->valid);
+    }
+
+    #[Test]
+    public function a_layout_takes_the_key_and_refuses_a_bad_shape(): void
+    {
+        $layoutDefinition = static fn (string $settings): object => Yaml::parse(<<<YAML
+        name: X
+        category: Block
+        fields:
+          items:
+            type: flexible_content
+            label: L
+            layouts:
+              intro:
+                label: Intro
+                third_party_settings: {$settings}
+                fields:
+                  headline: { type: text, label: H }
+        YAML, Yaml::PARSE_OBJECT_FOR_MAP);
+
+        $validator = new FieldsSchemaValidator();
+
+        self::assertTrue($validator->validateData($layoutDefinition('{ my_theme: { a: 1 } }'))->valid);
+        self::assertFalse($validator->validateData($layoutDefinition('{ My-Theme: { a: 1 } }'))->valid);
+        self::assertFalse($validator->validateData($layoutDefinition('{ my_theme: [a] }'))->valid);
     }
 
     #[Test]
