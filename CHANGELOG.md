@@ -8,6 +8,16 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 <!-- New entries go directly under this line. It is the anchor that keeps a branch's
      changelog edit from merging into a version that shipped without it. -->
 
+### Added
+
+- **`third_party_settings` on a component and on a field (#115).** An optional map from an owner
+  to that owner's object, for data that a project or a tool outside this package owns, for example
+  which sites a component is for. It follows Drupal's `third_party_settings`, which is keyed by
+  module name. The schema checks the shape only: an owner key matches `^[a-z][a-z0-9_]*$` and its
+  value is an object. The kit never reads the content and never merges it into the Drupal, ACF or
+  `block.json` output, so there is no precedence to get wrong. The Drupal, ACF and `block.json`
+  projections are tested to stay the same with the key present. Pages and docs do not take it.
+
 ## [0.27.0] - 2026-11-08
 
 ### Added
