@@ -8,6 +8,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 <!-- New entries go directly under this line. It is the anchor that keeps a branch's
      changelog edit from merging into a version that shipped without it. -->
 
+## [0.28.0] - 2026-11-10
+
 ### Added
 
 - **`third_party_settings` on a component, a field and a layout (#115).** An optional map from an owner
